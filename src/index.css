@@ -189,6 +189,27 @@
   border-radius: 8px;
   margin: 0.5em 0;
   display: block;
+  cursor: zoom-in;
+}
+
+.editor-content img.img-uploading {
+  opacity: 0.6;
+  cursor: default;
+  max-height: 200px;
+  width: 200px;
+  object-fit: cover;
+}
+
+/* Drag-over highlight */
+.drag-over {
+  background-color: var(--accent-light);
+  outline: 2px dashed var(--accent);
+  outline-offset: -4px;
+}
+
+/* Fullscreen image viewer */
+.fullscreen-overlay {
+  background: rgba(0, 0, 0, 0.9);
 }
 
 .editor-content table {

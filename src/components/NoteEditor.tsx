@@ -22,10 +22,20 @@ import {
   Trash2,
   MoreHorizontal,
   ToggleRight,
+  Paperclip,
+  Loader2,
+  X,
 } from 'lucide-react';
 import type { Note, Folder } from '@/types';
 import { formatTime } from '@/lib/utils';
 import { useToast } from '@/contexts/ToastContext';
+import {
+  uploadNoteImage,
+  deleteNoteImage,
+  deleteAllNoteImages,
+  isAcceptedImageType,
+  extractImagePaths,
+} from '@/lib/images';
 
 interface NoteEditorProps {
   note: Note | null;
@@ -53,6 +63,9 @@ export function NoteEditor({
   const [showMenu, setShowMenu] = useState(false);
   const [showMoveMenu, setShowMoveMenu] = useState(false);
   const [saved, setSaved] = useState(true);
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
+  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -70,13 +83,11 @@ export function NoteEditor({
     setSaved(true);
   }, [note?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-resize title
   const autoResize = (el: HTMLTextAreaElement) => {
     el.style.height = 'auto';
     el.style.height = el.scrollHeight + 'px';
   };
 
-  // Detect selection in editor to show/hide toolbar
   const checkSelection = useCallback(() => {
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0 && editorRef.current) {
@@ -94,7 +105,6 @@ export function NoteEditor({
     return () => document.removeEventListener('selectionchange', checkSelection);
   }, [checkSelection]);
 
-  // Close menu on outside click
   useEffect(() => {
     if (!showMenu) return;
     const handler = (e: MouseEvent) => {
@@ -107,7 +117,7 @@ export function NoteEditor({
     return () => document.removeEventListener('mousedown', handler);
   }, [showMenu]);
 
-  // Debounced save
+  // Debounced save with orphan image cleanup
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   const triggerSave = useCallback(
     (title: string, content: string) => {
@@ -115,6 +125,12 @@ export function NoteEditor({
       setSaved(false);
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
+        // Clean up orphaned images (in content before but not after)
+        const oldPaths = extractImagePaths(note.content);
+        const newPaths = extractImagePaths(content);
+        const orphaned = oldPaths.filter((p) => !newPaths.includes(p));
+        orphaned.forEach((path) => deleteNoteImage(path));
+
         onUpdate(note.id, title, content);
         setSaved(true);
       }, 600);
@@ -124,7 +140,6 @@ export function NoteEditor({
 
   const handleInput = () => {
     if (!note || !editorRef.current || !titleRef.current) return;
-    // Highlight tags
     highlightTags(editorRef.current);
     triggerSave(titleRef.current.value, editorRef.current.innerHTML);
   };
@@ -152,7 +167,6 @@ export function NoteEditor({
     const url = window.prompt('Enter URL:');
     if (url) {
       exec('createLink', url);
-      // Make links open in new tab
       const sel = window.getSelection();
       if (sel && sel.anchorNode) {
         const anchor = sel.anchorNode.parentElement;
@@ -164,30 +178,139 @@ export function NoteEditor({
     }
   };
 
+  // ===== Image attachment =====
   const insertImage = () => {
     fileInputRef.current?.click();
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      toast('Image too large (max 2MB)');
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length > 0) {
+      processImageFiles(files);
+    }
+  };
+
+  const processImageFiles = async (files: File[]) => {
+    if (!note || !editorRef.current) return;
+
+    const valid = files.filter(isAcceptedImageType);
+    const invalid = files.length - valid.length;
+    if (invalid > 0) {
+      toast(`${invalid} file(s) skipped — only JPG, PNG, WEBP supported`);
+    }
+    if (valid.length === 0) return;
+
+    editorRef.current.focus();
+
+    for (const file of valid) {
+      const uploadId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      // Insert placeholder image with loading state
+      const placeholder = document.createElement('img');
+      placeholder.src = createLoadingPlaceholder();
+      placeholder.setAttribute('data-upload-id', uploadId);
+      placeholder.className = 'img-uploading';
+      document.execCommand('insertHTML', false, placeholder.outerHTML + '<p><br></p>');
+
+      setUploadingCount((c) => c + 1);
+
+      try {
+        const { url } = await uploadNoteImage(note.id, file);
+
+        // Replace placeholder with real image
+        const imgEl = editorRef.current.querySelector(`img[data-upload-id="${uploadId}"]`);
+        if (imgEl) {
+          imgEl.removeAttribute('data-upload-id');
+          imgEl.classList.remove('img-uploading');
+          imgEl.setAttribute('src', url);
+          imgEl.setAttribute('data-fullscreen', 'true');
+        }
+        handleInput();
+      } catch (err) {
+        // Remove failed placeholder
+        const failedEl = editorRef.current.querySelector(`img[data-upload-id="${uploadId}"]`);
+        if (failedEl) failedEl.remove();
+        toast('Image upload failed — try again');
+        handleInput();
+      } finally {
+        setUploadingCount((c) => c - 1);
+      }
+    }
+  };
+
+  // Drag & drop images into editor
+  const handleDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      setDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget === e.target) {
+      setDragOver(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files).filter(isAcceptedImageType);
+    if (files.length > 0) {
+      // Place cursor at drop point
+      const range = getRangeFromPoint(e.clientX, e.clientY);
+      if (range && editorRef.current) {
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }
+      processImageFiles(files);
+    }
+  };
+
+  // Handle clicks in editor (checklist toggles, image fullscreen, image delete)
+  const handleEditorClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+
+    // Image click → fullscreen viewer
+    if (target.tagName === 'IMG' && !target.classList.contains('img-uploading')) {
+      e.preventDefault();
+      const src = target.getAttribute('src');
+      if (src) setFullscreenImage(src);
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      document.execCommand('insertImage', false, dataUrl);
-      handleInput();
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
+
+    // Checklist toggle
+    if (target.tagName === 'LI') {
+      const ul = target.closest('ul[data-checklist]');
+      if (ul) {
+        const isChecked = target.getAttribute('data-checked') === 'true';
+        target.setAttribute('data-checked', isChecked ? 'false' : 'true');
+        handleInput();
+      }
+    }
+  };
+
+  const handleDeleteImage = () => {
+    if (!fullscreenImage || !editorRef.current) return;
+    const imgs = editorRef.current.querySelectorAll(`img[src="${fullscreenImage}"]`);
+    imgs.forEach((img) => img.remove());
+    handleInput();
+
+    // Extract path and delete from storage
+    const match = fullscreenImage.match(/\/note-images\/(.+?)(\?|$)/);
+    if (match) {
+      deleteNoteImage(decodeURIComponent(match[1]));
+    }
+
+    setFullscreenImage(null);
+    toast('Image removed');
   };
 
   const insertChecklist = () => {
     document.execCommand('insertUnorderedList', false);
-    // Mark the list as checklist
     const sel = window.getSelection();
     if (sel && sel.anchorNode) {
       let el: Node | null = sel.anchorNode;
@@ -245,28 +368,12 @@ export function NoteEditor({
     handleInput();
   };
 
-  // Handle clicks in editor (checklist toggles, tag clicks)
-  const handleEditorClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    // Checklist toggle
-    if (target.tagName === 'LI') {
-      const ul = target.closest('ul[data-checklist]');
-      if (ul) {
-        const isChecked = target.getAttribute('data-checked') === 'true';
-        target.setAttribute('data-checked', isChecked ? 'false' : 'true');
-        handleInput();
-      }
-    }
-  };
-
-  // Handle Enter key in title to focus editor
   const handleTitleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       const editor = editorRef.current;
       if (!editor) return;
       editor.focus();
-      // Move cursor to start
       const sel = window.getSelection();
       const range = document.createRange();
       if (editor.firstChild) {
@@ -280,13 +387,21 @@ export function NoteEditor({
     }
   };
 
-  // Handle Tab key in editor for indentation
   const handleEditorKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Tab') {
       e.preventDefault();
       exec('indent');
     }
   };
+
+  // Clean up images when note is permanently deleted
+  useEffect(() => {
+    return () => {
+      if (note) {
+        deleteAllNoteImages(note.id).catch(() => {});
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!note) {
     return (
@@ -304,11 +419,11 @@ export function NoteEditor({
 
   return (
     <div className="h-full flex flex-col bg-app" style={{ backgroundColor: 'var(--bg)' }}>
-      {/* Hidden file input for images */}
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/jpg,image/png,image/webp"
+        multiple
         onChange={handleFileSelect}
         className="hidden"
       />
@@ -331,6 +446,15 @@ export function NoteEditor({
               </span>
             )}
             <span>{saved ? 'Saved' : 'Saving…'}</span>
+            {uploadingCount > 0 && (
+              <>
+                <span>·</span>
+                <span className="flex items-center gap-1" style={{ color: 'var(--accent)' }}>
+                  <Loader2 size={11} className="animate-spin" />
+                  Uploading {uploadingCount}…
+                </span>
+              </>
+            )}
             <span>·</span>
             <span>{formatTime(note.updatedAt)}</span>
           </div>
@@ -340,6 +464,9 @@ export function NoteEditor({
           <span className="sm:hidden text-xs text-tertiary mr-1" style={{ color: 'var(--text-tertiary)' }}>
             {saved ? '' : 'Saving…'}
           </span>
+          {uploadingCount > 0 && (
+            <Loader2 size={16} className="animate-spin sm:hidden" style={{ color: 'var(--accent)' }} />
+          )}
           <button
             onClick={() => onTogglePin(note.id)}
             className="p-2 rounded-lg hover-bg text-secondary"
@@ -426,7 +553,12 @@ export function NoteEditor({
       )}
 
       {/* Editor area */}
-      <div className="flex-1 overflow-y-auto">
+      <div
+        className={`flex-1 overflow-y-auto ${dragOver ? 'drag-over' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <div className="max-w-2xl mx-auto px-6 py-6 sm:px-8 sm:py-8">
           <textarea
             ref={titleRef}
@@ -448,8 +580,59 @@ export function NoteEditor({
             className="editor-content text-app"
             style={{ color: 'var(--text)' }}
           />
+
+          {/* Attach button — always visible, touch-friendly */}
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              onClick={insertImage}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-colors hover-bg"
+              style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--bg-secondary)' }}
+            >
+              <Paperclip size={16} />
+              <span>Attach image</span>
+            </button>
+            {dragOver && (
+              <span className="text-xs" style={{ color: 'var(--accent)' }}>
+                Drop images here
+              </span>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Fullscreen image viewer */}
+      {fullscreenImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center animate-fade-in"
+          style={{ backgroundColor: 'rgba(0,0,0,0.9)' }}
+          onClick={() => setFullscreenImage(null)}
+        >
+          <div className="absolute top-4 right-4 flex gap-2 z-10">
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDeleteImage(); }}
+              className="p-2.5 rounded-full transition-colors"
+              style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}
+              title="Delete image"
+            >
+              <Trash2 size={20} color="white" />
+            </button>
+            <button
+              onClick={() => setFullscreenImage(null)}
+              className="p-2.5 rounded-full transition-colors"
+              style={{ backgroundColor: 'rgba(255,255,255,0.15)' }}
+              title="Close"
+            >
+              <X size={20} color="white" />
+            </button>
+          </div>
+          <img
+            src={fullscreenImage}
+            alt="Full size"
+            className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -470,6 +653,23 @@ function Divider() {
   return <div className="w-px h-5 mx-1 flex-shrink-0" style={{ backgroundColor: 'var(--border)' }} />;
 }
 
+// Create a small loading placeholder SVG as data URL
+function createLoadingPlaceholder(): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120" viewBox="0 0 200 120">
+    <rect width="200" height="120" fill="#f0f0ee" rx="8"/>
+    <circle cx="100" cy="60" r="16" fill="none" stroke="#a1a1a6" stroke-width="2" stroke-dasharray="80" stroke-dashoffset="60">
+      <animateTransform attributeName="transform" type="rotate" from="0 100 60" to="360 100 60" dur="1s" repeatCount="indefinite"/>
+    </circle>
+  </svg>`;
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
+}
+
+// Get a range at the given client coordinates for drop positioning
+function getRangeFromPoint(x: number, y: number): Range | null {
+  const caret = document.caretRangeFromPoint?.(x, y);
+  return caret ?? null;
+}
+
 // Highlight #tags in editor content
 function highlightTags(editor: HTMLElement) {
   const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, null);
@@ -477,7 +677,6 @@ function highlightTags(editor: HTMLElement) {
   let node: Node | null;
   while ((node = walker.nextNode())) {
     if (node.textContent && /#[\p{L}\p{N}_]+/u.test(node.textContent)) {
-      // Skip if parent is already a tag-link or inside a link/pre
       const parent = node.parentElement;
       if (parent && (parent.classList.contains('tag-link') || parent.tagName === 'A' || parent.tagName === 'PRE' || parent.tagName === 'CODE')) {
         continue;

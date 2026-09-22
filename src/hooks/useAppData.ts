@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS } from '@/types';
 import * as localDb from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import { uid, createNote, applyTheme, applyFontSize } from '@/lib/utils';
+import { deleteAllNoteImages } from '@/lib/images';
 
 interface NoteRow {
   id: string;
@@ -427,6 +428,7 @@ export function useAppData() {
       setNotes((prev) => prev.filter((n) => n.id !== id));
       localDb.deleteNote(id);
       deleteNoteFromCloud(id);
+      deleteAllNoteImages(id);
     },
     [deleteNoteFromCloud]
   );
