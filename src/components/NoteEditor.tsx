@@ -58,7 +58,8 @@ export function NoteEditor({
   const [menuOpen, setMenuOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [imageViewer, setImageViewer] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [uploadsInProgress, setUploadsInProgress] = useState(0);
+  const uploading = uploadsInProgress > 0;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -149,7 +150,7 @@ export function NoteEditor({
       toast('Only JPG, PNG, GIF, and WEBP images are supported');
       return;
     }
-    setUploading(true);
+    setUploadsInProgress((count) => count + 1);
     try {
       const { url } = await uploadNoteImage(note.id, file);
       const imgTag = `<img src="${url}" alt="${file.name}" style="max-width:100%;border-radius:8px;margin:8px 0;" />`;
@@ -159,13 +160,13 @@ export function NoteEditor({
       toast('Failed to upload image');
       console.error(err);
     } finally {
-      setUploading(false);
+      setUploadsInProgress((count) => Math.max(0, count - 1));
     }
   };
 
   const handleFileUpload = async (file: File) => {
     if (!note) return;
-    setUploading(true);
+    setUploadsInProgress((count) => count + 1);
     try {
       const result = await onAddAttachment(note.id, file);
       if (result) {
@@ -177,7 +178,7 @@ export function NoteEditor({
       toast('Failed to attach file');
       console.error(err);
     } finally {
-      setUploading(false);
+      setUploadsInProgress((count) => Math.max(0, count - 1));
     }
   };
 
@@ -322,7 +323,7 @@ export function NoteEditor({
                   </button>
                   {moveOpen && (
                     <div
-                      className="absolute left-full top-0 ml-1 w-44 rounded-xl shadow-xl border py-1 animate-scale-in"
+                      className="absolute right-0 top-full z-50 mt-1 w-44 rounded-xl shadow-xl border py-1 animate-scale-in"
                       style={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)' }}
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -372,6 +373,9 @@ export function NoteEditor({
             suppressContentEditableWarning
             onInput={(e) => setContent((e.target as HTMLDivElement).innerHTML)}
             onPaste={handlePaste}
+            onClick={(e) => {
+              if (e.target instanceof HTMLImageElement) setImageViewer(e.target.src);
+            }}
             data-placeholder="Start writing..."
             className="note-content w-full min-h-[200px] outline-none text-app text-sm leading-relaxed"
             style={{ color: 'var(--text)' }}
@@ -439,7 +443,7 @@ export function NoteEditor({
         </button>
         {uploading && (
           <span className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>
-            Uploading...
+            Uploading {uploadsInProgress} file{uploadsInProgress === 1 ? '' : 's'}...
           </span>
         )}
       </div>
@@ -500,6 +504,7 @@ function AttachmentItem({
   onOpen: () => void;
   onDelete: () => void;
 }) {
+  const fileType = attachment.name.split('.').pop()?.toUpperCase() || 'FILE';
   const iconType = getFileIcon(attachment.type, attachment.name);
   const isImage = iconType === 'image';
 
@@ -532,7 +537,7 @@ function AttachmentItem({
           {attachment.name}
         </div>
         <div className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>
-          {formatFileSize(attachment.size)}
+          {fileType} · {formatFileSize(attachment.size)} · Uploaded
         </div>
       </button>
       <button

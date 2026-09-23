@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import type { Note, Folder } from '@/types';
 import type { ViewType } from '@/lib/navigation';
-import { sortNotes, formatTime, getPreview, htmlToText } from '@/lib/utils';
+import { sortNotes, formatTime, getPreview, htmlToText, noteHasTag } from '@/lib/utils';
 import { useToast } from '@/contexts/ToastContext';
 
 interface NoteListProps {
@@ -69,7 +69,7 @@ export function NoteList({
       case 'archived': return !n.trashed && n.archived;
       case 'trash': return n.trashed;
       case 'folder': return !n.trashed && !n.archived && n.folderId === view.id;
-      case 'tag': return !n.trashed && !n.archived && htmlToText(n.content).toLowerCase().includes('#' + view.name.toLowerCase());
+      case 'tag': return !n.trashed && !n.archived && noteHasTag(n, view.name);
       default: return false;
     }
   });
@@ -131,7 +131,8 @@ export function NoteList({
       {/* Search bar */}
       {view.kind !== 'trash' && (
         <div className="px-4 pt-4 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
-          <div className="relative">
+          <div className="relative"
+                  >
             <Search
               size={16}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-tertiary"
@@ -170,6 +171,7 @@ export function NoteList({
                 <div
                   key={note.id}
                   className="relative"
+                  ref={menuFor === note.id ? menuRef : undefined}
                 >
                   <button
                     onClick={() => onSelectNote(note.id)}
@@ -213,7 +215,7 @@ export function NoteList({
                   {/* Action menu button — always visible, touch-friendly */}
                   <div
                     className="absolute right-2 top-2"
-                    ref={menuFor === note.id ? menuRef : undefined}
+                    
                   >
                     <button
                       onClick={(e) => {
@@ -262,7 +264,7 @@ export function NoteList({
                           </button>
                           {moveFor === note.id && (
                             <div
-                              className="absolute right-48 top-0 w-44 rounded-xl shadow-xl border border-app py-1 animate-scale-in"
+                              className="absolute right-0 top-full z-50 mt-1 w-44 rounded-xl shadow-xl border border-app py-1 animate-scale-in"
                               style={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)' }}
                               onClick={(e) => e.stopPropagation()}
                             >

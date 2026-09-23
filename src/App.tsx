@@ -98,6 +98,64 @@ function AppContent() {
     setSelectedNoteId(id);
   };
 
+  // Keyboard shortcuts for common note actions.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTyping = Boolean(
+        target?.isContentEditable ||
+          target?.closest('input, textarea, select, [contenteditable="true"]')
+      );
+      const modifier = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+
+      if (modifier && key === 'k') {
+        if (isTyping) return;
+        const searchInput = document.querySelector<HTMLInputElement>(
+          'input[placeholder="Search notes"]'
+        );
+        if (searchInput) {
+          event.preventDefault();
+          searchInput.focus();
+        }
+        return;
+      }
+
+      if (modifier && key === 'n') {
+        event.preventDefault();
+        if (
+          isTyping ||
+          !user ||
+          !data.loaded ||
+          view.kind === 'trash' ||
+          view.kind === 'settings' ||
+          view.kind === 'archived'
+        ) return;
+        const folderId = view.kind === 'folder' ? view.id : null;
+        const note = data.addNote(folderId);
+        setSelectedNoteId(note.id);
+        return;
+      }
+
+      if (isTyping) return;
+
+      if (event.key === 'Escape') {
+        if (searchQuery) {
+          setSearchQuery('');
+          return;
+        }
+        if (sidebarOpen) {
+          setSidebarOpen(false);
+          return;
+        }
+        if (window.innerWidth < 1024 && selectedNoteId) setSelectedNoteId(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [data.addNote, data.loaded, searchQuery, selectedNoteId, sidebarOpen, user, view]);
+
   // Show auth screen if not signed in
   if (authLoading) {
     return (
