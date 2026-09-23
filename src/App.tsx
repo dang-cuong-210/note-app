@@ -42,7 +42,7 @@ function AppContent() {
         case 'pinned': return !n.trashed && !n.archived && n.pinned;
         case 'archived': return !n.trashed && n.archived;
         case 'trash': return n.trashed;
-        case 'folder': return !n.trashed && n.folderId === view.id;
+        case 'folder': return !n.trashed && !n.archived && n.folderId === view.id;
         case 'tag': return !n.trashed && !n.archived && noteHasTag(n, view.name);
         default: return false;
       }

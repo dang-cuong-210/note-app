@@ -153,9 +153,14 @@ export function useAppData() {
     }
   }, []);
 
-  // Load all data from cloud
+  // Load all data from cloud, merging with any local-only changes
   const loadFromCloud = useCallback(async () => {
     setSyncing(true);
+    // Load local cache first — used for merge and as fallback
+    const [localNotes, localFolders] = await Promise.all([
+      localDb.getAllNotes(),
+      localDb.getAllFolders(),
+    ]);
     try {
       const [notesRes, foldersRes] = await Promise.all([
         supabase.from('notes').select('*').order('updated_at', { ascending: false }),
@@ -168,21 +173,38 @@ export function useAppData() {
       const cloudNotes = (notesRes.data as NoteRow[]).map(mapNote);
       const cloudFolders = (foldersRes.data as FolderRow[]).map(mapFolder);
 
-      setNotes(cloudNotes);
-      setFolders(cloudFolders);
+      // Merge: for each note, keep whichever (local vs cloud) has a newer updatedAt.
+      // This prevents losing local edits that haven't synced yet.
+      const localMap = new Map(localNotes.map((n) => [n.id, n]));
+      const mergedNotes = cloudNotes.map((cn) => {
+        const ln = localMap.get(cn.id);
+        if (ln && ln.updatedAt > cn.updatedAt) return ln;
+        return cn;
+      });
+      // Include local-only notes (created offline, not yet in cloud)
+      for (const ln of localNotes) {
+        if (!mergedNotes.find((n) => n.id === ln.id)) {
+          mergedNotes.unshift(ln);
+        }
+      }
+
+      const mergedFolders = [...cloudFolders];
+      for (const lf of localFolders) {
+        if (!mergedFolders.find((f) => f.id === lf.id)) {
+          mergedFolders.push(lf);
+        }
+      }
+
+      setNotes(mergedNotes);
+      setFolders(mergedFolders);
 
       // Cache locally for offline use
       await Promise.all([
-        localDb.putNotes(cloudNotes),
-        ...cloudFolders.map((f) => localDb.putFolder(f)),
+        localDb.putNotes(mergedNotes),
+        ...mergedFolders.map((f) => localDb.putFolder(f)),
       ]);
     } catch (err) {
       console.warn('Cloud load failed, falling back to local cache:', err);
-      // Fall back to local cache
-      const [localNotes, localFolders] = await Promise.all([
-        localDb.getAllNotes(),
-        localDb.getAllFolders(),
-      ]);
       setNotes(localNotes);
       setFolders(localFolders);
     } finally {
@@ -218,6 +240,8 @@ export function useAppData() {
             setNotes((prev) => {
               const idx = prev.findIndex((n) => n.id === note.id);
               if (idx >= 0) {
+                // Skip stale updates — don't overwrite a newer local edit
+                if (prev[idx].updatedAt > note.updatedAt) return prev;
                 const next = [...prev];
                 next[idx] = note;
                 return next;
@@ -558,11 +582,29 @@ export function useAppData() {
   );
 
   const flushAll = useCallback(async () => {
+    // Sync any pending note changes before clearing timers
     saveTimers.current.forEach((timer) => clearTimeout(timer));
     saveTimers.current.clear();
     folderSaveTimers.current.forEach((timer) => clearTimeout(timer));
     folderSaveTimers.current.clear();
-  }, []);
+    // Flush current notes state to cloud
+    for (const note of notesRef.current) {
+      await syncNoteToCloud(note);
+    }
+  }, [syncNoteToCloud]);
+
+  // Flush pending changes when the page is hidden or unloaded
+  useEffect(() => {
+    if (!loaded) return;
+    const handler = () => { void flushAll(); };
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') handler();
+    });
+    window.addEventListener('pagehide', handler);
+    return () => {
+      window.removeEventListener('pagehide', handler);
+    };
+  }, [loaded, flushAll]);
 
   return {
     notes,
