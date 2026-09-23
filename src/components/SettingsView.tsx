@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import {
   Sun,
   Moon,
@@ -6,7 +6,6 @@ import {
   Download,
   Upload,
   ArrowLeft,
-  Check,
 } from 'lucide-react';
 import type { Settings, Note, Folder } from '@/types';
 import { exportData, parseImport } from '@/lib/utils';
@@ -175,18 +174,6 @@ export function SettingsView({
               onChange={handleImport}
               className="hidden"
             />
-
-            <button
-              onClick={handleExport}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-secondary hover-bg text-app text-sm transition-colors text-left"
-              style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text)' }}
-            >
-              <Check size={18} style={{ color: 'var(--accent)' }} />
-              <div className="flex-1">
-                <div className="font-medium">Backup</div>
-                <div className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>Same as export — your data is stored locally</div>
-              </div>
-            </button>
           </Section>
 
           {/* About */}
@@ -195,7 +182,7 @@ export function SettingsView({
               Noted · {notes.length} notes · {folders.length} folders
             </p>
             <p className="text-xs text-tertiary mt-1" style={{ color: 'var(--text-tertiary)' }}>
-              All data is stored locally on your device
+              Synced across your devices via cloud storage
             </p>
           </div>
         </div>

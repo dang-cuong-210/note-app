@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   FileText,
   Pin,
@@ -11,6 +11,7 @@ import {
   Archive,
   X,
   LogOut,
+  MoreHorizontal,
 } from 'lucide-react';
 import type { Folder, Note } from '@/types';
 import type { ViewType } from '@/lib/navigation';
@@ -47,6 +48,7 @@ export function Sidebar({
   const [editName, setEditName] = useState('');
   const [tagsExpanded, setTagsExpanded] = useState(true);
   const [foldersExpanded, setFoldersExpanded] = useState(true);
+  const [folderMenuFor, setFolderMenuFor] = useState<string | null>(null);
 
   const activeNotes = notes.filter((n) => !n.trashed);
   const tags = getAllTags(activeNotes);
@@ -54,12 +56,26 @@ export function Sidebar({
   const archivedCount = activeNotes.filter((n) => n.archived).length;
   const trashCount = notes.filter((n) => n.trashed).length;
 
+  useEffect(() => {
+    if (!folderMenuFor) return;
+    const handler = () => setFolderMenuFor(null);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [folderMenuFor]);
+
   const handleAddFolder = () => {
     if (folderName.trim()) {
       onAddFolder(folderName);
       setFolderName('');
       setShowFolderInput(false);
     }
+  };
+
+  const handleDeleteFolder = (id: string, name: string) => {
+    if (window.confirm(`Delete "${name}"? Notes inside will be moved to All Notes.`)) {
+      onDeleteFolder(id);
+    }
+    setFolderMenuFor(null);
   };
 
   const isActive = (view: ViewType): boolean => {
@@ -199,24 +215,58 @@ export function Sidebar({
                         style={{ color: 'var(--text)', borderColor: 'var(--border)' }}
                       />
                     ) : (
-                      <button
-                        onClick={() => {
-                          onViewChange({ kind: 'folder', id: folder.id });
-                          onClose?.();
-                        }}
-                        onDoubleClick={() => {
-                          setEditingFolder(folder.id);
-                          setEditName(folder.name);
-                        }}
-                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-left ${
-                          active ? 'bg-accent-light' : 'hover-bg'
-                        }`}
-                        style={active ? { backgroundColor: 'var(--accent-light)', color: 'var(--accent)' } : { color: 'var(--text-secondary)' }}
-                      >
-                        <FolderIcon size={16} style={active ? { color: 'var(--accent)' } : undefined} />
-                        <span className="flex-1 truncate text-left">{folder.name}</span>
-                        {count > 0 && <span className="text-xs text-tertiary">{count}</span>}
-                      </button>
+                      <div className="relative group/folder">
+                        <button
+                          onClick={() => {
+                            onViewChange({ kind: 'folder', id: folder.id });
+                            onClose?.();
+                          }}
+                          onDoubleClick={() => {
+                            setEditingFolder(folder.id);
+                            setEditName(folder.name);
+                          }}
+                          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-left ${
+                            active ? 'bg-accent-light' : 'hover-bg'
+                          }`}
+                          style={active ? { backgroundColor: 'var(--accent-light)', color: 'var(--accent)' } : { color: 'var(--text-secondary)' }}
+                        >
+                          <FolderIcon size={16} style={active ? { color: 'var(--accent)' } : undefined} />
+                          <span className="flex-1 truncate text-left">{folder.name}</span>
+                          {count > 0 && <span className="text-xs text-tertiary">{count}</span>}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFolderMenuFor(folderMenuFor === folder.id ? null : folder.id);
+                          }}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover/folder:opacity-100 transition-opacity"
+                          style={{ color: 'var(--text-tertiary)' }}
+                        >
+                          <MoreHorizontal size={14} />
+                        </button>
+                        {folderMenuFor === folder.id && (
+                          <div
+                            className="absolute right-0 top-8 z-50 w-36 rounded-lg shadow-xl border py-1 animate-scale-in"
+                            style={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)' }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={() => { setEditingFolder(folder.id); setEditName(folder.name); setFolderMenuFor(null); }}
+                              className="w-full px-3 py-2 text-sm text-left hover-bg rounded-lg mx-1"
+                              style={{ color: 'var(--text-secondary)' }}
+                            >
+                              Rename
+                            </button>
+                            <button
+                              onClick={() => handleDeleteFolder(folder.id, folder.name)}
+                              className="w-full px-3 py-2 text-sm text-left hover-bg rounded-lg mx-1"
+                              style={{ color: 'var(--danger)' }}
+                            >
+                              Delete folder
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 );

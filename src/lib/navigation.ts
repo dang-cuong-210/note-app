@@ -1,5 +1,4 @@
 import type { LucideIcon } from 'lucide-react';
-import { FileText, Inbox, Pin, Settings as SettingsIcon, Tag, Folder as FolderIcon } from 'lucide-react';
 
 export type ViewType =
   | { kind: 'all' }

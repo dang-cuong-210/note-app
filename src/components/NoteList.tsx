@@ -37,18 +37,6 @@ interface NoteListProps {
   onSearchChange: (q: string) => void;
 }
 
-function viewTitle(view: ViewType): string {
-  switch (view.kind) {
-    case 'all': return 'All Notes';
-    case 'pinned': return 'Pinned';
-    case 'archived': return 'Archived';
-    case 'trash': return 'Recently Deleted';
-    case 'settings': return 'Settings';
-    case 'folder': return 'Folder';
-    case 'tag': return `#${view.name}`;
-  }
-}
-
 export function NoteList({
   notes,
   folders,
@@ -79,7 +67,7 @@ export function NoteList({
       case 'pinned': return !n.trashed && !n.archived && n.pinned;
       case 'archived': return !n.trashed && n.archived;
       case 'trash': return n.trashed;
-      case 'folder': return !n.trashed && n.folderId === view.id;
+      case 'folder': return !n.trashed && !n.archived && n.folderId === view.id;
       case 'tag': return !n.trashed && !n.archived && htmlToText(n.content).toLowerCase().includes('#' + view.name.toLowerCase());
       default: return false;
     }

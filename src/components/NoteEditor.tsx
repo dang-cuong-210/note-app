@@ -32,7 +32,6 @@ import { useToast } from '@/contexts/ToastContext';
 import {
   uploadNoteImage,
   deleteNoteImage,
-  deleteAllNoteImages,
   isAcceptedImageType,
   extractImagePaths,
 } from '@/lib/images';
@@ -227,7 +226,7 @@ export function NoteEditor({
           imgEl.setAttribute('data-fullscreen', 'true');
         }
         handleInput();
-      } catch (err) {
+      } catch {
         // Remove failed placeholder
         const failedEl = editorRef.current.querySelector(`img[data-upload-id="${uploadId}"]`);
         if (failedEl) failedEl.remove();
@@ -295,8 +294,11 @@ export function NoteEditor({
 
   const handleDeleteImage = () => {
     if (!fullscreenImage || !editorRef.current) return;
-    const imgs = editorRef.current.querySelectorAll(`img[src="${fullscreenImage}"]`);
-    imgs.forEach((img) => img.remove());
+    // Use attribute matching instead of CSS selector with URL (URLs contain ? and &)
+    const allImgs = editorRef.current.querySelectorAll('img');
+    allImgs.forEach((img) => {
+      if (img.getAttribute('src') === fullscreenImage) img.remove();
+    });
     handleInput();
 
     // Extract path and delete from storage
@@ -394,21 +396,15 @@ export function NoteEditor({
     }
   };
 
-  // Clean up images when note is permanently deleted
-  useEffect(() => {
-    return () => {
-      if (note) {
-        deleteAllNoteImages(note.id).catch(() => {});
-      }
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // NOTE: Image cleanup on permanent deletion is handled in useAppData.permanentDelete
+  // Do NOT delete images here — this component unmounts when switching notes too
 
   if (!note) {
     return (
       <div className="h-full flex items-center justify-center bg-app" style={{ backgroundColor: 'var(--bg)' }}>
         <div className="text-center px-8">
           <p className="text-secondary text-sm" style={{ color: 'var(--text-secondary)' }}>
-            Select a note to start reading
+            Select a note to start writing
           </p>
         </div>
       </div>

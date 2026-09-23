@@ -37,8 +37,8 @@ export async function compressImage(file: File): Promise<Blob> {
 
   ctx.drawImage(img, 0, 0, width, height);
 
-  // Preserve PNG format, compress others as JPEG quality 0.82
-  const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+  // Preserve PNG and WEBP format, compress others as JPEG quality 0.82
+  const mime = file.type === 'image/png' ? 'image/png' : file.type === 'image/webp' ? 'image/webp' : 'image/jpeg';
   const quality = mime === 'image/png' ? undefined : 0.82;
 
   return new Promise((resolve, reject) => {
@@ -80,7 +80,9 @@ export async function uploadNoteImage(
   if (!user) throw new Error('Not authenticated');
 
   const compressed = await compressImage(file);
-  const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+  const isPng = compressed.type === 'image/png';
+  const isWebp = compressed.type === 'image/webp';
+  const ext = isPng ? 'png' : isWebp ? 'webp' : 'jpg';
   const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const path = `${user.id}/${noteId}/${fileName}`;
 
