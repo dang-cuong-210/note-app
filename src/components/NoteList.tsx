@@ -12,6 +12,7 @@ import {
   Search,
   X,
   Plus,
+  ChevronRight,
 } from 'lucide-react';
 import type { Note, Folder } from '@/types';
 import type { ViewType } from '@/lib/navigation';
@@ -85,16 +86,21 @@ export function NoteList({
 
   const folderName = (id: string | null) => folders.find((f) => f.id === id)?.name || null;
 
-  // Close menu on outside click
+  // Close menu on outside click/touch
   useEffect(() => {
     if (!menuFor) return;
-    const handler = (e: MouseEvent) => {
+    const handler = (e: Event) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuFor(null);
+        setMoveFor(null);
       }
     };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
+    };
   }, [menuFor]);
 
   const handleTrash = (note: Note) => {
@@ -163,14 +169,14 @@ export function NoteList({
               return (
                 <div
                   key={note.id}
-                  className="group relative"
+                  className="relative"
                 >
                   <button
                     onClick={() => onSelectNote(note.id)}
                     className={`w-full text-left px-3 py-3 rounded-lg transition-colors ${
                       selected ? 'bg-accent-light' : 'hover-bg'
-                    }`}
-                    style={selected ? { backgroundColor: 'var(--accent-light)' } : undefined}
+                    } ${menuFor === note.id ? 'bg-accent-light' : ''}`}
+                    style={selected || menuFor === note.id ? { backgroundColor: 'var(--accent-light)' } : undefined}
                   >
                     <div className="flex items-start justify-between gap-2 mb-0.5">
                       <h3
@@ -204,15 +210,24 @@ export function NoteList({
                     </div>
                   </button>
 
-                  {/* Action menu button */}
-                  <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity" ref={menuFor === note.id ? menuRef : undefined}>
+                  {/* Action menu button — always visible, touch-friendly */}
+                  <div
+                    className="absolute right-2 top-2"
+                    ref={menuFor === note.id ? menuRef : undefined}
+                  >
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setMenuFor(menuFor === note.id ? null : note.id);
+                        setMoveFor(null);
                       }}
-                      className="p-1.5 rounded-lg hover-bg text-tertiary"
-                      style={{ color: 'var(--text-tertiary)', backgroundColor: selected ? 'var(--accent-light)' : 'var(--bg)' }}
+                      className="p-1.5 rounded-lg hover-bg text-tertiary transition-colors"
+                      style={{
+                        color: 'var(--text-tertiary)',
+                        backgroundColor: selected || menuFor === note.id ? 'var(--accent-light)' : 'var(--bg)',
+                        opacity: menuFor === note.id ? 1 : undefined,
+                      }}
+                      aria-label="Note actions"
                     >
                       <MoreHorizontal size={16} />
                     </button>
@@ -221,7 +236,7 @@ export function NoteList({
                   {/* Dropdown menu */}
                   {menuFor === note.id && (
                     <div
-                      className="absolute right-2 top-8 z-50 w-48 rounded-xl shadow-xl border border-app py-1 animate-scale-in"
+                      className="absolute right-2 top-9 z-50 w-48 rounded-xl shadow-xl border border-app py-1 animate-scale-in"
                       style={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)', boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -235,19 +250,21 @@ export function NoteList({
                         <MenuItem icon={note.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />} label={note.archived ? 'Unarchive' : 'Archive'} onClick={() => { handleArchive(note); setMenuFor(null); }} />
                       )}
                       {view.kind !== 'trash' && (
-                        <div className="relative group/submenu">
+                        <div className="relative">
                           <button
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-secondary hover-bg text-left rounded-lg mx-1"
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-secondary hover-bg text-left rounded-lg mx-1 transition-colors"
                             style={{ color: 'var(--text-secondary)' }}
                             onClick={() => setMoveFor(moveFor === note.id ? null : note.id)}
                           >
                             <FolderIcon size={15} />
-                            Move to...
+                            <span className="flex-1">Move to...</span>
+                            <ChevronRight size={14} style={{ color: 'var(--text-tertiary)' }} />
                           </button>
                           {moveFor === note.id && (
                             <div
-                              className="absolute left-full top-0 ml-1 w-44 rounded-xl shadow-xl border border-app py-1 animate-scale-in"
+                              className="absolute right-48 top-0 w-44 rounded-xl shadow-xl border border-app py-1 animate-scale-in"
                               style={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)' }}
+                              onClick={(e) => e.stopPropagation()}
                             >
                               <MenuItem label="No folder" onClick={() => { onMove(note.id, null); setMenuFor(null); setMoveFor(null); }} />
                               {folders.map((f) => (

@@ -230,10 +230,14 @@ function AppContent() {
               <NoteEditor
                 note={selectedNote}
                 folders={data.folders}
+                attachments={data.getAttachmentsForNote(selectedNote?.id || '')}
                 onUpdate={data.updateNoteContent}
                 onTogglePin={data.togglePin}
                 onTrash={handleTrash}
                 onMove={data.moveNote}
+                onArchive={data.archiveNote}
+                onAddAttachment={data.addAttachment}
+                onRemoveAttachment={data.removeAttachment}
                 onBack={() => setSelectedNoteId(null)}
               />
             </div>

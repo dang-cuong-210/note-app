@@ -1,10 +1,11 @@
-import type { Note, Folder, Settings } from '@/types';
+import type { Note, Folder, Settings, Attachment } from '@/types';
 
 const DB_NAME = 'noted-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const NOTES_STORE = 'notes';
 const FOLDERS_STORE = 'folders';
 const SETTINGS_STORE = 'settings';
+const ATTACHMENTS_STORE = 'attachments';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -24,6 +25,10 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
         db.createObjectStore(SETTINGS_STORE, { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(ATTACHMENTS_STORE)) {
+        const store = db.createObjectStore(ATTACHMENTS_STORE, { keyPath: 'id' });
+        store.createIndex('noteId', 'noteId');
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -101,4 +106,40 @@ export async function getSettings() {
 }
 export async function saveSettings(settings: Settings) {
   return tx(SETTINGS_STORE, 'readwrite', (s) => s.put({ key: 'app', value: settings }));
+}
+
+// ===== Attachments =====
+export async function getAllAttachments() {
+  return txAll<Attachment>(ATTACHMENTS_STORE, 'readonly', (s) => s.getAll() as IDBRequest<Attachment[]>);
+}
+export async function getAttachmentsByNote(noteId: string) {
+  return openDB().then(
+    (db) =>
+      new Promise<Attachment[]>((resolve, reject) => {
+        const t = db.transaction(ATTACHMENTS_STORE, 'readonly');
+        const s = t.objectStore(ATTACHMENTS_STORE);
+        const idx = s.index('noteId');
+        const req = idx.getAll(noteId);
+        req.onsuccess = () => resolve(req.result as Attachment[]);
+        req.onerror = () => reject(req.error);
+      })
+  );
+}
+export async function putAttachment(attachment: Attachment) {
+  return tx(ATTACHMENTS_STORE, 'readwrite', (s) => s.put(attachment));
+}
+export async function putAttachments(attachments: Attachment[]) {
+  return openDB().then(
+    (db) =>
+      new Promise<void>((resolve, reject) => {
+        const t = db.transaction(ATTACHMENTS_STORE, 'readwrite');
+        const s = t.objectStore(ATTACHMENTS_STORE);
+        attachments.forEach((a) => s.put(a));
+        t.oncomplete = () => resolve();
+        t.onerror = () => reject(t.error);
+      })
+  );
+}
+export async function deleteAttachmentRecord(id: string) {
+  return tx(ATTACHMENTS_STORE, 'readwrite', (s) => s.delete(id));
 }

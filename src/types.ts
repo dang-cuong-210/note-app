@@ -32,6 +32,17 @@ export const DEFAULT_SETTINGS: Settings = {
   sortDir: 'desc',
 };
 
+export interface Attachment {
+  id: string;
+  noteId: string;
+  name: string;
+  type: string;
+  size: number;
+  storagePath: string;
+  url: string | null;
+  createdAt: number;
+}
+
 export interface TagInfo {
   name: string;
   count: number;

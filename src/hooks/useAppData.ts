@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Note, Folder, Settings } from '@/types';
+import type { Note, Folder, Settings, Attachment } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
 import * as localDb from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import { uid, createNote, applyTheme, applyFontSize } from '@/lib/utils';
 import { deleteAllNoteImages } from '@/lib/images';
+import { uploadAttachment, deleteAttachment, deleteAllAttachments, loadAllAttachments, refreshAttachmentUrl } from '@/lib/attachments';
 
 interface NoteRow {
   id: string;
@@ -77,6 +78,7 @@ function folderToRow(folder: Folder): FolderRow {
 export function useAppData() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -162,9 +164,10 @@ export function useAppData() {
       localDb.getAllFolders(),
     ]);
     try {
-      const [notesRes, foldersRes] = await Promise.all([
+      const [notesRes, foldersRes, cloudAttachments] = await Promise.all([
         supabase.from('notes').select('*').order('updated_at', { ascending: false }),
         supabase.from('folders').select('*').order('name', { ascending: true }),
+        loadAllAttachments(),
       ]);
 
       if (notesRes.error) throw notesRes.error;
@@ -197,16 +200,20 @@ export function useAppData() {
 
       setNotes(mergedNotes);
       setFolders(mergedFolders);
+      setAttachments(cloudAttachments);
 
       // Cache locally for offline use
       await Promise.all([
         localDb.putNotes(mergedNotes),
         ...mergedFolders.map((f) => localDb.putFolder(f)),
+        localDb.putAttachments(cloudAttachments),
       ]);
     } catch (err) {
       console.warn('Cloud load failed, falling back to local cache:', err);
+      const localAttachments = await localDb.getAllAttachments();
       setNotes(localNotes);
       setFolders(localFolders);
+      setAttachments(localAttachments);
     } finally {
       setSyncing(false);
       setLoaded(true);
@@ -450,9 +457,11 @@ export function useAppData() {
   const permanentDelete = useCallback(
     (id: string) => {
       setNotes((prev) => prev.filter((n) => n.id !== id));
+      setAttachments((prev) => prev.filter((a) => a.noteId !== id));
       localDb.deleteNote(id);
       deleteNoteFromCloud(id);
       deleteAllNoteImages(id);
+      deleteAllAttachments(id);
     },
     [deleteNoteFromCloud]
   );
@@ -606,9 +615,44 @@ export function useAppData() {
     };
   }, [loaded, flushAll]);
 
+  // ===== Attachment operations =====
+  const addAttachment = useCallback(
+    async (noteId: string, file: File): Promise<Attachment | null> => {
+      try {
+        const attachment = await uploadAttachment(noteId, file);
+        setAttachments((prev) => [...prev, attachment]);
+        localDb.putAttachment(attachment);
+        return attachment;
+      } catch (err) {
+        console.error('Attachment upload failed:', err);
+        return null;
+      }
+    },
+    []
+  );
+
+  const removeAttachment = useCallback(
+    async (id: string) => {
+      setAttachments((prev) => prev.filter((a) => a.id !== id));
+      localDb.deleteAttachmentRecord(id);
+      try {
+        await deleteAttachment(id);
+      } catch (err) {
+        console.error('Attachment delete failed:', err);
+      }
+    },
+    []
+  );
+
+  const getAttachmentsForNote = useCallback(
+    (noteId: string): Attachment[] => attachments.filter((a) => a.noteId === noteId),
+    [attachments]
+  );
+
   return {
     notes,
     folders,
+    attachments,
     settings,
     loaded,
     syncing,
@@ -629,6 +673,9 @@ export function useAppData() {
     updateSettings,
     importData,
     flushAll,
+    addAttachment,
+    removeAttachment,
+    getAttachmentsForNote,
   };
 }
 
