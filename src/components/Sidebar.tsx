@@ -12,6 +12,7 @@ import {
   X,
   LogOut,
   MoreHorizontal,
+  Search,
 } from 'lucide-react';
 import type { Folder, Note } from '@/types';
 import type { ViewType } from '@/lib/navigation';
@@ -21,6 +22,8 @@ interface SidebarProps {
   notes: Note[];
   folders: Folder[];
   currentView: ViewType;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
   onViewChange: (view: ViewType) => void;
   onAddFolder: (name: string) => void;
   onRenameFolder: (id: string, name: string) => void;
@@ -34,6 +37,8 @@ export function Sidebar({
   notes,
   folders,
   currentView,
+  searchQuery,
+  onSearchChange,
   onViewChange,
   onAddFolder,
   onRenameFolder,
@@ -94,6 +99,7 @@ export function Sidebar({
       onClick={() => {
         onViewChange(view);
         onClose?.();
+        onClose?.();
       }}
       className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-left ${
         active ? 'bg-accent-light text-accent' : 'text-secondary hover-bg'
@@ -129,7 +135,8 @@ export function Sidebar({
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-2 pb-4">
+      <div className="px-3 pb-3"><label htmlFor={onClose ? "mobile-sidebar-search" : "desktop-sidebar-search"} className="sr-only">Search notes</label><div className="relative"><Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-secondary)" }} /><input id={onClose ? "mobile-sidebar-search" : "desktop-sidebar-search"} type="search" value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} placeholder="Search" className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm outline-none focus:ring-2" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border)", color: "var(--text)" }} /></div></div>
+    <nav className="flex-1 overflow-y-auto px-2 pb-4">
         <div className="space-y-0.5">
           {navItem(<FileText size={18} />, 'All Notes', { kind: 'all' }, activeNotes.filter((n) => !n.archived).length, isActive({ kind: 'all' }))}
           {navItem(<Pin size={18} />, 'Pinned', { kind: 'pinned' }, pinnedCount, isActive({ kind: 'pinned' }))}

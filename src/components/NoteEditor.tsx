@@ -70,7 +70,7 @@ export function NoteEditor({
   useEffect(() => {
     if (note) {
       setTitle(note.title);
-      setContent(note.content);
+      setContent(note.content); contentRef.current = note.content; if (editorRef.current) editorRef.current.innerHTML = note.content ?? "";
     }
   }, [note?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -194,22 +194,27 @@ export function NoteEditor({
     e.target.value = '';
   };
 
-  const handleRemoveImage = (src: string) => {
-    setContent((prev) => {
-      const div = document.createElement('div');
-      div.innerHTML = prev;
-      const imgs = div.querySelectorAll(`img[src="${src}"]`);
-      imgs.forEach((img) => img.remove());
-      return div.innerHTML;
-    });
-    const paths = extractImagePaths(content);
-    const match = src.match(/\/note-images\/(.+?)(\?|$)/);
-    if (match) {
-      const path = decodeURIComponent(match[1]);
-      if (!paths.includes(path)) {
-        deleteNoteImage(path).catch((err) => console.warn('Image delete failed:', err));
+  const removeUnusedImageFiles = (previousHtml: string, nextHtml: string) => {
+    const nextPaths = new Set(extractImagePaths(nextHtml));
+    extractImagePaths(previousHtml).forEach((path) => {
+      if (!nextPaths.has(path)) {
+        void deleteNoteImage(path).catch((error) => console.error("Failed to delete note image", error));
       }
-    }
+    });
+  };
+
+  const handleRemoveImage = (src: string) => {
+    const currentContent = editorRef.current?.innerHTML ?? contentRef.current;
+    const container = document.createElement("div");
+    container.innerHTML = currentContent;
+    const image = Array.from(container.querySelectorAll("img")).find((candidate) => candidate.getAttribute("src") === src || candidate.src === src);
+    if (!image) return;
+    image.remove();
+    const nextContent = container.innerHTML;
+    if (editorRef.current) editorRef.current.innerHTML = nextContent;
+    contentRef.current = nextContent;
+    setContent(nextContent);
+    removeUnusedImageFiles(currentContent, nextContent);
   };
 
   const handleDeleteAttachment = async (attachment: Attachment) => {
@@ -371,7 +376,7 @@ export function NoteEditor({
             ref={editorRef}
             contentEditable
             suppressContentEditableWarning
-            onInput={(e) => setContent((e.target as HTMLDivElement).innerHTML)}
+            onInput={(e) => { const nextContent = e.currentTarget.innerHTML; removeUnusedImageFiles(contentRef.current, nextContent); contentRef.current = nextContent; setContent(nextContent); }}
             onPaste={handlePaste}
             onClick={(e) => {
               if (e.target instanceof HTMLImageElement) setImageViewer(e.target.src);
@@ -379,7 +384,6 @@ export function NoteEditor({
             data-placeholder="Start writing..."
             className="note-content w-full min-h-[200px] outline-none text-app text-sm leading-relaxed"
             style={{ color: 'var(--text)' }}
-            dangerouslySetInnerHTML={{ __html: content }}
           />
 
           {/* Attachments section */}
@@ -460,6 +464,7 @@ export function NoteEditor({
           >
             <X size={24} />
           </button>
+          <button type="button" className="absolute top-4 left-4 rounded bg-black/70 px-3 py-2 text-white" onClick={() => { handleRemoveImage(imageViewer); setImageViewer(null); }}>Remove image</button>
           <img
             src={imageViewer}
             alt="Viewer"

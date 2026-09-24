@@ -185,12 +185,26 @@ function AppContent() {
 
   return (
     <div className="h-screen flex overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
-      {/* Sidebar - desktop */}
+      {selectedNoteId && (
+                      <button
+                                type="button"
+                                          aria-label="Open navigation menu"
+                                                    title="Open navigation menu"
+                                                              onClick={() => setSidebarOpen(true)}
+                                                                        className="fixed left-3 top-3 z-30 flex h-10 w-10 items-center justify-center rounded-lg border lg:hidden"
+                                                                                  style={{ borderColor: "var(--border)", backgroundColor: "var(--bg-secondary)", color: "var(--text)" }}
+                                                                                          >
+                                                                                                      <Menu size={20} aria-hidden="true" />
+                                                                                                              </button>
+            )}
+            {/* Sidebar - desktop */}
       <aside className="hidden lg:flex w-60 flex-shrink-0 border-r" style={{ borderColor: 'var(--border)' }}>
         <Sidebar
           notes={data.notes}
           folders={data.folders}
           currentView={view}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
           onViewChange={handleViewChange}
           onAddFolder={data.addFolder}
           onRenameFolder={data.renameFolder}
@@ -212,6 +226,8 @@ function AppContent() {
               notes={data.notes}
               folders={data.folders}
               currentView={view}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
               onViewChange={handleViewChange}
               onAddFolder={data.addFolder}
               onRenameFolder={data.renameFolder}
@@ -225,7 +241,7 @@ function AppContent() {
       )}
 
       {/* Main area */}
-      <main className="flex-1 flex overflow-hidden relative">
+      <main className="max-lg:w-full max-lg:min-w-0 max-lg:max-w-full flex-1 flex overflow-hidden relative">
         {/* Offline indicator */}
         {!data.online && (
           <div
@@ -252,13 +268,13 @@ function AppContent() {
             <div
               className={`${
                 selectedNoteId ? 'hidden lg:flex' : 'flex'
-              } w-full lg:w-80 xl:w-96 flex-shrink-0 border-r flex-col relative`}
+              } w-full max-lg:min-w-0 max-lg:max-w-full lg:w-80 xl:w-96 flex-shrink-0 border-r flex-col relative`}
               style={{ borderColor: 'var(--border)' }}
             >
               {/* Mobile menu button */}
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="lg:hidden absolute top-3 left-3 z-10 p-2 rounded-lg hover-bg"
+                className="hidden"
                 style={{ color: 'var(--text-secondary)' }}
               >
                 <Menu size={20} />
@@ -267,6 +283,7 @@ function AppContent() {
                 notes={data.notes}
                 folders={data.folders}
                 view={view}
+                            onOpenSidebar={() => setSidebarOpen(true)}
                 settings={data.settings}
                 selectedNoteId={selectedNoteId}
                 onSelectNote={handleSelectNote}
@@ -284,7 +301,7 @@ function AppContent() {
             </div>
 
             {/* Editor panel */}
-            <div className={`${selectedNoteId ? 'flex' : 'hidden lg:flex'} flex-1 overflow-hidden`}>
+        <div className={`${selectedNoteId ? 'flex' : 'hidden lg:flex'} max-lg:w-full max-lg:min-w-0 max-lg:max-w-full flex-1 overflow-hidden`}>
               <NoteEditor
                 note={selectedNote}
                 folders={data.folders}

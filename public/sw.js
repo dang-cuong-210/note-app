@@ -35,7 +35,16 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return;
 
-  const url = new URL(request.url);
+  const url = new URL(request.url);  // Vite development requests must always reach the current dev server.
+  const viteDevPaths = [
+    "/@vite/",
+    "/@react-refresh",
+    "/src/",
+    "/node_modules/",
+  ];
+  if (viteDevPaths.some((path) => url.pathname === path || url.pathname.startsWith(path))) return;
+
+
 
   // Skip Supabase API calls — always go to network
   if (url.hostname.includes('supabase.co')) return;

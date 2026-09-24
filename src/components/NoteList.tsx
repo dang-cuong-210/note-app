@@ -8,6 +8,7 @@ import {
   Archive,
   ArchiveRestore,
   MoreHorizontal,
+    Menu,
   RotateCcw,
   Search,
   X,
@@ -35,7 +36,8 @@ interface NoteListProps {
   onArchive: (id: string, archived: boolean) => void;
   onMove: (id: string, folderId: string | null) => void;
   searchQuery: string;
-  onSearchChange: (q: string) => void;
+    onOpenSidebar?: () => void;
+    onSearchChange: (q: string) => void;
 }
 
 export function NoteList({
@@ -55,7 +57,8 @@ export function NoteList({
   onMove,
   searchQuery,
   onSearchChange,
-}: NoteListProps) {
+    onOpenSidebar,
+  }: NoteListProps) {
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [moveFor, setMoveFor] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -127,12 +130,23 @@ export function NoteList({
   const showAddButton = view.kind !== 'trash' && view.kind !== 'settings' && view.kind !== 'archived';
 
   return (
-    <div className="h-full flex flex-col bg-app" style={{ backgroundColor: 'var(--bg)' }}>
+    <div className="h-full w-full max-lg:min-w-0 max-lg:max-w-full flex flex-col bg-appcurl -I http://localhost:5173/
+    " style={{ backgroundColor: 'var(--bg)' }}>
       {/* Search bar */}
       {view.kind !== 'trash' && (
-        <div className="px-4 pt-4 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
-          <div className="relative"
-                  >
+      <div className="flex items-center gap-2 px-4 pt-4 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
+      <button
+              type="button"
+                      aria-label="Open navigation menu"
+                              title="Open navigation menu"
+                                      onClick={onOpenSidebar}
+                                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border lg:hidden"
+                                                      style={{ borderColor: "var(--border)", backgroundColor: "var(--bg-secondary)", color: "var(--text-secondary)" }}
+                                                            >
+                                                                      <Menu size={20} aria-hidden="true" />
+                                                                            </button>
+                                                                                  <div className="relative flex-1 min-w-0 lg:hidden">      <div className="relative flex-1 min-w-0 lg:hidden">
+
             <Search
               size={16}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-tertiary"
@@ -156,7 +170,7 @@ export function NoteList({
             )}
           </div>
         </div>
-      )}
+      </div>      )}
 
       {/* Notes list */}
       <div className="flex-1 overflow-y-auto px-2">
