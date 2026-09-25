@@ -21,6 +21,13 @@ function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { toast } = useToast();
+  useEffect(() => {
+    if (data.syncConflicts > 0) {
+      toast('A sync conflict was detected. Both versions were preserved as separate notes.');
+      data.dismissSyncConflicts();
+    }
+  }, [data.syncConflicts]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   // Select first note when view changes (desktop only)
   useEffect(() => {
@@ -185,18 +192,7 @@ function AppContent() {
 
   return (
     <div className="h-screen flex overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
-      {selectedNoteId && (
-                      <button
-                                type="button"
-                                          aria-label="Open navigation menu"
-                                                    title="Open navigation menu"
-                                                              onClick={() => setSidebarOpen(true)}
-                                                                        className="fixed left-3 top-3 z-30 flex h-10 w-10 items-center justify-center rounded-lg border lg:hidden"
-                                                                                  style={{ borderColor: "var(--border)", backgroundColor: "var(--bg-secondary)", color: "var(--text)" }}
-                                                                                          >
-                                                                                                      <Menu size={20} aria-hidden="true" />
-                                                                                                              </button>
-            )}
+      {/* The note editor already has a Back button on mobile. */}
             {/* Sidebar - desktop */}
       <aside className="hidden lg:flex w-60 flex-shrink-0 border-r" style={{ borderColor: 'var(--border)' }}>
         <Sidebar
@@ -313,6 +309,7 @@ function AppContent() {
                 onArchive={data.archiveNote}
                 onAddAttachment={data.addAttachment}
                 onRemoveAttachment={data.removeAttachment}
+                onRenameAttachment={data.renameAttachment}
                 onBack={() => setSelectedNoteId(null)}
               />
             </div>

@@ -5,7 +5,7 @@ import * as localDb from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import { uid, createNote, applyTheme, applyFontSize } from '@/lib/utils';
 import { deleteAllNoteImages } from '@/lib/images';
-import { uploadAttachment, deleteAttachment, deleteAllAttachments, loadAllAttachments, refreshAttachmentUrl } from '@/lib/attachments';
+import { uploadAttachment, deleteAttachment, deleteAllAttachments, loadAllAttachments } from '@/lib/attachments';
 
 interface NoteRow {
   id: string;
@@ -18,6 +18,7 @@ interface NoteRow {
   trashed_at: number | null;
   created_at: number;
   updated_at: number;
+  revision: number;
 }
 
 interface FolderRow {
@@ -39,6 +40,7 @@ function mapNote(row: NoteRow): Note {
     trashedAt: row.trashed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    revision: row.revision ?? 0,
   };
 }
 
@@ -63,6 +65,7 @@ function noteToRow(note: Note): NoteRow {
     trashed_at: note.trashedAt,
     created_at: note.createdAt,
     updated_at: note.updatedAt,
+    revision: note.revision ?? 0,
   };
 }
 
@@ -86,6 +89,12 @@ export function useAppData() {
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const folderSaveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const migratedRef = useRef(false);
+  // Unsynced drafts remain in IndexedDB until the server confirms the write.
+  const pendingNotes = useRef(new Map<string, Note>());
+  const confirmedRevisions = useRef(new Map<string, number>());
+  const inFlightNotes = useRef(new Set<string>());
+  const cloudReadyRef = useRef(false);
+  const [syncConflicts, setSyncConflicts] = useState(0);
 
   // Load settings from local storage (settings stay local — they're device-specific)
   useEffect(() => {
@@ -133,11 +142,13 @@ export function useAppData() {
     if (localNotes.length === 0 && localFolders.length === 0) return;
 
     // Check if cloud already has data (to avoid duplicating)
-    const { count: noteCount } = await supabase
+    const { count: noteCount, error: countError } = await supabase
       .from('notes')
       .select('*', { count: 'exact', head: true });
 
-    if (noteCount && noteCount > 0) {
+    // A failed count must never be misinterpreted as an empty cloud.
+    if (countError || noteCount === null) return;
+    if (noteCount > 0) {
       // Cloud already has data — just clear local cache, cloud wins
       return;
     }
@@ -148,8 +159,10 @@ export function useAppData() {
       const { error } = await supabase.from('folders').upsert(rows, { onConflict: 'id' });
       if (error) console.warn('Folder migration error:', error.message);
     }
-    if (localNotes.length > 0) {
-      const rows = localNotes.map(noteToRow);
+    // Never resurrect known synced notes removed on another device.
+    const toMigrate = localNotes.filter((n) => n.syncPending || n.revision === undefined);
+    if (toMigrate.length > 0) {
+      const rows = toMigrate.map(noteToRow);
       const { error } = await supabase.from('notes').upsert(rows, { onConflict: 'id' });
       if (error) console.warn('Note migration error:', error.message);
     }
@@ -179,15 +192,37 @@ export function useAppData() {
       // Merge: for each note, keep whichever (local vs cloud) has a newer updatedAt.
       // This prevents losing local edits that haven't synced yet.
       const localMap = new Map(localNotes.map((n) => [n.id, n]));
+      // Include edits made while the cloud request was in flight.
+      pendingNotes.current.forEach((draft, id) => localMap.set(id, draft));
       const mergedNotes = cloudNotes.map((cn) => {
         const ln = localMap.get(cn.id);
-        if (ln && ln.updatedAt > cn.updatedAt) return ln;
+        // A newer local draft is never discarded just because the server has
+        // advanced. The CAS write below will preserve BOTH versions if needed.
+        if (ln && (ln.syncPending || ln.updatedAt > cn.updatedAt) &&
+            (ln.title !== cn.title || ln.content !== cn.content ||
+             ln.pinned !== cn.pinned || ln.archived !== cn.archived || ln.trashed !== cn.trashed ||
+             ln.folderId !== cn.folderId)) {
+          confirmedRevisions.current.set(cn.id, ln.revision ?? 0);
+          pendingNotes.current.set(cn.id, ln);
+          return ln;
+        }
+        confirmedRevisions.current.set(cn.id, cn.revision ?? 0);
         return cn;
       });
       // Include local-only notes (created offline, not yet in cloud)
-      for (const ln of localNotes) {
+      for (const ln of localMap.values()) {
         if (!mergedNotes.find((n) => n.id === ln.id)) {
-          mergedNotes.unshift(ln);
+          if (ln.syncPending || ln.revision === undefined) {
+            // The pending marker survives reloads/offline sessions.
+            // Older cached notes lacking the marker receive a one-time
+            // conservative recovery rather than being silently discarded.
+            mergedNotes.unshift(ln);
+            confirmedRevisions.current.set(ln.id, ln.revision ? ln.revision : -1);
+            pendingNotes.current.set(ln.id, ln);
+          } else {
+            // The server no longer has a previously synced note (deleted elsewhere).
+            void localDb.deleteNote(ln.id);
+          }
         }
       }
 
@@ -198,6 +233,7 @@ export function useAppData() {
         }
       }
 
+      cloudReadyRef.current = true;
       setNotes(mergedNotes);
       setFolders(mergedFolders);
       setAttachments(cloudAttachments);
@@ -209,9 +245,15 @@ export function useAppData() {
         localDb.putAttachments(cloudAttachments),
       ]);
     } catch (err) {
+      cloudReadyRef.current = false;
       console.warn('Cloud load failed, falling back to local cache:', err);
       const localAttachments = await localDb.getAllAttachments();
-      setNotes(localNotes);
+      const recovered = new Map(localNotes.map((note) => [note.id, note]));
+      pendingNotes.current.forEach((draft, id) => recovered.set(id, draft));
+      recovered.forEach((note) => {
+        if (note.syncPending) pendingNotes.current.set(note.id, note);
+      });
+      setNotes(Array.from(recovered.values()));
       setFolders(localFolders);
       setAttachments(localAttachments);
     } finally {
@@ -240,22 +282,29 @@ export function useAppData() {
         (payload) => {
           if (payload.eventType === 'DELETE') {
             const oldRow = payload.old as NoteRow;
+            if (pendingNotes.current.has(oldRow.id)) return;
+            confirmedRevisions.current.delete(oldRow.id);
             setNotes((prev) => prev.filter((n) => n.id !== oldRow.id));
+            void localDb.deleteNote(oldRow.id);
           } else {
             const newRow = payload.new as NoteRow;
             const note = mapNote(newRow);
+            // Never overwrite an unsynced draft, including the IndexedDB copy.
+            // Its conditional write will either succeed or create a conflict copy.
+            if (pendingNotes.current.has(note.id)) return;
+            const knownRevision = confirmedRevisions.current.get(note.id) ?? -1;
+            if (note.revision! < knownRevision) return;
+            confirmedRevisions.current.set(note.id, note.revision ?? 0);
             setNotes((prev) => {
               const idx = prev.findIndex((n) => n.id === note.id);
               if (idx >= 0) {
-                // Skip stale updates — don't overwrite a newer local edit
-                if (prev[idx].updatedAt > note.updatedAt) return prev;
                 const next = [...prev];
                 next[idx] = note;
                 return next;
               }
               return [note, ...prev];
             });
-            localDb.putNote(note);
+            void localDb.putNote(note);
           }
         }
       )
@@ -296,13 +345,97 @@ export function useAppData() {
 
   // ===== Cloud sync helpers =====
   const syncNoteToCloud = useCallback(async (note: Note) => {
+    const id = note.id;
+    // A stale debounce callback must NEVER recreate a draft already confirmed.
+    if (!pendingNotes.current.has(id)) return;
+    if (inFlightNotes.current.has(id) || !navigator.onLine || !cloudReadyRef.current) return;
+    inFlightNotes.current.add(id);
     try {
-      const { error } = await supabase.from('notes').upsert(noteToRow(note), { onConflict: 'id' });
-      if (error) console.warn('Note sync error:', error.message);
+      // Serialise writes per note; a newer edit can arrive while awaiting RPC.
+      while (pendingNotes.current.has(id) && navigator.onLine) {
+        const draft = pendingNotes.current.get(id)!;
+        const expected = confirmedRevisions.current.get(id) ?? (draft.revision ?? -1);
+        const { data, error } = await supabase.rpc('save_note_versioned', {
+          p_note: noteToRow(draft), p_expected_revision: expected,
+        });
+        if (error) {
+          // Network / missing-migration errors leave the local draft intact.
+          console.warn('Note sync postponed:', error.message);
+          break;
+        }
+        const result = data as { status: string; revision?: number; updated_at?: number } | null;
+        if (!result || !['saved', 'conflict'].includes(result.status)) {
+          console.warn('Unexpected note sync result; draft remains on this device');
+          break;
+        }
+        if (result.status === 'saved') {
+          const revision = result.revision!;
+          confirmedRevisions.current.set(id, revision);
+          const newest = pendingNotes.current.get(id);
+          if (newest === draft) {
+            pendingNotes.current.delete(id);
+            const saved = { ...draft, syncPending: false, revision, updatedAt: result.updated_at ?? draft.updatedAt };
+            setNotes((prev) => prev.map((n) => n.id === id &&
+              n.title === draft.title && n.content === draft.content && n.updatedAt === draft.updatedAt
+              ? saved : n));
+            if (confirmedRevisions.current.get(id) === revision && !pendingNotes.current.has(id)) {
+              void localDb.putNote(saved);
+            }
+          } else if (newest) {
+            const carried = { ...newest, revision, syncPending: true };
+            pendingNotes.current.set(id, carried);
+            void localDb.putNote(carried);
+          }
+          continue;
+        }
+        // A simultaneous edit won the race. Keep ours as a separately named,
+        // locally backed note BEFORE replacing the original with cloud data.
+        const copy: Note = {
+          ...pendingNotes.current.get(id)!, id: uid(),
+          title: `${draft.title || 'Untitled'} (conflict copy)`,
+          revision: 0, syncPending: true, createdAt: Date.now(), updatedAt: Date.now(),
+        };
+        await localDb.putNote(copy);
+        pendingNotes.current.set(copy.id, copy);
+        confirmedRevisions.current.set(copy.id, -1);
+        pendingNotes.current.delete(id);
+        const { data: current, error: fetchError } = await supabase.from('notes')
+          .select('*').eq('id', id).maybeSingle();
+        if (!fetchError && current) {
+          const remote = mapNote(current as NoteRow);
+          confirmedRevisions.current.set(id, remote.revision ?? 0);
+          await localDb.putNote(remote);
+          setNotes((prev) => [copy, ...prev.map((n) => n.id === id ? remote : n)]);
+        } else {
+          // The server may be temporarily unavailable; retain both local rows.
+          setNotes((prev) => [copy, ...prev]);
+        }
+        setSyncConflicts((count) => count + 1);
+        void syncNoteToCloudRef.current(copy);
+        break;
+      }
     } catch (err) {
-      console.warn('Note sync failed (offline?):', err);
+      // Unexpected network exceptions must not discard the local draft.
+      console.warn('Note sync interrupted:', err);
+    } finally {
+      inFlightNotes.current.delete(id);
+      // A new edit that arrived during the last RPC must not be stranded.
+      if (pendingNotes.current.has(id) && navigator.onLine) {
+        const latest = pendingNotes.current.get(id)!;
+        // Do not immediately retry a failing request in a tight loop.
+        const existing = saveTimers.current.get(id);
+        if (!existing) {
+          const timer = setTimeout(() => {
+            saveTimers.current.delete(id);
+            void syncNoteToCloudRef.current(latest);
+          }, 5000);
+          saveTimers.current.set(id, timer);
+        }
+      }
     }
   }, []);
+  const syncNoteToCloudRef = useRef(syncNoteToCloud);
+  syncNoteToCloudRef.current = syncNoteToCloud;
 
   const syncFolderToCloud = useCallback(async (folder: Folder) => {
     try {
@@ -334,14 +467,16 @@ export function useAppData() {
   // Debounced save: local + cloud
   const saveNote = useCallback(
     (note: Note) => {
-      // Save to local cache immediately
-      localDb.putNote(note);
+      // Save to local cache immediately and protect against Realtime overwrites.
+      const draft = { ...note, syncPending: true };
+      pendingNotes.current.set(note.id, draft);
+      void localDb.putNote(draft);
       // Debounce cloud sync
       const existing = saveTimers.current.get(note.id);
       if (existing) clearTimeout(existing);
       const timer = setTimeout(() => {
-        syncNoteToCloud(note);
         saveTimers.current.delete(note.id);
+        void syncNoteToCloud(note);
       }, 600);
       saveTimers.current.set(note.id, timer);
     },
@@ -368,7 +503,8 @@ export function useAppData() {
   // ===== Note operations =====
   const addNote = useCallback(
     (folderId: string | null = null): Note => {
-      const note = createNote(folderId);
+      const note = { ...createNote(folderId), revision: 0 };
+      confirmedRevisions.current.set(note.id, -1);
       setNotes((prev) => [note, ...prev]);
       saveNote(note);
       return note;
@@ -381,7 +517,7 @@ export function useAppData() {
       setNotes((prev) =>
         prev.map((n) => {
           if (n.id !== id) return n;
-          const updated = { ...n, ...updates, updatedAt: Date.now() };
+          const updated = { ...n, ...updates, updatedAt: Math.max(Date.now(), n.updatedAt + 1) };
           saveNote(updated);
           return updated;
         })
@@ -395,7 +531,7 @@ export function useAppData() {
       setNotes((prev) =>
         prev.map((n) => {
           if (n.id !== id) return n;
-          const updated = { ...n, title, content, updatedAt: Date.now() };
+          const updated = { ...n, title, content, updatedAt: Math.max(Date.now(), n.updatedAt + 1) };
           saveNote(updated);
           return updated;
         })
@@ -419,6 +555,7 @@ export function useAppData() {
         createdAt: now,
         updatedAt: now,
       };
+      confirmedRevisions.current.set(copy.id, -1);
       setNotes((prev) => [copy, ...prev]);
       saveNote(copy);
       return copy;
@@ -456,6 +593,11 @@ export function useAppData() {
 
   const permanentDelete = useCallback(
     (id: string) => {
+      const timer = saveTimers.current.get(id);
+      if (timer) clearTimeout(timer);
+      saveTimers.current.delete(id);
+      pendingNotes.current.delete(id);
+      confirmedRevisions.current.delete(id);
       setNotes((prev) => prev.filter((n) => n.id !== id));
       setAttachments((prev) => prev.filter((a) => a.noteId !== id));
       localDb.deleteNote(id);
@@ -578,7 +720,10 @@ export function useAppData() {
       if (data.notes) {
         setNotes(data.notes);
         localDb.putNotes(data.notes);
-        data.notes.forEach((n) => syncNoteToCloud(n));
+        data.notes.forEach((n) => {
+          if (!confirmedRevisions.current.has(n.id)) confirmedRevisions.current.set(n.id, -1);
+          saveNote(n);
+        });
       }
       if (data.settings) {
         setSettings(data.settings);
@@ -587,7 +732,7 @@ export function useAppData() {
         localDb.saveSettings(data.settings);
       }
     },
-    [syncNoteToCloud, syncFolderToCloud]
+    [saveNote, syncFolderToCloud]
   );
 
   const flushAll = useCallback(async () => {
@@ -596,8 +741,8 @@ export function useAppData() {
     saveTimers.current.clear();
     folderSaveTimers.current.forEach((timer) => clearTimeout(timer));
     folderSaveTimers.current.clear();
-    // Flush current notes state to cloud
-    for (const note of notesRef.current) {
+    // Never re-upload every cached note: stale tabs could overwrite current data.
+    for (const note of Array.from(pendingNotes.current.values())) {
       await syncNoteToCloud(note);
     }
   }, [syncNoteToCloud]);
@@ -606,13 +751,28 @@ export function useAppData() {
   useEffect(() => {
     if (!loaded) return;
     const handler = () => { void flushAll(); };
-    document.addEventListener('visibilitychange', () => {
+    const onVisibility = () => {
       if (document.visibilityState === 'hidden') handler();
-    });
-    window.addEventListener('pagehide', handler);
-    return () => {
-      window.removeEventListener('pagehide', handler);
     };
+    const onOnline = () => {
+      // Refetch revisions before trying to upload offline edits.
+      void loadFromCloud().then(() => {
+        if (cloudReadyRef.current) void flushAll();
+      });
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', handler);
+    window.addEventListener('online', onOnline);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', handler);
+      window.removeEventListener('online', onOnline);
+    };
+  }, [loaded, flushAll, loadFromCloud]);
+
+  // After recovering drafts from IndexedDB, try to upload them now.
+  useEffect(() => {
+    if (loaded && navigator.onLine && cloudReadyRef.current && pendingNotes.current.size) void flushAll();
   }, [loaded, flushAll]);
 
   // ===== Attachment operations =====
@@ -631,15 +791,30 @@ export function useAppData() {
     []
   );
 
+  // Keep a renamed file's storage path unchanged; only its display name changes.
+  const renameAttachment = useCallback(async (id: string, name: string): Promise<boolean> => {
+    const trimmed = name.trim();
+    if (!trimmed) return false;
+    const { error } = await supabase.from('attachments').update({ name: trimmed }).eq('id', id);
+    if (error) {
+      console.error('Attachment rename failed:', error);
+      return false;
+    }
+    setAttachments((prev) => prev.map((a) => {
+      if (a.id !== id) return a;
+      const updated = { ...a, name: trimmed };
+      localDb.putAttachment(updated);
+      return updated;
+    }));
+    return true;
+  }, []);
+
   const removeAttachment = useCallback(
     async (id: string) => {
+      // Do not report success or erase the offline record until Supabase confirms deletion.
+      await deleteAttachment(id);
+      await localDb.deleteAttachmentRecord(id);
       setAttachments((prev) => prev.filter((a) => a.id !== id));
-      localDb.deleteAttachmentRecord(id);
-      try {
-        await deleteAttachment(id);
-      } catch (err) {
-        console.error('Attachment delete failed:', err);
-      }
     },
     []
   );
@@ -657,6 +832,8 @@ export function useAppData() {
     loaded,
     syncing,
     online,
+    syncConflicts,
+    dismissSyncConflicts: () => setSyncConflicts(0),
     addNote,
     updateNote,
     updateNoteContent,
@@ -675,6 +852,7 @@ export function useAppData() {
     flushAll,
     addAttachment,
     removeAttachment,
+    renameAttachment,
     getAttachmentsForNote,
   };
 }

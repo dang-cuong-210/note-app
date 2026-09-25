@@ -9,6 +9,8 @@ export interface Note {
   trashedAt: number | null;
   createdAt: number;
   updatedAt: number;
+  revision?: number; // Last confirmed server revision for optimistic concurrency
+  syncPending?: boolean; // Local IndexedDB flag; not sent to Supabase
 }
 
 export interface Folder {

@@ -28,19 +28,6 @@ function mapRow(row: AttachmentRow): Attachment {
   };
 }
 
-function mapAttachment(a: Attachment): AttachmentRow {
-  return {
-    id: a.id,
-    note_id: a.noteId,
-    name: a.name,
-    type: a.type,
-    size: a.size,
-    storage_path: a.storagePath,
-    url: a.url,
-    created_at: a.createdAt,
-  };
-}
-
 export async function uploadAttachment(
   noteId: string,
   file: File
@@ -102,8 +89,9 @@ export async function deleteAttachment(id: string): Promise<void> {
   const path = (data as { storage_path: string }).storage_path;
 
   // Delete from DB first, then storage
-  const { error: dbError } = await supabase.from('attachments').delete().eq('id', id);
+  const { data: deletedRows, error: dbError } = await supabase.from('attachments').delete().eq('id', id).select('id');
   if (dbError) throw new Error(`Failed to delete attachment record: ${dbError.message}`);
+  if (!deletedRows?.length) throw new Error('Attachment was not deleted. Check Supabase permissions.');
 
   const { error: storageError } = await supabase.storage.from(BUCKET).remove([path]);
   if (storageError) console.warn('Storage delete error:', storageError.message);

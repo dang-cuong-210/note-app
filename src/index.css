@@ -383,3 +383,121 @@
 .animate-slide-in {
   animation: slide-in 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+/* Contextual media controls. Kept outside the contentEditable DOM. */
+.note-content img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+  margin: 8px 0;
+  cursor: zoom-in;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  touch-action: pan-y;
+}
+.noted-image-outline {
+  position: fixed;
+  z-index: 55;
+  pointer-events: none;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+}
+.noted-image-handle {
+  position: fixed;
+  z-index: 57;
+  width: 22px;
+  height: 22px;
+  border: 2px solid white;
+  border-radius: 6px;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  touch-action: none;
+}
+.noted-media-toolbar {
+  position: fixed;
+  z-index: 58;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  max-width: calc(100vw - 16px);
+  overflow-x: auto;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.18);
+  background: var(--bg);
+  color: var(--text);
+}
+.noted-media-toolbar button,
+.noted-attachment-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 5px 7px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.noted-media-toolbar button:active,
+.noted-attachment-toolbar button:active,
+.noted-media-toolbar button[aria-pressed="true"] {
+  background: var(--accent-light);
+}
+.noted-attachment-toolbar {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  padding: 4px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.noted-media-toolbar .noted-danger,
+.noted-attachment-toolbar .noted-danger { color: var(--danger); }
+.noted-attachment-toolbar button:disabled { opacity: .3; }
+
+.noted-attachment-resize-handle {
+  position: absolute;
+  right: -8px;
+  top: 10px;
+  z-index: 10;
+  padding: 7px;
+  border: 1px solid white;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  touch-action: none;
+}
+
+/* Atomic file cards can be positioned between text runs and paragraphs. */
+.note-content .noted-inline-attachment {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 40%;
+  min-height: 56px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.noted-inline-attachment-icon { flex: none; font-size: 22px; }
+.noted-inline-attachment-detail { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.noted-inline-attachment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.noted-inline-attachment-size { font-size: 11px; color: var(--text-tertiary); }
+.noted-attachment-missing { opacity: .65; border-style: dashed !important; }
