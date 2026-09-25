@@ -26,12 +26,19 @@ This archive extends `noted-safety-fixes.zip`. It is **not production-tested**.
 5. Test concurrent edits with two devices, offline edit + browser restart + reconnect, attachment rendering in conflict copies, and permanent note deletion under a simulated network failure.
 6. Deploy to a separate Vercel preview; roll back if any check fails.
 
+## Supabase migration status
+
+- `20260926010000_add_note_revision_cas.sql` was applied successfully to the existing Noted project.
+- All 17 existing notes started at revision `0`.
+- The `anon` and `PUBLIC` roles cannot execute `save_note_versioned(jsonb, bigint)`.
+- The `authenticated` role can execute `save_note_versioned(jsonb, bigint)`.
+
 ## Known limitations / next audit
 
 - This uses the RPC on the *updated* app. Older clients can still use unconditional note writes; a coordinated rollout is required for full end-to-end protection.
 - `migrateLocalData` never auto-imports ambiguous pre-upgrade IndexedDB records. Offline-only legacy drafts without independent ownership evidence remain preserved but unavailable until an explicit recovery flow is added.
 - Conflict copies duplicate note HTML but do not clone storage bytes or reassign legacy attachment metadata. Do **not** delete the original note before verifying images and inline file cards in the conflict copy.
 - Permanent deletion now confirms the note database deletion before removing local state or cleaning storage. A storage cleanup failure after that confirmation can still leave inaccessible orphan objects and is logged for later cleanup.
-- Local dependency installation, TypeScript typecheck, production build, and lint pass. SQL execution against a real Supabase project and real touch/multi-device tests remain outstanding.
+- Local dependency installation, TypeScript typecheck, production build, and lint pass. Real touch/multi-device tests remain outstanding.
 - This codebase also still uses a browser-wide IndexedDB cache rather than a per-authenticated-user cache. Do not switch between different Supabase accounts in the same browser until account isolation is implemented and verified.
 - The initial data-loading hook can start while authentication is still resolving. If first load has no valid session, a page reload after login may be needed; auth lifecycle is a separate priority fix.

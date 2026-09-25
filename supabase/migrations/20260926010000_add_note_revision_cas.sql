@@ -60,4 +60,5 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.save_note_versioned(jsonb, bigint) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.save_note_versioned(jsonb, bigint) FROM anon;
 GRANT EXECUTE ON FUNCTION public.save_note_versioned(jsonb, bigint) TO authenticated;
