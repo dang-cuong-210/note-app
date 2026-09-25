@@ -4,7 +4,7 @@ This archive extends `noted-safety-fixes.zip`. It is **not production-tested**.
 
 ## Changes
 
-- IndexedDB notes, folders, attachments, and pending note drafts are keyed by authenticated account. Switching accounts immediately hides the prior account's state and clears its sync queues before loading the next account. Existing unscoped v2 stores are retained. They are imported only when matching cloud IDs or an owner-prefixed attachment path proves ownership; ambiguous offline-only records remain quarantined in the legacy stores rather than being exposed to another account.
+- IndexedDB notes, folders, attachments, and pending note drafts are keyed by authenticated account. Switching accounts immediately hides the prior account's state and clears its sync queues before loading the next account. Existing unscoped v2 stores are retained and evaluated record by record: notes require a matching cloud note ID or an attachment path proving the note owner; folders require a matching cloud folder ID; attachments require an owner-prefixed storage path or a cloud-owned note ID. One proven record never causes adjacent legacy records to be imported. Ambiguous offline-only records remain quarantined in the untouched legacy stores for future explicit recovery.
 - Theme, font-size, and sort settings remain intentionally device-wide because they contain no note or account content.
 - Permanent deletion waits for any active note save, blocks later retries, confirms the Supabase note deletion, and only then removes local state and cleans up file/image storage. A failed database deletion leaves the note and its cache intact.
 - Attachment bulk deletion now stops before storage cleanup if its database query or deletion fails.
@@ -29,9 +29,9 @@ This archive extends `noted-safety-fixes.zip`. It is **not production-tested**.
 ## Known limitations / next audit
 
 - This uses the RPC on the *updated* app. Older clients can still use unconditional note writes; a coordinated rollout is required for full end-to-end protection.
-- `migrateLocalData` retains a cautious legacy import path for pre-upgrade IndexedDB entries without a revision. Deleted old cached notes may be revived once during legacy migration; verify the backup before migration.
+- `migrateLocalData` never auto-imports ambiguous pre-upgrade IndexedDB records. Offline-only legacy drafts without independent ownership evidence remain preserved but unavailable until an explicit recovery flow is added.
 - Conflict copies duplicate note HTML but do not clone storage bytes or reassign legacy attachment metadata. Do **not** delete the original note before verifying images and inline file cards in the conflict copy.
-- Permanently deleting a note currently starts cleanup before the server confirms the deletion. It also may leave attachment storage objects after DB cascade. This is next in the safety work and is **not** fixed in this archive.
-- Full TypeScript typecheck/build, SQL execution against a real Supabase project, and real touch/device tests could not be completed here due to unavailable npm dependencies and database access. Successful TypeScript parsing is not a substitute.
+- Permanent deletion now confirms the note database deletion before removing local state or cleaning storage. A storage cleanup failure after that confirmation can still leave inaccessible orphan objects and is logged for later cleanup.
+- Local dependency installation, TypeScript typecheck, production build, and lint pass. SQL execution against a real Supabase project and real touch/multi-device tests remain outstanding.
 - This codebase also still uses a browser-wide IndexedDB cache rather than a per-authenticated-user cache. Do not switch between different Supabase accounts in the same browser until account isolation is implemented and verified.
 - The initial data-loading hook can start while authentication is still resolving. If first load has no valid session, a page reload after login may be needed; auth lifecycle is a separate priority fix.

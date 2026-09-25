@@ -9,7 +9,6 @@ const NOTES_STORE = 'user-notes';
 const FOLDERS_STORE = 'user-folders';
 const ATTACHMENTS_STORE = 'user-attachments';
 const SETTINGS_STORE = 'settings';
-const LEGACY_OWNER_KEY = 'legacy-data-owner';
 
 type Scoped<T> = T & { scopedId: string; accountId: string };
 
@@ -100,11 +99,6 @@ export async function migrateLegacyData(
     .filter((name) => db.objectStoreNames.contains(name));
   if (legacyStores.length === 0) return false;
 
-  const owner = await storeRequest<{ key: string; value: string } | undefined>(
-    SETTINGS_STORE, 'readonly', (store) => store.get(LEGACY_OWNER_KEY)
-  );
-  if (owner && owner.value !== accountId) return false;
-
   const legacyNotes = db.objectStoreNames.contains(LEGACY_NOTES_STORE)
     ? await storeRequest<Note[]>(LEGACY_NOTES_STORE, 'readonly', (store) => store.getAll())
     : [];
@@ -115,28 +109,40 @@ export async function migrateLegacyData(
     ? await storeRequest<Attachment[]>(LEGACY_ATTACHMENTS_STORE, 'readonly', (store) => store.getAll())
     : [];
 
-  if (!owner) {
-    // Unscoped v2 data is imported only when existing cloud IDs or an owner-
-    // prefixed storage path prove which account owns it. Ambiguous offline-only
-    // drafts stay intact in the legacy stores instead of being exposed.
-    const ownershipProven = legacyNotes.some((note) => cloudNoteIds.has(note.id)) ||
-      legacyFolders.some((folder) => cloudFolderIds.has(folder.id)) ||
-      legacyAttachments.some((attachment) => attachment.storagePath.startsWith(`${accountId}/`));
-    if (!ownershipProven) return false;
-    await storeRequest(SETTINGS_STORE, 'readwrite', (store) =>
-      store.put({ key: LEGACY_OWNER_KEY, value: accountId })
-    );
-  }
+  // Migration is intentionally record-level. One proven record never grants
+  // ownership of neighboring legacy rows. Ambiguous rows stay untouched in the
+  // v2 stores for a future user-confirmed recovery flow.
+  const ownerPrefix = `${accountId}/`;
+  const attachmentOwnedNoteIds = new Set(
+    legacyAttachments
+      .filter((attachment) => attachment.storagePath.startsWith(ownerPrefix))
+      .map((attachment) => attachment.noteId)
+  );
+  const provenNotes = legacyNotes.filter((note) =>
+    cloudNoteIds.has(note.id) || attachmentOwnedNoteIds.has(note.id)
+  );
+  const provenFolders = legacyFolders.filter((folder) => cloudFolderIds.has(folder.id));
+  const provenAttachments = legacyAttachments.filter((attachment) =>
+    attachment.storagePath.startsWith(ownerPrefix) || cloudNoteIds.has(attachment.noteId)
+  );
 
   const [existingNotes, existingFolders, existingAttachments] = await Promise.all([
     getAllNotes(accountId), getAllFolders(accountId), getAllAttachments(accountId),
   ]);
+  const existingNoteIds = new Set(existingNotes.map((note) => note.id));
+  const existingFolderIds = new Set(existingFolders.map((folder) => folder.id));
+  const existingAttachmentIds = new Set(existingAttachments.map((attachment) => attachment.id));
+  const notesToImport = provenNotes.filter((note) => !existingNoteIds.has(note.id));
+  const foldersToImport = provenFolders.filter((folder) => !existingFolderIds.has(folder.id));
+  const attachmentsToImport = provenAttachments.filter((attachment) =>
+    !existingAttachmentIds.has(attachment.id)
+  );
   await Promise.all([
-    existingNotes.length === 0 ? putNotes(accountId, legacyNotes) : Promise.resolve(),
-    existingFolders.length === 0 ? putFolders(accountId, legacyFolders) : Promise.resolve(),
-    existingAttachments.length === 0 ? putAttachments(accountId, legacyAttachments) : Promise.resolve(),
+    putNotes(accountId, notesToImport),
+    putFolders(accountId, foldersToImport),
+    putAttachments(accountId, attachmentsToImport),
   ]);
-  return true;
+  return notesToImport.length + foldersToImport.length + attachmentsToImport.length > 0;
 }
 
 export function getAllNotes(accountId: string) { return getForAccount<Note>(NOTES_STORE, accountId); }
