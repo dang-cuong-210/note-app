@@ -145,7 +145,14 @@ export function useAppData(userId: string | null) {
     if (!userId || migratedRef.current) return;
     migratedRef.current = true;
 
-    await localDb.migrateLegacyData(userId);
+    const [cloudNoteIdsResult, cloudFolderIdsResult] = await Promise.all([
+      supabase.from('notes').select('id'),
+      supabase.from('folders').select('id'),
+    ]);
+    if (cloudNoteIdsResult.error || cloudFolderIdsResult.error) return;
+    const cloudNoteIds = new Set((cloudNoteIdsResult.data as { id: string }[]).map((row) => row.id));
+    const cloudFolderIds = new Set((cloudFolderIdsResult.data as { id: string }[]).map((row) => row.id));
+    await localDb.migrateLegacyData(userId, cloudNoteIds, cloudFolderIds);
 
     const [localNotes, localFolders] = await Promise.all([
       localDb.getAllNotes(userId),
@@ -155,13 +162,7 @@ export function useAppData(userId: string | null) {
     if (localNotes.length === 0 && localFolders.length === 0) return;
 
     // Check if cloud already has data (to avoid duplicating)
-    const { count: noteCount, error: countError } = await supabase
-      .from('notes')
-      .select('*', { count: 'exact', head: true });
-
-    // A failed count must never be misinterpreted as an empty cloud.
-    if (countError || noteCount === null) return;
-    if (noteCount > 0) {
+    if (cloudNoteIds.size > 0) {
       // Cloud already has data — just clear local cache, cloud wins
       return;
     }

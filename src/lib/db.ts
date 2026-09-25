@@ -90,19 +90,39 @@ async function putMany<T extends { id: string }>(storeName: string, accountId: s
   });
 }
 
-export async function migrateLegacyData(accountId: string): Promise<void> {
+export async function migrateLegacyData(
+  accountId: string,
+  cloudNoteIds: ReadonlySet<string>,
+  cloudFolderIds: ReadonlySet<string>
+): Promise<boolean> {
   const db = await openDB();
   const legacyStores = [LEGACY_NOTES_STORE, LEGACY_FOLDERS_STORE, LEGACY_ATTACHMENTS_STORE]
     .filter((name) => db.objectStoreNames.contains(name));
-  if (legacyStores.length === 0) return;
+  if (legacyStores.length === 0) return false;
 
   const owner = await storeRequest<{ key: string; value: string } | undefined>(
     SETTINGS_STORE, 'readonly', (store) => store.get(LEGACY_OWNER_KEY)
   );
-  if (owner && owner.value !== accountId) return;
+  if (owner && owner.value !== accountId) return false;
+
+  const legacyNotes = db.objectStoreNames.contains(LEGACY_NOTES_STORE)
+    ? await storeRequest<Note[]>(LEGACY_NOTES_STORE, 'readonly', (store) => store.getAll())
+    : [];
+  const legacyFolders = db.objectStoreNames.contains(LEGACY_FOLDERS_STORE)
+    ? await storeRequest<Folder[]>(LEGACY_FOLDERS_STORE, 'readonly', (store) => store.getAll())
+    : [];
+  const legacyAttachments = db.objectStoreNames.contains(LEGACY_ATTACHMENTS_STORE)
+    ? await storeRequest<Attachment[]>(LEGACY_ATTACHMENTS_STORE, 'readonly', (store) => store.getAll())
+    : [];
+
   if (!owner) {
-    // Bind the legacy cache once to the persisted authenticated account that
-    // opens v3. The marker prevents later accounts from reading those records.
+    // Unscoped v2 data is imported only when existing cloud IDs or an owner-
+    // prefixed storage path prove which account owns it. Ambiguous offline-only
+    // drafts stay intact in the legacy stores instead of being exposed.
+    const ownershipProven = legacyNotes.some((note) => cloudNoteIds.has(note.id)) ||
+      legacyFolders.some((folder) => cloudFolderIds.has(folder.id)) ||
+      legacyAttachments.some((attachment) => attachment.storagePath.startsWith(`${accountId}/`));
+    if (!ownershipProven) return false;
     await storeRequest(SETTINGS_STORE, 'readwrite', (store) =>
       store.put({ key: LEGACY_OWNER_KEY, value: accountId })
     );
@@ -111,12 +131,12 @@ export async function migrateLegacyData(accountId: string): Promise<void> {
   const [existingNotes, existingFolders, existingAttachments] = await Promise.all([
     getAllNotes(accountId), getAllFolders(accountId), getAllAttachments(accountId),
   ]);
-  await Promise.all(legacyStores.map(async (name) => {
-    const rows = await storeRequest<unknown[]>(name, 'readonly', (store) => store.getAll());
-    if (name === LEGACY_NOTES_STORE && existingNotes.length === 0) await putNotes(accountId, rows as Note[]);
-    if (name === LEGACY_FOLDERS_STORE && existingFolders.length === 0) await putFolders(accountId, rows as Folder[]);
-    if (name === LEGACY_ATTACHMENTS_STORE && existingAttachments.length === 0) await putAttachments(accountId, rows as Attachment[]);
-  }));
+  await Promise.all([
+    existingNotes.length === 0 ? putNotes(accountId, legacyNotes) : Promise.resolve(),
+    existingFolders.length === 0 ? putFolders(accountId, legacyFolders) : Promise.resolve(),
+    existingAttachments.length === 0 ? putAttachments(accountId, legacyAttachments) : Promise.resolve(),
+  ]);
+  return true;
 }
 
 export function getAllNotes(accountId: string) { return getForAccount<Note>(NOTES_STORE, accountId); }

@@ -4,7 +4,7 @@ This archive extends `noted-safety-fixes.zip`. It is **not production-tested**.
 
 ## Changes
 
-- IndexedDB notes, folders, attachments, and pending note drafts are keyed by authenticated account. Switching accounts clears in-memory sync state before loading the next account. Existing v2 cache stores are retained and copied once into the account-scoped stores for the authenticated account present on first v3 load; an ownership marker prevents another account from reading that legacy cache.
+- IndexedDB notes, folders, attachments, and pending note drafts are keyed by authenticated account. Switching accounts immediately hides the prior account's state and clears its sync queues before loading the next account. Existing unscoped v2 stores are retained. They are imported only when matching cloud IDs or an owner-prefixed attachment path proves ownership; ambiguous offline-only records remain quarantined in the legacy stores rather than being exposed to another account.
 - Theme, font-size, and sort settings remain intentionally device-wide because they contain no note or account content.
 - Permanent deletion waits for any active note save, blocks later retries, confirms the Supabase note deletion, and only then removes local state and cleans up file/image storage. A failed database deletion leaves the note and its cache intact.
 - Attachment bulk deletion now stops before storage cleanup if its database query or deletion fails.
