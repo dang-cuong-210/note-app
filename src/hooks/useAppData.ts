@@ -5,7 +5,13 @@ import * as localDb from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import { uid, createNote, applyTheme, applyFontSize } from '@/lib/utils';
 import { deleteAllNoteImages } from '@/lib/images';
-import { uploadAttachment, deleteAttachment, deleteAllAttachments, loadAllAttachments } from '@/lib/attachments';
+import {
+  uploadAttachment,
+  deleteAttachment,
+  deleteAttachmentStorage,
+  getAttachmentStoragePaths,
+  loadAllAttachments,
+} from '@/lib/attachments';
 
 interface NoteRow {
   id: string;
@@ -78,12 +84,13 @@ function folderToRow(folder: Folder): FolderRow {
   };
 }
 
-export function useAppData() {
+export function useAppData(userId: string | null) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false);
+  const [loadedAccountId, setLoadedAccountId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -92,9 +99,13 @@ export function useAppData() {
   // Unsynced drafts remain in IndexedDB until the server confirms the write.
   const pendingNotes = useRef(new Map<string, Note>());
   const confirmedRevisions = useRef(new Map<string, number>());
-  const inFlightNotes = useRef(new Set<string>());
+  const inFlightTasks = useRef(new Map<string, Promise<void>>());
+  const deletingNotes = useRef(new Set<string>());
+  const activeAccountId = useRef<string | null>(userId);
   const cloudReadyRef = useRef(false);
   const [syncConflicts, setSyncConflicts] = useState(0);
+
+  activeAccountId.current = userId;
 
   // Load settings from local storage (settings stay local — they're device-specific)
   useEffect(() => {
@@ -131,12 +142,14 @@ export function useAppData() {
 
   // Migrate local IndexedDB data to cloud on first load
   const migrateLocalData = useCallback(async () => {
-    if (migratedRef.current) return;
+    if (!userId || migratedRef.current) return;
     migratedRef.current = true;
 
+    await localDb.migrateLegacyData(userId);
+
     const [localNotes, localFolders] = await Promise.all([
-      localDb.getAllNotes(),
-      localDb.getAllFolders(),
+      localDb.getAllNotes(userId),
+      localDb.getAllFolders(userId),
     ]);
 
     if (localNotes.length === 0 && localFolders.length === 0) return;
@@ -166,15 +179,17 @@ export function useAppData() {
       const { error } = await supabase.from('notes').upsert(rows, { onConflict: 'id' });
       if (error) console.warn('Note migration error:', error.message);
     }
-  }, []);
+  }, [userId]);
 
   // Load all data from cloud, merging with any local-only changes
   const loadFromCloud = useCallback(async () => {
+    if (!userId) return;
+    const accountId = userId;
     setSyncing(true);
     // Load local cache first — used for merge and as fallback
     const [localNotes, localFolders] = await Promise.all([
-      localDb.getAllNotes(),
-      localDb.getAllFolders(),
+      localDb.getAllNotes(accountId),
+      localDb.getAllFolders(accountId),
     ]);
     try {
       const [notesRes, foldersRes, cloudAttachments] = await Promise.all([
@@ -221,7 +236,7 @@ export function useAppData() {
             pendingNotes.current.set(ln.id, ln);
           } else {
             // The server no longer has a previously synced note (deleted elsewhere).
-            void localDb.deleteNote(ln.id);
+            void localDb.deleteNote(accountId, ln.id);
           }
         }
       }
@@ -233,46 +248,68 @@ export function useAppData() {
         }
       }
 
+      if (activeAccountId.current !== accountId) return;
       cloudReadyRef.current = true;
+      setLoadedAccountId(accountId);
       setNotes(mergedNotes);
       setFolders(mergedFolders);
       setAttachments(cloudAttachments);
 
       // Cache locally for offline use
       await Promise.all([
-        localDb.putNotes(mergedNotes),
-        ...mergedFolders.map((f) => localDb.putFolder(f)),
-        localDb.putAttachments(cloudAttachments),
+        localDb.putNotes(accountId, mergedNotes),
+        ...mergedFolders.map((f) => localDb.putFolder(accountId, f)),
+        localDb.putAttachments(accountId, cloudAttachments),
       ]);
     } catch (err) {
       cloudReadyRef.current = false;
       console.warn('Cloud load failed, falling back to local cache:', err);
-      const localAttachments = await localDb.getAllAttachments();
+      if (activeAccountId.current !== accountId) return;
+      const localAttachments = await localDb.getAllAttachments(accountId);
       const recovered = new Map(localNotes.map((note) => [note.id, note]));
       pendingNotes.current.forEach((draft, id) => recovered.set(id, draft));
       recovered.forEach((note) => {
         if (note.syncPending) pendingNotes.current.set(note.id, note);
       });
+      setLoadedAccountId(accountId);
       setNotes(Array.from(recovered.values()));
       setFolders(localFolders);
       setAttachments(localAttachments);
     } finally {
-      setSyncing(false);
-      setLoaded(true);
+      if (activeAccountId.current === accountId) {
+        setSyncing(false);
+        setLoaded(true);
+      }
     }
-  }, []);
+  }, [userId]);
 
   // Initial load
   useEffect(() => {
+    saveTimers.current.forEach(clearTimeout);
+    folderSaveTimers.current.forEach(clearTimeout);
+    saveTimers.current.clear();
+    folderSaveTimers.current.clear();
+    pendingNotes.current.clear();
+    confirmedRevisions.current.clear();
+    deletingNotes.current.clear();
+    cloudReadyRef.current = false;
+    migratedRef.current = false;
+    setNotes([]);
+    setFolders([]);
+    setAttachments([]);
+    setLoaded(false);
+    setLoadedAccountId(null);
+    if (!userId) return;
     (async () => {
       await migrateLocalData();
       await loadFromCloud();
     })();
-  }, [migrateLocalData, loadFromCloud]);
+  }, [userId, migrateLocalData, loadFromCloud]);
 
   // Realtime subscription for cross-device sync
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !userId) return;
+    const accountId = userId;
 
     const notesChannel = supabase
       .channel('notes-sync')
@@ -280,12 +317,13 @@ export function useAppData() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'notes' },
         (payload) => {
+          if (activeAccountId.current !== accountId) return;
           if (payload.eventType === 'DELETE') {
             const oldRow = payload.old as NoteRow;
             if (pendingNotes.current.has(oldRow.id)) return;
             confirmedRevisions.current.delete(oldRow.id);
             setNotes((prev) => prev.filter((n) => n.id !== oldRow.id));
-            void localDb.deleteNote(oldRow.id);
+            void localDb.deleteNote(accountId, oldRow.id);
           } else {
             const newRow = payload.new as NoteRow;
             const note = mapNote(newRow);
@@ -304,7 +342,7 @@ export function useAppData() {
               }
               return [note, ...prev];
             });
-            void localDb.putNote(note);
+            void localDb.putNote(accountId, note);
           }
         }
       )
@@ -316,9 +354,11 @@ export function useAppData() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'folders' },
         (payload) => {
+          if (activeAccountId.current !== accountId) return;
           if (payload.eventType === 'DELETE') {
             const oldRow = payload.old as FolderRow;
             setFolders((prev) => prev.filter((f) => f.id !== oldRow.id));
+            void localDb.deleteFolder(accountId, oldRow.id);
           } else {
             const newRow = payload.new as FolderRow;
             const folder = mapFolder(newRow);
@@ -331,7 +371,7 @@ export function useAppData() {
               }
               return [...prev, folder];
             });
-            localDb.putFolder(folder);
+            void localDb.putFolder(accountId, folder);
           }
         }
       )
@@ -341,23 +381,29 @@ export function useAppData() {
       supabase.removeChannel(notesChannel);
       supabase.removeChannel(foldersChannel);
     };
-  }, [loaded]);
+  }, [loaded, userId]);
 
   // ===== Cloud sync helpers =====
-  const syncNoteToCloud = useCallback(async (note: Note) => {
+  const syncNoteToCloud = useCallback((note: Note): Promise<void> => {
     const id = note.id;
+    const accountId = userId;
+    const taskKey = accountId ? `${accountId}:${id}` : id;
+    const existingTask = inFlightTasks.current.get(taskKey);
+    if (existingTask) return existingTask;
     // A stale debounce callback must NEVER recreate a draft already confirmed.
-    if (!pendingNotes.current.has(id)) return;
-    if (inFlightNotes.current.has(id) || !navigator.onLine || !cloudReadyRef.current) return;
-    inFlightNotes.current.add(id);
-    try {
+    if (!accountId || !pendingNotes.current.has(id) || deletingNotes.current.has(id) ||
+        !navigator.onLine || !cloudReadyRef.current) return Promise.resolve();
+    const task = (async () => {
+      try {
       // Serialise writes per note; a newer edit can arrive while awaiting RPC.
-      while (pendingNotes.current.has(id) && navigator.onLine) {
+      while (pendingNotes.current.has(id) && !deletingNotes.current.has(id) &&
+             activeAccountId.current === accountId && navigator.onLine) {
         const draft = pendingNotes.current.get(id)!;
         const expected = confirmedRevisions.current.get(id) ?? (draft.revision ?? -1);
         const { data, error } = await supabase.rpc('save_note_versioned', {
           p_note: noteToRow(draft), p_expected_revision: expected,
         });
+        if (deletingNotes.current.has(id) || activeAccountId.current !== accountId) break;
         if (error) {
           // Network / missing-migration errors leave the local draft intact.
           console.warn('Note sync postponed:', error.message);
@@ -379,12 +425,12 @@ export function useAppData() {
               n.title === draft.title && n.content === draft.content && n.updatedAt === draft.updatedAt
               ? saved : n));
             if (confirmedRevisions.current.get(id) === revision && !pendingNotes.current.has(id)) {
-              void localDb.putNote(saved);
+              void localDb.putNote(accountId, saved);
             }
           } else if (newest) {
             const carried = { ...newest, revision, syncPending: true };
             pendingNotes.current.set(id, carried);
-            void localDb.putNote(carried);
+            void localDb.putNote(accountId, carried);
           }
           continue;
         }
@@ -395,7 +441,9 @@ export function useAppData() {
           title: `${draft.title || 'Untitled'} (conflict copy)`,
           revision: 0, syncPending: true, createdAt: Date.now(), updatedAt: Date.now(),
         };
-        await localDb.putNote(copy);
+        // New conflict notes always start with creation semantics. Never inherit
+        // the original note's server revision.
+        await localDb.putNote(accountId, copy);
         pendingNotes.current.set(copy.id, copy);
         confirmedRevisions.current.set(copy.id, -1);
         pendingNotes.current.delete(id);
@@ -404,7 +452,7 @@ export function useAppData() {
         if (!fetchError && current) {
           const remote = mapNote(current as NoteRow);
           confirmedRevisions.current.set(id, remote.revision ?? 0);
-          await localDb.putNote(remote);
+          await localDb.putNote(accountId, remote);
           setNotes((prev) => [copy, ...prev.map((n) => n.id === id ? remote : n)]);
         } else {
           // The server may be temporarily unavailable; retain both local rows.
@@ -414,13 +462,13 @@ export function useAppData() {
         void syncNoteToCloudRef.current(copy);
         break;
       }
-    } catch (err) {
+      } catch (err) {
       // Unexpected network exceptions must not discard the local draft.
       console.warn('Note sync interrupted:', err);
-    } finally {
-      inFlightNotes.current.delete(id);
+      } finally {
       // A new edit that arrived during the last RPC must not be stranded.
-      if (pendingNotes.current.has(id) && navigator.onLine) {
+      if (pendingNotes.current.has(id) && !deletingNotes.current.has(id) &&
+          activeAccountId.current === accountId && navigator.onLine) {
         const latest = pendingNotes.current.get(id)!;
         // Do not immediately retry a failing request in a tight loop.
         const existing = saveTimers.current.get(id);
@@ -432,8 +480,14 @@ export function useAppData() {
           saveTimers.current.set(id, timer);
         }
       }
-    }
-  }, []);
+      }
+    })();
+    inFlightTasks.current.set(taskKey, task);
+    void task.finally(() => {
+      if (inFlightTasks.current.get(taskKey) === task) inFlightTasks.current.delete(taskKey);
+    });
+    return task;
+  }, [userId]);
   const syncNoteToCloudRef = useRef(syncNoteToCloud);
   syncNoteToCloudRef.current = syncNoteToCloud;
 
@@ -443,15 +497,6 @@ export function useAppData() {
       if (error) console.warn('Folder sync error:', error.message);
     } catch (err) {
       console.warn('Folder sync failed:', err);
-    }
-  }, []);
-
-  const deleteNoteFromCloud = useCallback(async (id: string) => {
-    try {
-      const { error } = await supabase.from('notes').delete().eq('id', id);
-      if (error) console.warn('Note delete error:', error.message);
-    } catch (err) {
-      console.warn('Note delete failed:', err);
     }
   }, []);
 
@@ -467,10 +512,11 @@ export function useAppData() {
   // Debounced save: local + cloud
   const saveNote = useCallback(
     (note: Note) => {
+      if (!userId || deletingNotes.current.has(note.id)) return;
       // Save to local cache immediately and protect against Realtime overwrites.
       const draft = { ...note, syncPending: true };
       pendingNotes.current.set(note.id, draft);
-      void localDb.putNote(draft);
+      void localDb.putNote(userId, draft);
       // Debounce cloud sync
       const existing = saveTimers.current.get(note.id);
       if (existing) clearTimeout(existing);
@@ -480,12 +526,13 @@ export function useAppData() {
       }, 600);
       saveTimers.current.set(note.id, timer);
     },
-    [syncNoteToCloud]
+    [syncNoteToCloud, userId]
   );
 
   const saveFolder = useCallback(
     (folder: Folder) => {
-      localDb.putFolder(folder);
+      if (!userId) return;
+      void localDb.putFolder(userId, folder);
       const existing = folderSaveTimers.current.get(folder.id);
       if (existing) clearTimeout(existing);
       const timer = setTimeout(() => {
@@ -494,7 +541,7 @@ export function useAppData() {
       }, 400);
       folderSaveTimers.current.set(folder.id, timer);
     },
-    [syncFolderToCloud]
+    [syncFolderToCloud, userId]
   );
 
   const notesRef = useRef(notes);
@@ -554,6 +601,8 @@ export function useAppData() {
         trashedAt: null,
         createdAt: now,
         updatedAt: now,
+        revision: 0,
+        syncPending: true,
       };
       confirmedRevisions.current.set(copy.id, -1);
       setNotes((prev) => [copy, ...prev]);
@@ -592,20 +641,76 @@ export function useAppData() {
   );
 
   const permanentDelete = useCallback(
-    (id: string) => {
+    async (id: string): Promise<void> => {
+      if (!userId) throw new Error('Sign in before deleting a note.');
+      const note = notesRef.current.find((item) => item.id === id);
+      if (!note) throw new Error('The note is no longer available.');
+
       const timer = saveTimers.current.get(id);
       if (timer) clearTimeout(timer);
       saveTimers.current.delete(id);
-      pendingNotes.current.delete(id);
-      confirmedRevisions.current.delete(id);
-      setNotes((prev) => prev.filter((n) => n.id !== id));
-      setAttachments((prev) => prev.filter((a) => a.noteId !== id));
-      localDb.deleteNote(id);
-      deleteNoteFromCloud(id);
-      deleteAllNoteImages(id);
-      deleteAllAttachments(id);
+      deletingNotes.current.add(id);
+      let pendingBeforeDelete: Note | undefined;
+
+      try {
+        // Let an already-sent CAS request settle, then block all later retries.
+        const activeSync = inFlightTasks.current.get(`${userId}:${id}`);
+        if (activeSync) await activeSync;
+
+        // Persist a non-pending cache copy before the remote delete. If the tab
+        // closes after Supabase succeeds, startup treats this as a stale synced
+        // row and removes it instead of recreating it.
+        pendingBeforeDelete = pendingNotes.current.get(id);
+        const latest = pendingBeforeDelete ?? notesRef.current.find((item) => item.id === id) ?? note;
+        pendingNotes.current.delete(id);
+        await localDb.putNote(userId, {
+          ...latest,
+          revision: confirmedRevisions.current.get(id) ?? latest.revision ?? 0,
+          syncPending: false,
+        });
+
+        // Capture paths while attachment rows still exist. The note delete below
+        // cascades those rows; storage cleanup is intentionally afterward.
+        const attachmentPaths = await getAttachmentStoragePaths(id);
+        const { error } = await supabase
+          .from('notes').delete().eq('id', id).select('id');
+        if (error) throw new Error(`Could not permanently delete note: ${error.message}`);
+        // Zero returned rows means the authenticated account already has no
+        // matching cloud note (for example, a never-synced offline note).
+
+        pendingNotes.current.delete(id);
+        confirmedRevisions.current.delete(id);
+        setNotes((prev) => prev.filter((item) => item.id !== id));
+        setAttachments((prev) => prev.filter((item) => item.noteId !== id));
+
+        try {
+          await Promise.all([
+            localDb.deleteNote(userId, id),
+            localDb.deleteAttachmentsByNote(userId, id),
+          ]);
+        } catch (cacheError) {
+          // The cloud deletion is already final. Keep the in-memory tombstone
+          // so a stale cache row cannot be uploaded again in this session.
+          console.error('Local cleanup after note deletion failed:', cacheError);
+        }
+
+        // Database deletion is authoritative. Storage failures only leave
+        // inaccessible orphan objects and must not roll back the UI deletion.
+        await Promise.all([
+          deleteAllNoteImages(id),
+          deleteAttachmentStorage(attachmentPaths),
+        ]);
+      } catch (error) {
+        deletingNotes.current.delete(id);
+        if (pendingBeforeDelete) {
+          pendingNotes.current.set(id, pendingBeforeDelete);
+          void localDb.putNote(userId, pendingBeforeDelete);
+          void syncNoteToCloudRef.current(pendingBeforeDelete);
+        }
+        throw error;
+      }
     },
-    [deleteNoteFromCloud]
+    [userId]
   );
 
   const togglePin = useCallback(
@@ -690,10 +795,10 @@ export function useAppData() {
           return updated;
         })
       );
-      localDb.deleteFolder(id);
+      if (userId) void localDb.deleteFolder(userId, id);
       deleteFolderFromCloud(id);
     },
-    [saveNote, deleteFolderFromCloud]
+    [saveNote, deleteFolderFromCloud, userId]
   );
 
   // ===== Settings =====
@@ -713,13 +818,13 @@ export function useAppData() {
       if (data.folders) {
         setFolders(data.folders);
         data.folders.forEach((f) => {
-          localDb.putFolder(f);
+          if (userId) void localDb.putFolder(userId, f);
           syncFolderToCloud(f);
         });
       }
       if (data.notes) {
         setNotes(data.notes);
-        localDb.putNotes(data.notes);
+        if (userId) void localDb.putNotes(userId, data.notes);
         data.notes.forEach((n) => {
           if (!confirmedRevisions.current.has(n.id)) confirmedRevisions.current.set(n.id, -1);
           saveNote(n);
@@ -732,7 +837,7 @@ export function useAppData() {
         localDb.saveSettings(data.settings);
       }
     },
-    [saveNote, syncFolderToCloud]
+    [saveNote, syncFolderToCloud, userId]
   );
 
   const flushAll = useCallback(async () => {
@@ -781,14 +886,14 @@ export function useAppData() {
       try {
         const attachment = await uploadAttachment(noteId, file);
         setAttachments((prev) => [...prev, attachment]);
-        localDb.putAttachment(attachment);
+        if (userId) await localDb.putAttachment(userId, attachment);
         return attachment;
       } catch (err) {
         console.error('Attachment upload failed:', err);
         return null;
       }
     },
-    []
+    [userId]
   );
 
   // Keep a renamed file's storage path unchanged; only its display name changes.
@@ -803,20 +908,20 @@ export function useAppData() {
     setAttachments((prev) => prev.map((a) => {
       if (a.id !== id) return a;
       const updated = { ...a, name: trimmed };
-      localDb.putAttachment(updated);
+      if (userId) void localDb.putAttachment(userId, updated);
       return updated;
     }));
     return true;
-  }, []);
+  }, [userId]);
 
   const removeAttachment = useCallback(
     async (id: string) => {
       // Do not report success or erase the offline record until Supabase confirms deletion.
       await deleteAttachment(id);
-      await localDb.deleteAttachmentRecord(id);
+      if (userId) await localDb.deleteAttachmentRecord(userId, id);
       setAttachments((prev) => prev.filter((a) => a.id !== id));
     },
-    []
+    [userId]
   );
 
   const getAttachmentsForNote = useCallback(
@@ -825,11 +930,11 @@ export function useAppData() {
   );
 
   return {
-    notes,
-    folders,
-    attachments,
+    notes: loadedAccountId === userId ? notes : [],
+    folders: loadedAccountId === userId ? folders : [],
+    attachments: loadedAccountId === userId ? attachments : [],
     settings,
-    loaded,
+    loaded: loadedAccountId === userId && loaded,
     syncing,
     online,
     syncConflicts,

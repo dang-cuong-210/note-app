@@ -15,7 +15,7 @@ import { noteHasTag } from '@/lib/utils';
 
 function AppContent() {
   const { user, loading: authLoading, signOut } = useAuth();
-  const data = useAppData();
+  const data = useAppData(user?.id ?? null);
   const [view, setView] = useState<ViewType>({ kind: 'all' });
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -87,10 +87,16 @@ function AppContent() {
     toast('Note restored');
   };
 
-  const handlePermanentDelete = (id: string) => {
-    data.permanentDelete(id);
-    if (selectedNoteId === id) setSelectedNoteId(null);
-    toast('Note permanently deleted');
+  const handlePermanentDelete = async (id: string) => {
+    try {
+      await data.permanentDelete(id);
+      if (selectedNoteId === id) setSelectedNoteId(null);
+      toast('Note permanently deleted');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Note deletion failed';
+      toast(message);
+      throw error;
+    }
   };
 
   const handleDuplicate = (id: string) => {
@@ -106,6 +112,8 @@ function AppContent() {
   };
 
   // Keyboard shortcuts for common note actions.
+  const addNoteShortcut = data.addNote;
+  const dataLoaded = data.loaded;
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -133,13 +141,13 @@ function AppContent() {
         if (
           isTyping ||
           !user ||
-          !data.loaded ||
+          !dataLoaded ||
           view.kind === 'trash' ||
           view.kind === 'settings' ||
           view.kind === 'archived'
         ) return;
         const folderId = view.kind === 'folder' ? view.id : null;
-        const note = data.addNote(folderId);
+        const note = addNoteShortcut(folderId);
         setSelectedNoteId(note.id);
         return;
       }
@@ -161,7 +169,7 @@ function AppContent() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [data.addNote, data.loaded, searchQuery, selectedNoteId, sidebarOpen, user, view]);
+  }, [addNoteShortcut, dataLoaded, searchQuery, selectedNoteId, sidebarOpen, user, view]);
 
   // Show auth screen if not signed in
   if (authLoading) {

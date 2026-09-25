@@ -4,6 +4,11 @@ This archive extends `noted-safety-fixes.zip`. It is **not production-tested**.
 
 ## Changes
 
+- IndexedDB notes, folders, attachments, and pending note drafts are keyed by authenticated account. Switching accounts clears in-memory sync state before loading the next account. Existing v2 cache stores are retained and copied once into the account-scoped stores for the authenticated account present on first v3 load; an ownership marker prevents another account from reading that legacy cache.
+- Theme, font-size, and sort settings remain intentionally device-wide because they contain no note or account content.
+- Permanent deletion waits for any active note save, blocks later retries, confirms the Supabase note deletion, and only then removes local state and cleans up file/image storage. A failed database deletion leaves the note and its cache intact.
+- Attachment bulk deletion now stops before storage cleanup if its database query or deletion fails.
+- Conflict copies explicitly use revision `0` locally and expected revision `-1` for their first CAS write.
 - Atomic compare-and-set note writes via Supabase RPC `save_note_versioned` with monotonically increasing `revision`.
 - `useAppData` writes notes through RPC rather than unconditional `upsert` (except one-time legacy IndexedDB migration when the cloud is empty).
 - Pending notes are marked in IndexedDB to survive browser restarts and offline sessions.

@@ -31,7 +31,7 @@ interface NoteListProps {
   onTogglePin: (id: string) => void;
   onTrash: (id: string) => void;
   onRestore: (id: string) => void;
-  onPermanentDelete: (id: string) => void;
+  onPermanentDelete: (id: string) => Promise<void>;
   onDuplicate: (id: string) => void;
   onArchive: (id: string, archived: boolean) => void;
   onMove: (id: string, folderId: string | null) => void;
@@ -122,9 +122,12 @@ export function NoteList({
     });
   };
 
-  const handleDelete = (note: Note) => {
-    onPermanentDelete(note.id);
-    toast('Note permanently deleted');
+  const handleDelete = async (note: Note) => {
+    try {
+      await onPermanentDelete(note.id);
+    } catch {
+      // The parent reports the error and the note remains visible.
+    }
   };
 
   const showAddButton = view.kind !== 'trash' && view.kind !== 'settings' && view.kind !== 'archived';

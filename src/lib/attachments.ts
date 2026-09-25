@@ -103,18 +103,38 @@ export async function deleteAllAttachments(noteId: string): Promise<void> {
     .select('id, storage_path')
     .eq('note_id', noteId);
 
-  if (error || !rows || rows.length === 0) return;
+  if (error) throw new Error(`Failed to find note attachments: ${error.message}`);
+  if (!rows || rows.length === 0) return;
 
   const paths = (rows as { id: string; storage_path: string }[]).map((r) => r.storage_path);
   const ids = (rows as { id: string; storage_path: string }[]).map((r) => r.id);
 
   // Delete DB records
-  const { error: dbError } = await supabase.from('attachments').delete().in('id', ids);
-  if (dbError) console.warn('Attachment DB delete error:', dbError.message);
+  const { data: deletedRows, error: dbError } = await supabase
+    .from('attachments').delete().in('id', ids).select('id');
+  if (dbError) throw new Error(`Failed to delete attachment records: ${dbError.message}`);
+  if (deletedRows?.length !== ids.length) {
+    throw new Error('Not all attachment records were deleted. Storage was left intact.');
+  }
 
   // Delete storage files
   const { error: storageError } = await supabase.storage.from(BUCKET).remove(paths);
-  if (storageError) console.warn('Attachment storage delete error:', storageError.message);
+  if (storageError) console.warn('Attachment storage orphan cleanup failed:', storageError.message);
+}
+
+export async function getAttachmentStoragePaths(noteId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('attachments')
+    .select('storage_path')
+    .eq('note_id', noteId);
+  if (error) throw new Error(`Failed to prepare attachment cleanup: ${error.message}`);
+  return (data as { storage_path: string }[] | null)?.map((row) => row.storage_path) ?? [];
+}
+
+export async function deleteAttachmentStorage(paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  const { error } = await supabase.storage.from(BUCKET).remove(paths);
+  if (error) console.warn('Attachment storage orphan cleanup failed:', error.message);
 }
 
 export async function loadAttachments(noteId: string): Promise<Attachment[]> {
