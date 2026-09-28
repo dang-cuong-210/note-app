@@ -8,6 +8,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { NoteList } from '@/components/NoteList';
 import { NoteEditor } from '@/components/NoteEditor';
 import { SettingsView } from '@/components/SettingsView';
+import { RealtimeDiagnosticsPanel } from '@/components/RealtimeDiagnosticsPanel';
 import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ViewType } from '@/lib/navigation';
@@ -21,6 +22,9 @@ function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { toast } = useToast();
+  const diagnosticsPanel = (
+    <RealtimeDiagnosticsPanel diagnostics={data.realtimeDiagnostics} />
+  );
   useEffect(() => {
     if (data.syncConflicts > 0) {
       toast('A sync conflict was detected. Both versions were preserved as separate notes.');
@@ -174,24 +178,30 @@ function AppContent() {
   // Show auth screen if not signed in
   if (authLoading) {
     return (
-      <div className="h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg)' }}>
-        <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading…</div>
-      </div>
+      <>
+        <div className="h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg)' }}>
+          <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading…</div>
+        </div>
+        {diagnosticsPanel}
+      </>
     );
   }
 
   if (!user) {
-    return <AuthScreen />;
+    return <><AuthScreen />{diagnosticsPanel}</>;
   }
 
   if (!data.loaded) {
     return (
-      <div className="h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg)' }}>
-        <div className="flex flex-col items-center gap-3">
-          <RefreshCw size={24} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
-          <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>Syncing your notes…</div>
+      <>
+        <div className="h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg)' }}>
+          <div className="flex flex-col items-center gap-3">
+            <RefreshCw size={24} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
+            <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>Syncing your notes…</div>
+          </div>
         </div>
-      </div>
+        {diagnosticsPanel}
+      </>
     );
   }
 
@@ -353,6 +363,7 @@ function AppContent() {
           </div>
         )}
       </main>
+      {diagnosticsPanel}
     </div>
   );
 }

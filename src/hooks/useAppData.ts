@@ -92,6 +92,63 @@ function realtimeDebug(message: string, details?: unknown) {
   else console.debug(`[Noted realtime] ${message}`, details);
 }
 
+const REALTIME_DIAGNOSTICS_ENABLED = typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('rtdebug') === '1';
+
+export interface RealtimeDiagnostics {
+  enabled: boolean;
+  maskedUserId: string;
+  sessionStatus: string;
+  sessionError: string | null;
+  notesChannelStatus: string;
+  notesChannelError: string | null;
+  foldersChannelStatus: string;
+  foldersChannelError: string | null;
+  websocketState: string;
+  lastNotesEventAt: string | null;
+  lastFoldersEventAt: string | null;
+  lastEventType: string | null;
+  lastRowId: string | null;
+  receivedRevision: number | null;
+  knownLocalRevision: number | null;
+  decision: 'none' | 'received' | 'accepted' | 'ignored';
+  ignoreReason: string | null;
+  pendingNotesSize: number;
+  inFlightSyncCount: number;
+}
+
+function maskUserId(userId: string | null): string {
+  if (!userId) return 'none';
+  if (userId.length <= 12) return `${userId.slice(0, 4)}…`;
+  return `${userId.slice(0, 8)}…${userId.slice(-4)}`;
+}
+
+function initialRealtimeDiagnostics(userId: string | null): RealtimeDiagnostics {
+  return {
+    enabled: REALTIME_DIAGNOSTICS_ENABLED,
+    maskedUserId: maskUserId(userId),
+    sessionStatus: userId ? 'not checked' : 'no authenticated user',
+    sessionError: null,
+    notesChannelStatus: 'not started',
+    notesChannelError: null,
+    foldersChannelStatus: 'not started',
+    foldersChannelError: null,
+    websocketState: REALTIME_DIAGNOSTICS_ENABLED
+      ? supabase.realtime.connectionState()
+      : 'disabled',
+    lastNotesEventAt: null,
+    lastFoldersEventAt: null,
+    lastEventType: null,
+    lastRowId: null,
+    receivedRevision: null,
+    knownLocalRevision: null,
+    decision: 'none',
+    ignoreReason: null,
+    pendingNotesSize: 0,
+    inFlightSyncCount: 0,
+  };
+}
+
 export function useAppData(userId: string | null) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -112,8 +169,53 @@ export function useAppData(userId: string | null) {
   const activeAccountId = useRef<string | null>(userId);
   const cloudReadyRef = useRef(false);
   const [syncConflicts, setSyncConflicts] = useState(0);
+  const [realtimeDiagnostics, setRealtimeDiagnostics] = useState<RealtimeDiagnostics>(
+    () => initialRealtimeDiagnostics(userId)
+  );
 
   activeAccountId.current = userId;
+
+  const updateRealtimeDiagnostics = useCallback((patch: Partial<RealtimeDiagnostics>) => {
+    if (!REALTIME_DIAGNOSTICS_ENABLED) return;
+    setRealtimeDiagnostics((current) => ({
+      ...current,
+      ...patch,
+      pendingNotesSize: pendingNotes.current.size,
+      inFlightSyncCount: inFlightTasks.current.size,
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (!REALTIME_DIAGNOSTICS_ENABLED) return;
+    updateRealtimeDiagnostics({
+      maskedUserId: maskUserId(userId),
+      sessionStatus: userId ? 'not checked' : 'no authenticated user',
+      sessionError: null,
+      notesChannelStatus: 'not started',
+      notesChannelError: null,
+      foldersChannelStatus: 'not started',
+      foldersChannelError: null,
+      lastNotesEventAt: null,
+      lastFoldersEventAt: null,
+      lastEventType: null,
+      lastRowId: null,
+      receivedRevision: null,
+      knownLocalRevision: null,
+      decision: 'none',
+      ignoreReason: null,
+    });
+  }, [userId, updateRealtimeDiagnostics]);
+
+  useEffect(() => {
+    if (!REALTIME_DIAGNOSTICS_ENABLED) return;
+    const refreshLiveValues = () => updateRealtimeDiagnostics({
+      maskedUserId: maskUserId(userId),
+      websocketState: supabase.realtime.connectionState(),
+    });
+    refreshLiveValues();
+    const timer = window.setInterval(refreshLiveValues, 500);
+    return () => window.clearInterval(timer);
+  }, [userId, updateRealtimeDiagnostics]);
 
   // Load settings from local storage (settings stay local — they're device-specific)
   useEffect(() => {
@@ -319,11 +421,17 @@ export function useAppData(userId: string | null) {
   useEffect(() => {
     if (!loaded || !userId) return;
     const accountId = userId;
+    let disposed = false;
     let initialRealtimeRefreshStarted = false;
+    let notesChannel: ReturnType<typeof supabase.channel> | null = null;
+    let foldersChannel: ReturnType<typeof supabase.channel> | null = null;
 
     const onChannelStatus = (channelName: 'notes' | 'folders') =>
       (status: string, error?: Error) => {
         realtimeDebug(`${channelName} channel ${status}`, error?.message);
+        updateRealtimeDiagnostics(channelName === 'notes'
+          ? { notesChannelStatus: status, notesChannelError: error?.message ?? null }
+          : { foldersChannelStatus: status, foldersChannelError: error?.message ?? null });
         // Loading precedes subscription setup, so one change can otherwise land
         // between the initial query and SUBSCRIBED. Refresh once after the first
         // channel joins; pending drafts remain protected by loadFromCloud.
@@ -333,45 +441,129 @@ export function useAppData(userId: string | null) {
         }
       };
 
-    const notesChannel = supabase
-      .channel(`notes-sync:${accountId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notes' },
-        (payload) => {
-          if (activeAccountId.current !== accountId) return;
+    const subscribe = async () => {
+      updateRealtimeDiagnostics({
+        sessionStatus: 'checking',
+        sessionError: null,
+        notesChannelStatus: 'waiting for session',
+        notesChannelError: null,
+        foldersChannelStatus: 'waiting for session',
+        foldersChannelError: null,
+      });
+
+      // supabase-js 2.57.4 supplies Realtime with its session-token callback and
+      // refreshes channel auth on auth events. Verify the session here, but do
+      // not manually duplicate setAuth() or retain the token in diagnostics.
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (disposed) return;
+      const session = sessionData.session;
+      const expired = Boolean(session?.expires_at && session.expires_at * 1000 <= Date.now());
+      let invalidReason: string | null = null;
+      if (sessionError) invalidReason = sessionError.message;
+      else if (!session?.access_token) invalidReason = 'missing access token';
+      else if (session.user.id !== accountId) invalidReason = 'session user does not match active account';
+      else if (expired) invalidReason = 'session is expired';
+
+      if (invalidReason) {
+        updateRealtimeDiagnostics({
+          sessionStatus: 'invalid',
+          sessionError: invalidReason,
+          notesChannelStatus: 'not subscribed',
+          foldersChannelStatus: 'not subscribed',
+        });
+        realtimeDebug('realtime subscription skipped: invalid session', invalidReason);
+        return;
+      }
+
+      updateRealtimeDiagnostics({ sessionStatus: 'valid', sessionError: null });
+
+      notesChannel = supabase
+        .channel(`notes-sync:${accountId}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'notes' },
+          (payload) => {
+          const newRow = payload.new as Partial<NoteRow>;
+          const oldRow = payload.old as Partial<NoteRow>;
+          const rowId = newRow.id ?? oldRow.id ?? null;
+          const receivedRevision = typeof newRow.revision === 'number'
+            ? newRow.revision
+            : typeof oldRow.revision === 'number' ? oldRow.revision : null;
+          const knownLocalRevision = rowId
+            ? confirmedRevisions.current.get(rowId) ?? -1
+            : null;
+          updateRealtimeDiagnostics({
+            lastNotesEventAt: new Date().toISOString(),
+            lastEventType: payload.eventType,
+            lastRowId: rowId,
+            receivedRevision,
+            knownLocalRevision,
+            decision: 'received',
+            ignoreReason: null,
+          });
           realtimeDebug('notes event received', {
             eventType: payload.eventType,
-            id: (payload.new as Partial<NoteRow>).id ?? (payload.old as Partial<NoteRow>).id,
-            revision: (payload.new as Partial<NoteRow>).revision,
+            id: rowId,
+            revision: receivedRevision,
           });
+          if (activeAccountId.current !== accountId) {
+            updateRealtimeDiagnostics({
+              decision: 'ignored',
+              ignoreReason: 'subscription account is no longer active',
+            });
+            realtimeDebug('notes change ignored for inactive account', rowId);
+            return;
+          }
           if (payload.eventType === 'DELETE') {
-            const oldRow = payload.old as NoteRow;
+            if (!oldRow.id) {
+              updateRealtimeDiagnostics({
+                decision: 'ignored',
+                ignoreReason: 'DELETE payload has no row ID',
+              });
+              return;
+            }
             if (pendingNotes.current.has(oldRow.id)) {
+              updateRealtimeDiagnostics({
+                decision: 'ignored',
+                ignoreReason: 'pending local draft',
+              });
               realtimeDebug('notes delete ignored for pending local draft', oldRow.id);
               return;
             }
             confirmedRevisions.current.delete(oldRow.id);
             setNotes((prev) => prev.filter((n) => n.id !== oldRow.id));
             void localDb.deleteNote(accountId, oldRow.id);
+            updateRealtimeDiagnostics({ decision: 'accepted', ignoreReason: null });
           } else {
-            const newRow = payload.new as NoteRow;
             // RLS is the primary row boundary. Keep this client check for
             // non-delete payloads without filtering the channel, because
             // Postgres DELETE payloads may contain only the primary key.
             if (newRow.user_id && newRow.user_id !== accountId) {
+              updateRealtimeDiagnostics({
+                decision: 'ignored',
+                ignoreReason: 'row belongs to another account',
+              });
               realtimeDebug('notes change ignored for another account', newRow.id);
               return;
             }
-            const note = mapNote(newRow);
+            const note = mapNote(newRow as NoteRow);
             // Never overwrite an unsynced draft, including the IndexedDB copy.
             // Its conditional write will either succeed or create a conflict copy.
             if (pendingNotes.current.has(note.id)) {
+              updateRealtimeDiagnostics({
+                decision: 'ignored',
+                ignoreReason: 'pending local draft',
+              });
               realtimeDebug('notes change ignored for pending local draft', note.id);
               return;
             }
             const knownRevision = confirmedRevisions.current.get(note.id) ?? -1;
             if (note.revision! < knownRevision) {
+              updateRealtimeDiagnostics({
+                knownLocalRevision: knownRevision,
+                decision: 'ignored',
+                ignoreReason: `stale revision: received ${note.revision ?? 0}, known ${knownRevision}`,
+              });
               realtimeDebug('stale notes revision ignored', {
                 id: note.id,
                 receivedRevision: note.revision,
@@ -390,33 +582,65 @@ export function useAppData(userId: string | null) {
               return [note, ...prev];
             });
             void localDb.putNote(accountId, note);
+            updateRealtimeDiagnostics({
+              decision: 'accepted',
+              ignoreReason: null,
+            });
           }
-        }
-      )
-      .subscribe(onChannelStatus('notes'));
+          }
+        )
+        .subscribe(onChannelStatus('notes'));
 
-    const foldersChannel = supabase
-      .channel(`folders-sync:${accountId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'folders' },
-        (payload) => {
-          if (activeAccountId.current !== accountId) return;
+      foldersChannel = supabase
+        .channel(`folders-sync:${accountId}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'folders' },
+          (payload) => {
+          const newRow = payload.new as Partial<FolderRow>;
+          const oldRow = payload.old as Partial<FolderRow>;
+          const rowId = newRow.id ?? oldRow.id ?? null;
+          updateRealtimeDiagnostics({
+            lastFoldersEventAt: new Date().toISOString(),
+            lastEventType: payload.eventType,
+            lastRowId: rowId,
+            receivedRevision: null,
+            knownLocalRevision: null,
+            decision: 'received',
+            ignoreReason: null,
+          });
           realtimeDebug('folders event received', {
             eventType: payload.eventType,
-            id: (payload.new as Partial<FolderRow>).id ?? (payload.old as Partial<FolderRow>).id,
+            id: rowId,
           });
+          if (activeAccountId.current !== accountId) {
+            updateRealtimeDiagnostics({
+              decision: 'ignored',
+              ignoreReason: 'subscription account is no longer active',
+            });
+            return;
+          }
           if (payload.eventType === 'DELETE') {
-            const oldRow = payload.old as FolderRow;
+            if (!oldRow.id) {
+              updateRealtimeDiagnostics({
+                decision: 'ignored',
+                ignoreReason: 'DELETE payload has no row ID',
+              });
+              return;
+            }
             setFolders((prev) => prev.filter((f) => f.id !== oldRow.id));
             void localDb.deleteFolder(accountId, oldRow.id);
+            updateRealtimeDiagnostics({ decision: 'accepted', ignoreReason: null });
           } else {
-            const newRow = payload.new as FolderRow;
             if (newRow.user_id && newRow.user_id !== accountId) {
+              updateRealtimeDiagnostics({
+                decision: 'ignored',
+                ignoreReason: 'row belongs to another account',
+              });
               realtimeDebug('folders change ignored for another account', newRow.id);
               return;
             }
-            const folder = mapFolder(newRow);
+            const folder = mapFolder(newRow as FolderRow);
             setFolders((prev) => {
               const idx = prev.findIndex((f) => f.id === folder.id);
               if (idx >= 0) {
@@ -427,17 +651,22 @@ export function useAppData(userId: string | null) {
               return [...prev, folder];
             });
             void localDb.putFolder(accountId, folder);
+            updateRealtimeDiagnostics({ decision: 'accepted', ignoreReason: null });
           }
-        }
-      )
-      .subscribe(onChannelStatus('folders'));
+          }
+        )
+        .subscribe(onChannelStatus('folders'));
+    };
+
+    void subscribe();
 
     return () => {
+      disposed = true;
       realtimeDebug('removing realtime channels', accountId);
-      supabase.removeChannel(notesChannel);
-      supabase.removeChannel(foldersChannel);
+      if (notesChannel) void supabase.removeChannel(notesChannel);
+      if (foldersChannel) void supabase.removeChannel(foldersChannel);
     };
-  }, [loaded, userId, loadFromCloud]);
+  }, [loaded, userId, loadFromCloud, updateRealtimeDiagnostics]);
 
   // ===== Cloud sync helpers =====
   const syncNoteToCloud = useCallback((note: Note): Promise<void> => {
@@ -994,6 +1223,7 @@ export function useAppData(userId: string | null) {
     syncing,
     online,
     syncConflicts,
+    realtimeDiagnostics,
     dismissSyncConflicts: () => setSyncConflicts(0),
     addNote,
     updateNote,
