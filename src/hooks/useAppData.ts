@@ -499,7 +499,7 @@ export function useAppData(userId: string | null) {
         .channel(`notes-sync:${accountId}`)
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: 'notes' },
+          { event: '*', schema: 'public', table: 'notes', filter: `user_id=eq.${accountId}` },
           (payload) => {
           const newRow = payload.new as Partial<NoteRow>;
           const oldRow = payload.old as Partial<NoteRow>;
@@ -613,7 +613,7 @@ export function useAppData(userId: string | null) {
         .channel(`folders-sync:${accountId}`)
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: 'folders' },
+          { event: '*', schema: 'public', table: 'folders', filter: `user_id=eq.${accountId}` },
           (payload) => {
           const newRow = payload.new as Partial<FolderRow>;
           const oldRow = payload.old as Partial<FolderRow>;
