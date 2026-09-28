@@ -15,6 +15,7 @@ import {
 
 interface NoteRow {
   id: string;
+  user_id?: string;
   title: string;
   content: string;
   folder_id: string | null;
@@ -29,6 +30,7 @@ interface NoteRow {
 
 interface FolderRow {
   id: string;
+  user_id?: string;
   name: string;
   parent_id: string | null;
   created_at: number;
@@ -82,6 +84,12 @@ function folderToRow(folder: Folder): FolderRow {
     parent_id: folder.parentId,
     created_at: folder.createdAt,
   };
+}
+
+function realtimeDebug(message: string, details?: unknown) {
+  if (!import.meta.env.DEV) return;
+  if (details === undefined) console.debug(`[Noted realtime] ${message}`);
+  else console.debug(`[Noted realtime] ${message}`, details);
 }
 
 export function useAppData(userId: string | null) {
@@ -311,28 +319,66 @@ export function useAppData(userId: string | null) {
   useEffect(() => {
     if (!loaded || !userId) return;
     const accountId = userId;
+    let initialRealtimeRefreshStarted = false;
+
+    const onChannelStatus = (channelName: 'notes' | 'folders') =>
+      (status: string, error?: Error) => {
+        realtimeDebug(`${channelName} channel ${status}`, error?.message);
+        // Loading precedes subscription setup, so one change can otherwise land
+        // between the initial query and SUBSCRIBED. Refresh once after the first
+        // channel joins; pending drafts remain protected by loadFromCloud.
+        if (status === 'SUBSCRIBED' && !initialRealtimeRefreshStarted) {
+          initialRealtimeRefreshStarted = true;
+          void loadFromCloud();
+        }
+      };
 
     const notesChannel = supabase
-      .channel('notes-sync')
+      .channel(`notes-sync:${accountId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'notes' },
         (payload) => {
           if (activeAccountId.current !== accountId) return;
+          realtimeDebug('notes event received', {
+            eventType: payload.eventType,
+            id: (payload.new as Partial<NoteRow>).id ?? (payload.old as Partial<NoteRow>).id,
+            revision: (payload.new as Partial<NoteRow>).revision,
+          });
           if (payload.eventType === 'DELETE') {
             const oldRow = payload.old as NoteRow;
-            if (pendingNotes.current.has(oldRow.id)) return;
+            if (pendingNotes.current.has(oldRow.id)) {
+              realtimeDebug('notes delete ignored for pending local draft', oldRow.id);
+              return;
+            }
             confirmedRevisions.current.delete(oldRow.id);
             setNotes((prev) => prev.filter((n) => n.id !== oldRow.id));
             void localDb.deleteNote(accountId, oldRow.id);
           } else {
             const newRow = payload.new as NoteRow;
+            // RLS is the primary row boundary. Keep this client check for
+            // non-delete payloads without filtering the channel, because
+            // Postgres DELETE payloads may contain only the primary key.
+            if (newRow.user_id && newRow.user_id !== accountId) {
+              realtimeDebug('notes change ignored for another account', newRow.id);
+              return;
+            }
             const note = mapNote(newRow);
             // Never overwrite an unsynced draft, including the IndexedDB copy.
             // Its conditional write will either succeed or create a conflict copy.
-            if (pendingNotes.current.has(note.id)) return;
+            if (pendingNotes.current.has(note.id)) {
+              realtimeDebug('notes change ignored for pending local draft', note.id);
+              return;
+            }
             const knownRevision = confirmedRevisions.current.get(note.id) ?? -1;
-            if (note.revision! < knownRevision) return;
+            if (note.revision! < knownRevision) {
+              realtimeDebug('stale notes revision ignored', {
+                id: note.id,
+                receivedRevision: note.revision,
+                knownRevision,
+              });
+              return;
+            }
             confirmedRevisions.current.set(note.id, note.revision ?? 0);
             setNotes((prev) => {
               const idx = prev.findIndex((n) => n.id === note.id);
@@ -347,21 +393,29 @@ export function useAppData(userId: string | null) {
           }
         }
       )
-      .subscribe();
+      .subscribe(onChannelStatus('notes'));
 
     const foldersChannel = supabase
-      .channel('folders-sync')
+      .channel(`folders-sync:${accountId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'folders' },
         (payload) => {
           if (activeAccountId.current !== accountId) return;
+          realtimeDebug('folders event received', {
+            eventType: payload.eventType,
+            id: (payload.new as Partial<FolderRow>).id ?? (payload.old as Partial<FolderRow>).id,
+          });
           if (payload.eventType === 'DELETE') {
             const oldRow = payload.old as FolderRow;
             setFolders((prev) => prev.filter((f) => f.id !== oldRow.id));
             void localDb.deleteFolder(accountId, oldRow.id);
           } else {
             const newRow = payload.new as FolderRow;
+            if (newRow.user_id && newRow.user_id !== accountId) {
+              realtimeDebug('folders change ignored for another account', newRow.id);
+              return;
+            }
             const folder = mapFolder(newRow);
             setFolders((prev) => {
               const idx = prev.findIndex((f) => f.id === folder.id);
@@ -376,13 +430,14 @@ export function useAppData(userId: string | null) {
           }
         }
       )
-      .subscribe();
+      .subscribe(onChannelStatus('folders'));
 
     return () => {
+      realtimeDebug('removing realtime channels', accountId);
       supabase.removeChannel(notesChannel);
       supabase.removeChannel(foldersChannel);
     };
-  }, [loaded, userId]);
+  }, [loaded, userId, loadFromCloud]);
 
   // ===== Cloud sync helpers =====
   const syncNoteToCloud = useCallback((note: Note): Promise<void> => {
