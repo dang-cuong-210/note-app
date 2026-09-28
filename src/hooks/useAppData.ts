@@ -451,9 +451,10 @@ export function useAppData(userId: string | null) {
         foldersChannelError: null,
       });
 
-      // supabase-js 2.57.4 supplies Realtime with its session-token callback and
-      // refreshes channel auth on auth events. Verify the session here, but do
-      // not manually duplicate setAuth() or retain the token in diagnostics.
+      // Verify the session before opening the socket. realtime-js starts its
+      // async token lookup and the channel join concurrently, so a restored
+      // session can otherwise join Postgres Changes as `anon`. Set the verified
+      // token first; supabase-js continues to propagate later token refreshes.
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (disposed) return;
       const session = sessionData.session;
@@ -476,6 +477,23 @@ export function useAppData(userId: string | null) {
       }
 
       updateRealtimeDiagnostics({ sessionStatus: 'valid', sessionError: null });
+      if (!session) return;
+
+      try {
+        await supabase.realtime.setAuth(session.access_token);
+      } catch (error) {
+        if (disposed) return;
+        const message = error instanceof Error ? error.message : 'failed to authenticate Realtime';
+        updateRealtimeDiagnostics({
+          sessionStatus: 'invalid',
+          sessionError: message,
+          notesChannelStatus: 'not subscribed',
+          foldersChannelStatus: 'not subscribed',
+        });
+        realtimeDebug('realtime authentication failed', message);
+        return;
+      }
+      if (disposed) return;
 
       notesChannel = supabase
         .channel(`notes-sync:${accountId}`)
