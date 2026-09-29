@@ -43,6 +43,7 @@ type DropBoundary = {
   left: number;
   right: number;
   target: HTMLElement | null;
+  priority: number;
 };
 type EditorDragSession = {
   pointerId: number;
@@ -60,8 +61,23 @@ type EditorDragSession = {
   ghost: HTMLElement | null;
   indicator: HTMLElement | null;
   boundary: DropBoundary | null;
+  boundaryIndex: number;
+  boundaries: DropBoundary[];
   highlighted: HTMLElement | null;
   frame: number | null;
+  cacheDirty: boolean;
+  measuredScrollTop: number;
+  measuredWindowScrollY: number;
+  scrollerRect: DOMRect | null;
+  editorRect: DOMRect | null;
+  ghostOffsetX: number;
+  ghostOffsetY: number;
+  activationX: number;
+  activationY: number;
+  onScroll: (() => void) | null;
+  onResize: (() => void) | null;
+  resizeObserver: ResizeObserver | null;
+  mutationObserver: MutationObserver | null;
 };
 const LAYOUT_MARKER = /<!--NOTED_ATTACHMENT_LAYOUT:([^>]*)-->/g;
 const EMPTY_LAYOUT: AttachmentLayout = { order: [], widths: {} };
@@ -367,6 +383,13 @@ export function NoteEditor({
     session.source.classList.remove('noted-dragging-source');
     session.highlighted?.classList.remove('noted-active-drop-target');
     editorRef.current?.classList.remove('noted-active-drop-target');
+    if (session.onScroll) editorScrollRef.current?.removeEventListener('scroll', session.onScroll);
+    if (session.onResize) {
+      window.removeEventListener('resize', session.onResize);
+      window.removeEventListener('orientationchange', session.onResize);
+    }
+    session.resizeObserver?.disconnect();
+    session.mutationObserver?.disconnect();
     try {
       if (session.surface.hasPointerCapture(session.pointerId)) session.surface.releasePointerCapture(session.pointerId);
     } catch { /* the browser may already have cancelled the pointer */ }
@@ -390,51 +413,108 @@ export function NoteEditor({
     return rect.height || rect.width ? rect : null;
   };
 
-  // Prefer stable DOM boundaries over a precise text caret. This makes the whole
-  // gap above/below paragraphs, line breaks, images and file cards a drop target.
-  const findNearestDropBoundary = (source: HTMLElement, x: number, y: number): DropBoundary | null => {
+  // Measure the editor once when dragging starts. Pointer frames only search this
+  // compact cache; DOM traversal, Range creation and layout reads stay off the hot path.
+  const collectDropBoundaries = (source: HTMLElement, touchOptimized: boolean): DropBoundary[] => {
     const editor = editorRef.current;
-    if (!editor) return null;
+    if (!editor) return [];
     const candidates: DropBoundary[] = [];
     const blockTags = new Set(['P', 'DIV', 'LI', 'BLOCKQUOTE', 'PRE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
-    const addNode = (node: Node, target: HTMLElement | null) => {
+    const addNode = (node: Node, target: HTMLElement | null, priority: number) => {
       if (node === source || (node instanceof Element && node.contains(source))) return;
       const rect = nodeRect(node);
       if (!rect) return;
       const parent = node.parentNode;
       if (!parent || !editor.contains(parent) && parent !== editor) return;
-      candidates.push({ parent, before: node, y: rect.top, left: rect.left, right: rect.right, target });
-      candidates.push({ parent, before: node.nextSibling, y: rect.bottom, left: rect.left, right: rect.right, target });
+      candidates.push({ parent, before: node, y: rect.top, left: rect.left, right: rect.right, target, priority });
+      candidates.push({ parent, before: node.nextSibling, y: rect.bottom, left: rect.left, right: rect.right, target, priority });
     };
-    const visit = (parent: Node) => {
+    const visit = (parent: Node, insideBlock = false) => {
       parent.childNodes.forEach(node => {
         if (node instanceof HTMLElement) {
           if (node.matches(`img, ${attachmentSelector}`)) {
-            addNode(node, node);
+            addNode(node, node, 0);
             return;
           }
           if (node.tagName === 'BR') {
-            addNode(node, node.parentElement);
+            addNode(node, node.parentElement, 1);
             return;
           }
-          if (blockTags.has(node.tagName)) addNode(node, node);
+          const isBlock = blockTags.has(node.tagName);
+          if (isBlock) addNode(node, node, 0);
           // Atomic media and BR-separated runs inside a block are also useful targets.
-          visit(node);
-        } else if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
-          addNode(node, node.parentElement);
+          visit(node, insideBlock || isBlock);
+        } else if ((!insideBlock || !touchOptimized) && node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
+          addNode(node, node.parentElement, 2);
         }
       });
     };
     visit(editor);
-    if (!candidates.length) return null;
-    return candidates.reduce((best, candidate) => {
-      const vertical = Math.abs(candidate.y - y);
+    candidates.sort((a, b) => a.y - b.y || a.priority - b.priority);
+    // Nested blocks can expose the same visual line. Keep the block-level target
+    // so a tiny touch movement cannot alternate between equivalent DOM positions.
+    if (!touchOptimized) return candidates;
+    return candidates.filter((candidate, index, all) => {
+      const previous = all[index - 1];
+      return !previous || Math.abs(previous.y - candidate.y) > 2 || previous.priority > candidate.priority;
+    });
+  };
+
+  const scheduleEditorDragFrame = (session: EditorDragSession) => {
+    if (editorDrag.current === session && session.active && session.frame == null) {
+      session.frame = requestAnimationFrame(renderEditorDragFrame);
+    }
+  };
+
+  const rebuildDropBoundaryCache = (session: EditorDragSession) => {
+    const scroller = editorScrollRef.current;
+    const touchOptimized = session.pointerType === 'touch' || session.pointerType === 'pen';
+    session.boundaries = collectDropBoundaries(session.source, touchOptimized);
+    session.boundaryIndex = -1;
+    session.boundary = null;
+    session.measuredScrollTop = scroller?.scrollTop || 0;
+    session.measuredWindowScrollY = window.scrollY;
+    session.scrollerRect = scroller?.getBoundingClientRect() || null;
+    session.editorRect = editorRef.current?.getBoundingClientRect() || null;
+    session.cacheDirty = false;
+  };
+
+  const syncCachedBoundaryScroll = (session: EditorDragSession) => {
+    const scroller = editorScrollRef.current;
+    const scrollTop = scroller?.scrollTop || 0;
+    const delta = scrollTop - session.measuredScrollTop + window.scrollY - session.measuredWindowScrollY;
+    if (delta) session.boundaries.forEach(boundary => { boundary.y -= delta; });
+    session.measuredScrollTop = scrollTop;
+    session.measuredWindowScrollY = window.scrollY;
+  };
+
+  const findCachedDropBoundary = (session: EditorDragSession): DropBoundary | null => {
+    if (session.cacheDirty) rebuildDropBoundaryCache(session);
+    else syncCachedBoundaryScroll(session);
+    if (!session.boundaries.length) return null;
+    const nearestIndex = session.boundaries.reduce((bestIndex, candidate, index, all) => {
+      const best = all[bestIndex];
+      if (session.pointerType === 'touch' || session.pointerType === 'pen') {
+        return Math.abs(candidate.y - session.y) < Math.abs(best.y - session.y) ? index : bestIndex;
+      }
+      const x = session.x;
+      const vertical = Math.abs(candidate.y - session.y);
       const horizontal = x < candidate.left ? candidate.left - x : x > candidate.right ? x - candidate.right : 0;
       const score = vertical + horizontal * 0.12;
-      const bestVertical = Math.abs(best.y - y);
+      const bestVertical = Math.abs(best.y - session.y);
       const bestHorizontal = x < best.left ? best.left - x : x > best.right ? x - best.right : 0;
-      return score < bestVertical + bestHorizontal * 0.12 ? candidate : best;
-    });
+      return score < bestVertical + bestHorizontal * 0.12 ? index : bestIndex;
+    }, 0);
+    if ((session.pointerType === 'touch' || session.pointerType === 'pen') && session.boundaryIndex >= 0 && nearestIndex !== session.boundaryIndex) {
+      const current = session.boundaries[session.boundaryIndex];
+      const nearest = session.boundaries[nearestIndex];
+      const midpoint = (current.y + nearest.y) / 2;
+      const deadband = 8;
+      const crossed = nearest.y > current.y ? session.y > midpoint + deadband : session.y < midpoint - deadband;
+      if (!crossed) return current;
+    }
+    session.boundaryIndex = nearestIndex;
+    return session.boundaries[nearestIndex];
   };
 
   const caretFallbackBoundary = (source: HTMLElement, x: number, y: number): DropBoundary | null => {
@@ -461,6 +541,7 @@ export function NoteEditor({
         left: rect.left,
         right: rect.right,
         target: atomic,
+        priority: 0,
       };
     }
     const rangeContainer = range.startContainer;
@@ -472,28 +553,35 @@ export function NoteEditor({
       parent = rangeContainer.parentNode || editor;
       before = textRect && x < textRect.left + textRect.width / 2 ? rangeContainer : rangeContainer.nextSibling;
     }
-    return { parent, before, y, left: editor.getBoundingClientRect().left, right: editor.getBoundingClientRect().right, target: containerElement instanceof HTMLElement ? containerElement : null };
+    const editorRect = editor.getBoundingClientRect();
+    return { parent, before, y, left: editorRect.left, right: editorRect.right, target: containerElement instanceof HTMLElement ? containerElement : null, priority: 3 };
   };
 
   const renderEditorDragFrame = () => {
     const session = editorDrag.current;
     if (!session?.active) return;
     session.frame = null;
-    session.ghost!.style.transform = `translate3d(${Math.round(session.x + 12)}px, ${Math.round(session.y + 12)}px, 0)`;
+    session.ghost!.style.transform = `translate3d(${Math.round(session.x + session.ghostOffsetX)}px, ${Math.round(session.y + session.ghostOffsetY)}px, 0)`;
 
     const scroller = editorScrollRef.current;
-    if (scroller) {
-      const rect = scroller.getBoundingClientRect();
+    let autoScrollSpeed = 0;
+    if (scroller && session.scrollerRect) {
+      const rect = session.scrollerRect;
       const edge = 60;
       const topDistance = session.y - Math.max(0, rect.top);
       const bottomDistance = Math.min(window.innerHeight, rect.bottom) - session.y;
-      let speed = 0;
-      if (topDistance >= 0 && topDistance < edge) speed = -Math.ceil((1 - topDistance / edge) * 18);
-      else if (bottomDistance >= 0 && bottomDistance < edge) speed = Math.ceil((1 - bottomDistance / edge) * 18);
-      if (speed) scroller.scrollTop += speed;
+      const touchScroll = session.pointerType === 'touch' || session.pointerType === 'pen';
+      if (topDistance >= 0 && topDistance < edge) {
+        const intensity = 1 - topDistance / edge;
+        autoScrollSpeed = -(touchScroll ? intensity * intensity * 10 : Math.ceil(intensity * 18));
+      } else if (bottomDistance >= 0 && bottomDistance < edge) {
+        const intensity = 1 - bottomDistance / edge;
+        autoScrollSpeed = touchScroll ? intensity * intensity * 10 : Math.ceil(intensity * 18);
+      }
+      if (Math.abs(autoScrollSpeed) >= .15) scroller.scrollTop += autoScrollSpeed;
     }
 
-    const boundary = findNearestDropBoundary(session.source, session.x, session.y) || caretFallbackBoundary(session.source, session.x, session.y);
+    const boundary = findCachedDropBoundary(session) || caretFallbackBoundary(session.source, session.x, session.y);
     session.boundary = boundary;
     if (session.highlighted !== boundary?.target) {
       session.highlighted?.classList.remove('noted-active-drop-target');
@@ -501,7 +589,7 @@ export function NoteEditor({
       session.highlighted?.classList.add('noted-active-drop-target');
     }
     if (boundary && session.indicator) {
-      const editorRect = editorRef.current?.getBoundingClientRect();
+      const editorRect = session.editorRect;
       const left = Math.max(editorRect?.left || 0, boundary.left || 0) + 2;
       const right = Math.min(editorRect?.right || window.innerWidth, boundary.right || window.innerWidth) - 2;
       session.indicator.style.display = 'block';
@@ -509,16 +597,15 @@ export function NoteEditor({
       session.indicator.style.width = `${Math.max(32, right - left)}px`;
     } else if (session.indicator) session.indicator.style.display = 'none';
 
-    const rect = scroller?.getBoundingClientRect();
-    if (rect && (session.y - Math.max(0, rect.top) < 60 || Math.min(window.innerHeight, rect.bottom) - session.y < 60)) {
-      session.frame = requestAnimationFrame(renderEditorDragFrame);
-    }
+    if (Math.abs(autoScrollSpeed) >= .15) scheduleEditorDragFrame(session);
   };
 
   const activateEditorDrag = (session: EditorDragSession) => {
     if (editorDrag.current !== session || session.active || !session.source.isConnected) return;
     session.active = true;
     session.timer = null;
+    session.activationX = session.x;
+    session.activationY = session.y;
     if (session.kind === 'image') { selectImage(session.source as HTMLImageElement); setMoveImageMode(true); }
     else selectInlineAttachment(session.source);
     const rect = session.source.getBoundingClientRect();
@@ -526,8 +613,13 @@ export function NoteEditor({
     ghost.removeAttribute('id');
     ghost.contentEditable = 'false';
     ghost.className = `noted-drag-ghost noted-drag-ghost-${session.kind}`;
-    ghost.style.width = `${Math.min(rect.width, 280)}px`;
-    if (rect.width > 0) ghost.style.height = `${Math.min(rect.height, 280 * rect.height / rect.width)}px`;
+    const ghostWidth = Math.min(rect.width, 280);
+    const ghostHeight = rect.width > 0 ? Math.min(rect.height, 280 * rect.height / rect.width) : rect.height;
+    ghost.style.width = `${ghostWidth}px`;
+    if (rect.width > 0) ghost.style.height = `${ghostHeight}px`;
+    const isTouch = session.pointerType === 'touch' || session.pointerType === 'pen';
+    session.ghostOffsetX = isTouch ? -Math.min(ghostWidth * .5, 120) : 12;
+    session.ghostOffsetY = isTouch ? -Math.min(110, ghostHeight * .55 + 42) : 12;
     const indicator = document.createElement('div');
     indicator.className = 'noted-drop-indicator';
     document.body.append(ghost, indicator);
@@ -535,9 +627,26 @@ export function NoteEditor({
     session.indicator = indicator;
     session.source.classList.add('noted-dragging-source');
     editorRef.current?.classList.add('noted-active-drop-target');
+    rebuildDropBoundaryCache(session);
+    session.onScroll = () => scheduleEditorDragFrame(session);
+    session.onResize = () => {
+      session.cacheDirty = true;
+      scheduleEditorDragFrame(session);
+    };
+    editorScrollRef.current?.addEventListener('scroll', session.onScroll, { passive: true });
+    window.addEventListener('resize', session.onResize, { passive: true });
+    window.addEventListener('orientationchange', session.onResize, { passive: true });
+    if (typeof ResizeObserver !== 'undefined' && editorRef.current) {
+      session.resizeObserver = new ResizeObserver(session.onResize);
+      session.resizeObserver.observe(editorRef.current);
+    }
+    if (typeof MutationObserver !== 'undefined' && editorRef.current) {
+      session.mutationObserver = new MutationObserver(session.onResize);
+      session.mutationObserver.observe(editorRef.current, { childList: true, characterData: true, subtree: true });
+    }
     try { session.surface.setPointerCapture(session.pointerId); } catch { /* pointer may have been cancelled */ }
-    navigator.vibrate?.(12);
-    session.frame = requestAnimationFrame(renderEditorDragFrame);
+    if (isTouch) navigator.vibrate?.(10);
+    scheduleEditorDragFrame(session);
   };
 
   const armEditorDrag = (e: React.PointerEvent<HTMLDivElement>, source: HTMLElement, kind: EditorDragKind) => {
@@ -546,11 +655,15 @@ export function NoteEditor({
       pointerId: e.pointerId, pointerType: e.pointerType, kind, source, surface: e.currentTarget,
       startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY,
       active: false, moved: false, timer: null, ghost: null, indicator: null,
-      boundary: null, highlighted: null, frame: null,
+      boundary: null, boundaryIndex: -1, boundaries: [], highlighted: null, frame: null,
+      cacheDirty: false, measuredScrollTop: 0, measuredWindowScrollY: window.scrollY,
+      scrollerRect: null, editorRect: null, ghostOffsetX: 12, ghostOffsetY: 12,
+      activationX: e.clientX, activationY: e.clientY, onScroll: null, onResize: null,
+      resizeObserver: null, mutationObserver: null,
     };
     editorDrag.current = session;
     if (e.pointerType === 'touch' || e.pointerType === 'pen') {
-      session.timer = setTimeout(() => activateEditorDrag(session), 340);
+      session.timer = setTimeout(() => activateEditorDrag(session), 290);
     }
   };
 
@@ -559,15 +672,19 @@ export function NoteEditor({
     if (!session || session.pointerId !== e.pointerId) return false;
     session.x = e.clientX;
     session.y = e.clientY;
-    const distance = Math.hypot(e.clientX - session.startX, e.clientY - session.startY);
+    const dx = e.clientX - session.startX;
+    const dy = e.clientY - session.startY;
+    const distance = Math.hypot(dx, dy);
     if (!session.active) {
       if (session.pointerType === 'mouse' && distance >= 4) activateEditorDrag(session);
-      else if (distance > 10) { cancelEditorDrag(); return false; }
+      else if ((session.pointerType === 'touch' || session.pointerType === 'pen') &&
+          (Math.abs(dy) > 12 || Math.abs(dx) > 10)) { cancelEditorDrag(); return false; }
     }
     if (session.active) {
-      session.moved ||= distance >= 4;
+      const activeDistance = Math.hypot(e.clientX - session.activationX, e.clientY - session.activationY);
+      session.moved ||= session.pointerType === 'mouse' ? distance >= 4 : activeDistance >= 1;
       e.preventDefault();
-      if (session.frame == null) session.frame = requestAnimationFrame(renderEditorDragFrame);
+      scheduleEditorDragFrame(session);
     }
     return true;
   };
