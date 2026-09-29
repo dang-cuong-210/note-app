@@ -35,6 +35,34 @@ import { formatFileSize, getFileIcon, refreshAttachmentUrl } from '@/lib/attachm
 // Attachment display settings travel inside note HTML, so no database migration is needed.
 // The marker is a comment, never a visible or editable element.
 type AttachmentLayout = { order: string[]; widths: Record<string, number> };
+type EditorDragKind = 'image' | 'inline-attachment';
+type DropBoundary = {
+  parent: Node;
+  before: Node | null;
+  y: number;
+  left: number;
+  right: number;
+  target: HTMLElement | null;
+};
+type EditorDragSession = {
+  pointerId: number;
+  pointerType: string;
+  kind: EditorDragKind;
+  source: HTMLElement;
+  surface: HTMLElement;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+  active: boolean;
+  moved: boolean;
+  timer: ReturnType<typeof setTimeout> | null;
+  ghost: HTMLElement | null;
+  indicator: HTMLElement | null;
+  boundary: DropBoundary | null;
+  highlighted: HTMLElement | null;
+  frame: number | null;
+};
 const LAYOUT_MARKER = /<!--NOTED_ATTACHMENT_LAYOUT:([^>]*)-->/g;
 const EMPTY_LAYOUT: AttachmentLayout = { order: [], widths: {} };
 function readLayout(html: string): AttachmentLayout {
@@ -97,7 +125,6 @@ export function NoteEditor({
   const [imageFrame, setImageFrame] = useState<DOMRect | null>(null);
   const [freeResize, setFreeResize] = useState(false);
   const [moveImageMode, setMoveImageMode] = useState(false);
-  const imageLongPress = useRef<ReturnType<typeof setTimeout> | null>(null);
   const imagePointers = useRef(new Map<number, { x: number; y: number }>());
   const imageGesture = useRef<{ mode: 'drag' | 'resize' | 'pinch'; x: number; y: number; w: number; h: number; distance?: number; dx?: number; dy?: number; target?: HTMLImageElement } | null>(null);
   const [attachmentLayout, setAttachmentLayout] = useState<AttachmentLayout>(EMPTY_LAYOUT);
@@ -106,8 +133,9 @@ export function NoteEditor({
   const [selectedInlineAttachment, setSelectedInlineAttachment] = useState<HTMLElement | null>(null);
   const [inlineFrame, setInlineFrame] = useState<DOMRect | null>(null);
   const lastCaretRange = useRef<Range | null>(null);
-  const inlinePress = useRef<{ timer: ReturnType<typeof setTimeout> | null; id: number; x: number; y: number; element: HTMLElement; active: boolean } | null>(null);
   const inlineDrag = useRef<{ element: HTMLElement; x: number; y: number; moved: boolean } | null>(null);
+  const editorDrag = useRef<EditorDragSession | null>(null);
+  const suppressMediaClick = useRef<{ source: HTMLElement; until: number } | null>(null);
   const attachmentLongPress = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attachmentPressStart = useRef<{x: number; y: number} | null>(null);
   const attachmentGesture = useRef<{ id: string; y: number; x: number; width: number; mode: 'drag' | 'resize' } | null>(null);
@@ -119,6 +147,7 @@ export function NoteEditor({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+  const editorScrollRef = useRef<HTMLDivElement>(null);
   const activeNoteId = useRef<string | undefined>(note?.id);
   activeNoteId.current = note?.id;
   const { toast } = useToast();
@@ -127,6 +156,7 @@ export function NoteEditor({
   // This prevents a second device's changes from silently replacing local edits.
   useEffect(() => {
     if (!note) return;
+    if (displayedNoteId.current !== note.id) cancelEditorDrag();
     const idChanged = displayedNoteId.current !== note.id;
     const baseline = acceptedRef.current;
     const localMatchesIncoming = titleRef.current === note.title && contentRef.current === note.content;
@@ -233,10 +263,9 @@ export function NoteEditor({
   }, [selectedImage, refreshImageFrame]);
 
   useEffect(() => () => {
-    if (imageLongPress.current) clearTimeout(imageLongPress.current);
+    cancelEditorDrag();
     if (attachmentLongPress.current) clearTimeout(attachmentLongPress.current);
-    if (inlinePress.current?.timer) clearTimeout(inlinePress.current.timer);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // No rerender of the contentEditable DOM: this preserves the typing caret.
   const commitEditor = (layout = layoutRef.current) => {
@@ -330,34 +359,241 @@ export function NoteEditor({
     commitEditor();
   };
 
-  const moveInlineAttachmentToPoint = (node: HTMLElement, x: number, y: number) => {
+  const clearEditorDragVisuals = (session: EditorDragSession) => {
+    if (session.timer) clearTimeout(session.timer);
+    if (session.frame != null) cancelAnimationFrame(session.frame);
+    session.ghost?.remove();
+    session.indicator?.remove();
+    session.source.classList.remove('noted-dragging-source');
+    session.highlighted?.classList.remove('noted-active-drop-target');
+    editorRef.current?.classList.remove('noted-active-drop-target');
+    try {
+      if (session.surface.hasPointerCapture(session.pointerId)) session.surface.releasePointerCapture(session.pointerId);
+    } catch { /* the browser may already have cancelled the pointer */ }
+  };
+
+  const cancelEditorDrag = () => {
+    const session = editorDrag.current;
+    if (!session) return;
+    clearEditorDragVisuals(session);
+    editorDrag.current = null;
+  };
+
+  const nodeRect = (node: Node): DOMRect | null => {
+    if (node instanceof Element) {
+      const rect = node.getBoundingClientRect();
+      return rect.height || rect.width ? rect : null;
+    }
+    const range = document.createRange();
+    range.selectNode(node);
+    const rect = range.getBoundingClientRect();
+    return rect.height || rect.width ? rect : null;
+  };
+
+  // Prefer stable DOM boundaries over a precise text caret. This makes the whole
+  // gap above/below paragraphs, line breaks, images and file cards a drop target.
+  const findNearestDropBoundary = (source: HTMLElement, x: number, y: number): DropBoundary | null => {
     const editor = editorRef.current;
-    if (!editor) return;
-    // Hide only during hit testing: the caret must target text, not the dragged card.
-    const original = node.style.pointerEvents;
-    node.style.pointerEvents = 'none';
-    const doc = document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null; caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null };
+    if (!editor) return null;
+    const candidates: DropBoundary[] = [];
+    const blockTags = new Set(['P', 'DIV', 'LI', 'BLOCKQUOTE', 'PRE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
+    const addNode = (node: Node, target: HTMLElement | null) => {
+      if (node === source || (node instanceof Element && node.contains(source))) return;
+      const rect = nodeRect(node);
+      if (!rect) return;
+      const parent = node.parentNode;
+      if (!parent || !editor.contains(parent) && parent !== editor) return;
+      candidates.push({ parent, before: node, y: rect.top, left: rect.left, right: rect.right, target });
+      candidates.push({ parent, before: node.nextSibling, y: rect.bottom, left: rect.left, right: rect.right, target });
+    };
+    const visit = (parent: Node) => {
+      parent.childNodes.forEach(node => {
+        if (node instanceof HTMLElement) {
+          if (node.matches(`img, ${attachmentSelector}`)) {
+            addNode(node, node);
+            return;
+          }
+          if (node.tagName === 'BR') {
+            addNode(node, node.parentElement);
+            return;
+          }
+          if (blockTags.has(node.tagName)) addNode(node, node);
+          // Atomic media and BR-separated runs inside a block are also useful targets.
+          visit(node);
+        } else if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
+          addNode(node, node.parentElement);
+        }
+      });
+    };
+    visit(editor);
+    if (!candidates.length) return null;
+    return candidates.reduce((best, candidate) => {
+      const vertical = Math.abs(candidate.y - y);
+      const horizontal = x < candidate.left ? candidate.left - x : x > candidate.right ? x - candidate.right : 0;
+      const score = vertical + horizontal * 0.12;
+      const bestVertical = Math.abs(best.y - y);
+      const bestHorizontal = x < best.left ? best.left - x : x > best.right ? x - best.right : 0;
+      return score < bestVertical + bestHorizontal * 0.12 ? candidate : best;
+    });
+  };
+
+  const caretFallbackBoundary = (source: HTMLElement, x: number, y: number): DropBoundary | null => {
+    const editor = editorRef.current;
+    if (!editor) return null;
+    const doc = document as Document & {
+      caretRangeFromPoint?: (x: number, y: number) => Range | null;
+      caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    };
     let range = doc.caretRangeFromPoint?.(x, y) || null;
     if (!range) {
       const pos = doc.caretPositionFromPoint?.(x, y);
       if (pos) { range = document.createRange(); range.setStart(pos.offsetNode, pos.offset); }
     }
-    node.style.pointerEvents = original;
-    if (!range || !editor.contains(range.startContainer) || node.contains(range.startContainer)) return;
-    const otherCard = range.startContainer instanceof Element
-      ? range.startContainer.closest<HTMLElement>(attachmentSelector)
-      : range.startContainer.parentElement?.closest<HTMLElement>(attachmentSelector);
-    if (otherCard && otherCard !== node) {
-      // Never insert one atomic file node inside another one.
-      if (y < otherCard.getBoundingClientRect().top + otherCard.getBoundingClientRect().height / 2) otherCard.before(node);
-      else otherCard.after(node);
-    } else {
-      range.collapse(true);
-      // Moving the DOM node (rather than copying HTML) preserves its ID and size.
-      range.insertNode(node);
+    if (!range || !editor.contains(range.startContainer) || source.contains(range.startContainer)) return null;
+    const containerElement = range.startContainer instanceof Element ? range.startContainer : range.startContainer.parentElement;
+    const atomic = containerElement?.closest<HTMLElement>(`img, ${attachmentSelector}`);
+    if (atomic && atomic !== source && editor.contains(atomic)) {
+      const rect = atomic.getBoundingClientRect();
+      return {
+        parent: atomic.parentNode || editor,
+        before: y < rect.top + rect.height / 2 ? atomic : atomic.nextSibling,
+        y: y < rect.top + rect.height / 2 ? rect.top : rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        target: atomic,
+      };
     }
-    commitEditor();
-    setInlineFrame(node.getBoundingClientRect());
+    const rangeContainer = range.startContainer;
+    if (rangeContainer instanceof HTMLImageElement || rangeContainer instanceof HTMLElement && rangeContainer.closest(attachmentSelector)) return null;
+    let parent: Node = rangeContainer;
+    let before: Node | null = rangeContainer.childNodes[range.startOffset] || null;
+    if (rangeContainer.nodeType === Node.TEXT_NODE) {
+      const textRect = nodeRect(rangeContainer);
+      parent = rangeContainer.parentNode || editor;
+      before = textRect && x < textRect.left + textRect.width / 2 ? rangeContainer : rangeContainer.nextSibling;
+    }
+    return { parent, before, y, left: editor.getBoundingClientRect().left, right: editor.getBoundingClientRect().right, target: containerElement instanceof HTMLElement ? containerElement : null };
+  };
+
+  const renderEditorDragFrame = () => {
+    const session = editorDrag.current;
+    if (!session?.active) return;
+    session.frame = null;
+    session.ghost!.style.transform = `translate3d(${Math.round(session.x + 12)}px, ${Math.round(session.y + 12)}px, 0)`;
+
+    const scroller = editorScrollRef.current;
+    if (scroller) {
+      const rect = scroller.getBoundingClientRect();
+      const edge = 60;
+      const topDistance = session.y - Math.max(0, rect.top);
+      const bottomDistance = Math.min(window.innerHeight, rect.bottom) - session.y;
+      let speed = 0;
+      if (topDistance >= 0 && topDistance < edge) speed = -Math.ceil((1 - topDistance / edge) * 18);
+      else if (bottomDistance >= 0 && bottomDistance < edge) speed = Math.ceil((1 - bottomDistance / edge) * 18);
+      if (speed) scroller.scrollTop += speed;
+    }
+
+    const boundary = findNearestDropBoundary(session.source, session.x, session.y) || caretFallbackBoundary(session.source, session.x, session.y);
+    session.boundary = boundary;
+    if (session.highlighted !== boundary?.target) {
+      session.highlighted?.classList.remove('noted-active-drop-target');
+      session.highlighted = boundary?.target || editorRef.current;
+      session.highlighted?.classList.add('noted-active-drop-target');
+    }
+    if (boundary && session.indicator) {
+      const editorRect = editorRef.current?.getBoundingClientRect();
+      const left = Math.max(editorRect?.left || 0, boundary.left || 0) + 2;
+      const right = Math.min(editorRect?.right || window.innerWidth, boundary.right || window.innerWidth) - 2;
+      session.indicator.style.display = 'block';
+      session.indicator.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(boundary.y)}px, 0)`;
+      session.indicator.style.width = `${Math.max(32, right - left)}px`;
+    } else if (session.indicator) session.indicator.style.display = 'none';
+
+    const rect = scroller?.getBoundingClientRect();
+    if (rect && (session.y - Math.max(0, rect.top) < 60 || Math.min(window.innerHeight, rect.bottom) - session.y < 60)) {
+      session.frame = requestAnimationFrame(renderEditorDragFrame);
+    }
+  };
+
+  const activateEditorDrag = (session: EditorDragSession) => {
+    if (editorDrag.current !== session || session.active || !session.source.isConnected) return;
+    session.active = true;
+    session.timer = null;
+    if (session.kind === 'image') { selectImage(session.source as HTMLImageElement); setMoveImageMode(true); }
+    else selectInlineAttachment(session.source);
+    const rect = session.source.getBoundingClientRect();
+    const ghost = session.source.cloneNode(true) as HTMLElement;
+    ghost.removeAttribute('id');
+    ghost.contentEditable = 'false';
+    ghost.className = `noted-drag-ghost noted-drag-ghost-${session.kind}`;
+    ghost.style.width = `${Math.min(rect.width, 280)}px`;
+    if (rect.width > 0) ghost.style.height = `${Math.min(rect.height, 280 * rect.height / rect.width)}px`;
+    const indicator = document.createElement('div');
+    indicator.className = 'noted-drop-indicator';
+    document.body.append(ghost, indicator);
+    session.ghost = ghost;
+    session.indicator = indicator;
+    session.source.classList.add('noted-dragging-source');
+    editorRef.current?.classList.add('noted-active-drop-target');
+    try { session.surface.setPointerCapture(session.pointerId); } catch { /* pointer may have been cancelled */ }
+    navigator.vibrate?.(12);
+    session.frame = requestAnimationFrame(renderEditorDragFrame);
+  };
+
+  const armEditorDrag = (e: React.PointerEvent<HTMLDivElement>, source: HTMLElement, kind: EditorDragKind) => {
+    cancelEditorDrag();
+    const session: EditorDragSession = {
+      pointerId: e.pointerId, pointerType: e.pointerType, kind, source, surface: e.currentTarget,
+      startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY,
+      active: false, moved: false, timer: null, ghost: null, indicator: null,
+      boundary: null, highlighted: null, frame: null,
+    };
+    editorDrag.current = session;
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+      session.timer = setTimeout(() => activateEditorDrag(session), 340);
+    }
+  };
+
+  const updateEditorDrag = (e: React.PointerEvent<HTMLDivElement>): boolean => {
+    const session = editorDrag.current;
+    if (!session || session.pointerId !== e.pointerId) return false;
+    session.x = e.clientX;
+    session.y = e.clientY;
+    const distance = Math.hypot(e.clientX - session.startX, e.clientY - session.startY);
+    if (!session.active) {
+      if (session.pointerType === 'mouse' && distance >= 4) activateEditorDrag(session);
+      else if (distance > 10) { cancelEditorDrag(); return false; }
+    }
+    if (session.active) {
+      session.moved ||= distance >= 4;
+      e.preventDefault();
+      if (session.frame == null) session.frame = requestAnimationFrame(renderEditorDragFrame);
+    }
+    return true;
+  };
+
+  const finishEditorDrag = (e: React.PointerEvent<HTMLDivElement>, cancelled = false): boolean => {
+    const session = editorDrag.current;
+    if (!session || session.pointerId !== e.pointerId) return false;
+    const handled = session.active;
+    const boundary = session.boundary;
+    const source = session.source;
+    const moved = session.moved;
+    if (session.active) suppressMediaClick.current = { source, until: performance.now() + 500 };
+    clearEditorDragVisuals(session);
+    editorDrag.current = null;
+    if (!cancelled && moved && boundary && !source.contains(boundary.parent)) {
+      const oldParent = source.parentNode;
+      const oldNext = source.nextSibling;
+      const noOp = boundary.parent === oldParent && (boundary.before === source || boundary.before === oldNext);
+      if (!noOp) {
+        boundary.parent.insertBefore(source, boundary.before);
+        commitEditor();
+      }
+    }
+    if (source instanceof HTMLImageElement) refreshImageFrame(source);
+    else if (source.isConnected) setInlineFrame(source.getBoundingClientRect());
+    return handled;
   };
 
   const resizeInlineAttachment = (node: HTMLElement, width: number) => {
@@ -403,62 +639,19 @@ export function NoteEditor({
   const onInlinePointerDown = (e: React.PointerEvent<HTMLDivElement>): boolean => {
     const node = (e.target as HTMLElement).closest<HTMLElement>(attachmentSelector);
     if (!node || !editorRef.current?.contains(node)) return false;
-    if (inlinePress.current?.timer) clearTimeout(inlinePress.current.timer);
-    const press = { timer: null as ReturnType<typeof setTimeout> | null, id: e.pointerId, x: e.clientX, y: e.clientY, element: node, active: false };
-    inlinePress.current = press;
-    if (selectedInlineAttachment === node) {
-      press.active = true;
-      inlineDrag.current = { element: node, x: e.clientX, y: e.clientY, moved: false };
-      if (e.pointerType === 'touch') e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } else {
-      press.timer = setTimeout(() => {
-        if (inlinePress.current !== press) return;
-        press.timer = null;
-        press.active = true;
-        selectInlineAttachment(node);
-        inlineDrag.current = { element: node, x: press.x, y: press.y, moved: false };
-        if (editorRef.current?.isConnected) {
-          try { editorRef.current.setPointerCapture(press.id); } catch { /* gesture cancelled */ }
-        }
-        navigator.vibrate?.(10);
-      }, 440);
+    if (e.pointerType === 'mouse' && selectedInlineAttachment !== node) {
+      suppressMediaClick.current = { source: node, until: performance.now() + 500 };
+      selectInlineAttachment(node);
+      return true;
     }
+    armEditorDrag(e, node, 'inline-attachment');
     return true;
   };
   const onInlinePointerMove = (e: React.PointerEvent<HTMLDivElement>): boolean => {
-    const press = inlinePress.current;
-    if (!press || press.id !== e.pointerId) return false;
-    const distance = Math.hypot(e.clientX - press.x, e.clientY - press.y);
-    if (!press.active && distance > 9) {
-      if (press.timer) clearTimeout(press.timer);
-      inlinePress.current = null;
-      return false;
-    }
-    const drag = inlineDrag.current;
-    if (drag && drag.element === press.element && press.active && distance > 5) {
-      drag.moved = true;
-      drag.element.style.transform = `translate(${e.clientX - drag.x}px, ${e.clientY - drag.y}px)`;
-      drag.element.style.position = 'relative';
-      drag.element.style.zIndex = '10';
-      e.preventDefault();
-    }
-    return true;
+    return editorDrag.current?.kind === 'inline-attachment' ? updateEditorDrag(e) : false;
   };
   const onInlinePointerEnd = (e: React.PointerEvent<HTMLDivElement>, cancelled = false): boolean => {
-    const press = inlinePress.current;
-    if (!press || press.id !== e.pointerId) return false;
-    if (press.timer) clearTimeout(press.timer);
-    const drag = inlineDrag.current;
-    if (drag?.element === press.element) {
-      drag.element.style.transform = '';
-      drag.element.style.position = '';
-      drag.element.style.zIndex = '';
-      if (drag.moved && !cancelled) moveInlineAttachmentToPoint(drag.element, e.clientX, e.clientY);
-    }
-    inlinePress.current = null;
-    inlineDrag.current = null;
-    return press.active;
+    return editorDrag.current?.kind === 'inline-attachment' ? finishEditorDrag(e, cancelled) : false;
   };
 
   const selectImage = (img: HTMLImageElement) => {
@@ -485,85 +678,47 @@ export function NoteEditor({
     else img.style.height = 'auto';
     refreshImageFrame(img);
   };
-  // Move in the document flow (not absolute-positioned). This survives screen-size changes.
-  const moveImageToPoint = (img: HTMLImageElement, x: number, y: number) => {
-    const doc = document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range; caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null };
-    let range = doc.caretRangeFromPoint?.(x, y) || null;
-    if (!range) {
-      const pos = doc.caretPositionFromPoint?.(x, y);
-      if (pos) { range = document.createRange(); range.setStart(pos.offsetNode, pos.offset); }
-    }
-    if (!range || !editorRef.current?.contains(range.startContainer) || img.contains(range.startContainer)) return;
-    range.collapse(true);
-    range.insertNode(img);
-    commitEditor();
-    refreshImageFrame(img);
-  };
   const onImagePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!(e.target instanceof HTMLImageElement)) return;
     const img = e.target;
     imagePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (selectedImage === img) {
-      if (e.pointerType === 'touch') e.preventDefault();
+    if (selectedImage === img && imagePointers.current.size >= 2) {
+      cancelEditorDrag();
       e.currentTarget.setPointerCapture(e.pointerId);
       const w = img.getBoundingClientRect().width;
       const h = img.getBoundingClientRect().height;
-      if (imagePointers.current.size >= 2) {
-        const [a, b] = [...imagePointers.current.values()];
-        imageGesture.current = { mode: 'pinch', x: e.clientX, y: e.clientY, w, h, distance: Math.hypot(a.x-b.x, a.y-b.y) };
-      } else if (moveImageMode) imageGesture.current = { mode: 'drag', x: e.clientX, y: e.clientY, w, h };
+      const [a, b] = [...imagePointers.current.values()];
+      imageGesture.current = { mode: 'pinch', x: e.clientX, y: e.clientY, w, h, distance: Math.hypot(a.x-b.x, a.y-b.y), target: img };
       return;
     }
-    if (imageLongPress.current) clearTimeout(imageLongPress.current);
-    const startX = e.clientX, startY = e.clientY;
-    const surface = e.currentTarget;
-    const pointerId = e.pointerId;
-    imageLongPress.current = setTimeout(() => {
-      imageLongPress.current = null;
-      if (!imagePointers.current.has(pointerId)) return;
+    if (e.pointerType === 'mouse' && selectedImage !== img) {
+      suppressMediaClick.current = { source: img, until: performance.now() + 500 };
       selectImage(img);
-      imageGesture.current = { mode: 'drag', x: startX, y: startY, w: img.width, h: img.height, target: img };
-      setMoveImageMode(true);
-      if (surface.isConnected) {
-        try { surface.setPointerCapture(pointerId); } catch { /* pointer may already be cancelled */ }
-      }
-      if (navigator.vibrate) navigator.vibrate(10);
-    }, 440);
-    imageGesture.current = { mode: 'drag', x: startX, y: startY, w: img.width, h: img.height, target: img };
+      return;
+    }
+    armEditorDrag(e, img, 'image');
   };
   const onImagePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!imagePointers.current.has(e.pointerId)) return;
     imagePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (selectedImage !== e.target && !imageGesture.current) return;
-    if (imageLongPress.current && imageGesture.current &&
-        Math.hypot(e.clientX-imageGesture.current.x, e.clientY-imageGesture.current.y) > 9) {
-      clearTimeout(imageLongPress.current);
-      imageLongPress.current = null;
-    }
-    if (!imageGesture.current) return;
     const g = imageGesture.current;
-    const draggedImage = g.target || selectedImage;
-    if (!draggedImage) return;
-    if (imagePointers.current.size >= 2 && g.mode === 'pinch') {
+    const resizedImage = g?.target || selectedImage;
+    if (g && resizedImage && imagePointers.current.size >= 2 && g.mode === 'pinch') {
       const [a, b] = [...imagePointers.current.values()];
       const ratio = Math.hypot(a.x-b.x, a.y-b.y) / (g.distance || 1);
-      resizeImage(draggedImage, g.w * ratio);
+      resizeImage(resizedImage, g.w * ratio);
       e.preventDefault();
-    } else if (g.mode === 'drag' && moveImageMode) {
-      g.dx = e.clientX-g.x; g.dy = e.clientY-g.y;
-      draggedImage.style.transform = `translate(${g.dx}px, ${g.dy}px)`;
-      e.preventDefault();
+      return;
     }
+    if (editorDrag.current?.kind === 'image') updateEditorDrag(e);
   };
-  const onImagePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (imageLongPress.current) { clearTimeout(imageLongPress.current); imageLongPress.current = null; }
+  const onImagePointerUp = (e: React.PointerEvent<HTMLDivElement>, cancelled = false) => {
     imagePointers.current.delete(e.pointerId);
-    const draggedImage = imageGesture.current?.target || selectedImage;
-    if (draggedImage && imageGesture.current?.mode === 'drag' && moveImageMode && imageGesture.current.dx !== undefined) {
-      draggedImage.style.transform = '';
-      moveImageToPoint(draggedImage, e.clientX, e.clientY);
-    } else if (selectedImage && imageGesture.current?.mode === 'pinch') commitEditor();
-    if (imagePointers.current.size === 0) imageGesture.current = null;
+    if (editorDrag.current?.kind === 'image') finishEditorDrag(e, cancelled);
+    if (selectedImage && imageGesture.current?.mode === 'pinch' && imagePointers.current.size < 2) {
+      commitEditor();
+      imageGesture.current = null;
+    } else if (imagePointers.current.size === 0) imageGesture.current = null;
   };
   const orderedAttachments = [...attachments].sort((a, b) => {
     const ai = attachmentLayout.order.indexOf(a.id), bi = attachmentLayout.order.indexOf(b.id);
@@ -892,7 +1047,7 @@ export function NoteEditor({
       </div>}
 
       {/* Editor area */}
-      <div className="flex-1 overflow-y-auto" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
+      <div ref={editorScrollRef} className="flex-1 overflow-y-auto" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 pb-32">
           <input
             value={title}
@@ -919,11 +1074,7 @@ export function NoteEditor({
             onPointerUp={e => { if (!onInlinePointerEnd(e)) onImagePointerUp(e); rememberCaret(); }}
             onPointerCancel={(e) => {
               onInlinePointerEnd(e, true);
-              if (imageLongPress.current) clearTimeout(imageLongPress.current);
-              imageLongPress.current = null;
-              imagePointers.current.delete(e.pointerId);
-              if (selectedImage) selectedImage.style.transform = '';
-              imageGesture.current = null;
+              onImagePointerUp(e, true);
             }}
             onContextMenu={(e) => {
               const inlineNode = (e.target as HTMLElement).closest<HTMLElement>(attachmentSelector);
@@ -931,6 +1082,15 @@ export function NoteEditor({
               else if (e.target instanceof HTMLImageElement) { e.preventDefault(); selectImage(e.target); }
             }}
             onClick={(e) => {
+              const suppressed = suppressMediaClick.current;
+              if (suppressed && performance.now() <= suppressed.until &&
+                  (e.target === suppressed.source || suppressed.source.contains(e.target as Node))) {
+                e.preventDefault();
+                e.stopPropagation();
+                suppressMediaClick.current = null;
+                return;
+              }
+              if (suppressed && performance.now() > suppressed.until) suppressMediaClick.current = null;
               const inlineNode = (e.target as HTMLElement).closest<HTMLElement>(attachmentSelector);
               if (inlineNode) {
                 if (selectedInlineAttachment !== inlineNode) {
@@ -938,7 +1098,7 @@ export function NoteEditor({
                   if (att) void handleOpenAttachment(att);
                 }
               } else if (e.target instanceof HTMLImageElement) {
-                if (selectedImage !== e.target) { setImageViewer(e.target.src); setViewerScale(1); }
+                if (selectedImage !== e.target) selectImage(e.target);
               } else { clearSelection(); rememberCaret(); }
             }}
             data-placeholder="Start writing..."
