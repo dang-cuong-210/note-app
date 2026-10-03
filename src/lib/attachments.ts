@@ -1,32 +1,9 @@
 import { supabase } from '@/lib/supabase';
 import type { Attachment } from '@/types';
+import { mapAttachment as mapRow, type AttachmentRow } from '@/lib/attachmentSync';
 
 const BUCKET = 'note-files';
 const SIGNED_URL_EXPIRY = 60 * 60 * 24 * 365 * 10; // 10 years in seconds
-
-interface AttachmentRow {
-  id: string;
-  note_id: string;
-  name: string;
-  type: string;
-  size: number;
-  storage_path: string;
-  url: string | null;
-  created_at: number;
-}
-
-function mapRow(row: AttachmentRow): Attachment {
-  return {
-    id: row.id,
-    noteId: row.note_id,
-    name: row.name,
-    type: row.type,
-    size: Number(row.size),
-    storagePath: row.storage_path,
-    url: row.url,
-    createdAt: Number(row.created_at),
-  };
-}
 
 export async function uploadAttachment(
   noteId: string,
@@ -152,15 +129,16 @@ export async function loadAttachments(noteId: string): Promise<Attachment[]> {
   return (data as AttachmentRow[]).map(mapRow);
 }
 
-export async function loadAllAttachments(): Promise<Attachment[]> {
+export async function loadAllAttachments(accountId: string): Promise<Attachment[]> {
   const { data, error } = await supabase
     .from('attachments')
     .select('*')
+    .eq('user_id', accountId)
     .order('created_at', { ascending: true });
 
   if (error) {
-    console.warn('Failed to load all attachments:', error.message);
-    return [];
+    // A failed request is not an authoritative empty list (especially offline).
+    throw new Error(`Failed to load all attachments: ${error.message}`);
   }
 
   return (data as AttachmentRow[]).map(mapRow);

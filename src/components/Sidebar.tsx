@@ -99,7 +99,6 @@ export function Sidebar({
       onClick={() => {
         onViewChange(view);
         onClose?.();
-        onClose?.();
       }}
       className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-left ${
         active ? 'bg-accent-light text-accent' : 'text-secondary hover-bg'

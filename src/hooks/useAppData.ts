@@ -5,6 +5,7 @@ import * as localDb from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import { uid, createNote, applyTheme, applyFontSize } from '@/lib/utils';
 import { deleteAllNoteImages } from '@/lib/images';
+import { createAttachmentSync } from '@/lib/attachmentSync';
 import {
   uploadAttachment,
   deleteAttachment,
@@ -104,6 +105,10 @@ export interface RealtimeDiagnostics {
   notesChannelError: string | null;
   foldersChannelStatus: string;
   foldersChannelError: string | null;
+  attachmentsChannelStatus: string;
+  attachmentsChannelError: string | null;
+  lastAttachmentsEventAt: string | null;
+  lastAttachmentsEventType: string | null;
   websocketState: string;
   lastNotesEventAt: string | null;
   lastFoldersEventAt: string | null;
@@ -133,6 +138,10 @@ function initialRealtimeDiagnostics(userId: string | null): RealtimeDiagnostics 
     notesChannelError: null,
     foldersChannelStatus: 'not started',
     foldersChannelError: null,
+    attachmentsChannelStatus: 'not started',
+    attachmentsChannelError: null,
+    lastAttachmentsEventAt: null,
+    lastAttachmentsEventType: null,
     websocketState: REALTIME_DIAGNOSTICS_ENABLED
       ? supabase.realtime.connectionState()
       : 'disabled',
@@ -153,6 +162,7 @@ export function useAppData(userId: string | null) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const attachmentSync = useRef<ReturnType<typeof createAttachmentSync> | null>(null);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false);
   const [loadedAccountId, setLoadedAccountId] = useState<string | null>(null);
@@ -195,6 +205,10 @@ export function useAppData(userId: string | null) {
       notesChannelError: null,
       foldersChannelStatus: 'not started',
       foldersChannelError: null,
+      attachmentsChannelStatus: 'not started',
+      attachmentsChannelError: null,
+      lastAttachmentsEventAt: null,
+      lastAttachmentsEventType: null,
       lastNotesEventAt: null,
       lastFoldersEventAt: null,
       lastEventType: null,
@@ -292,6 +306,25 @@ export function useAppData(userId: string | null) {
     }
   }, [userId]);
 
+  // Attachment requests have their own generation and mutation journal. A late
+  // cloud response must not overwrite an event or a local upload/delete echo.
+  const refreshAttachments = useCallback(async () => {
+    const sync = attachmentSync.current;
+    if (!userId || sync?.accountId !== userId) return;
+    const snapshot = sync.beginSnapshot();
+    try {
+      const rows = await loadAllAttachments(userId);
+      sync.applySnapshot(rows, snapshot);
+    } catch (error) {
+      console.warn('Attachment refresh failed; keeping cached metadata:', error);
+      try {
+        await sync.restoreCache(snapshot);
+      } catch (cacheError) {
+        console.warn('Attachment cache load failed:', cacheError);
+      }
+    }
+  }, [userId]);
+
   // Load all data from cloud, merging with any local-only changes
   const loadFromCloud = useCallback(async () => {
     if (!userId) return;
@@ -303,10 +336,10 @@ export function useAppData(userId: string | null) {
       localDb.getAllFolders(accountId),
     ]);
     try {
-      const [notesRes, foldersRes, cloudAttachments] = await Promise.all([
+      const [notesRes, foldersRes] = await Promise.all([
         supabase.from('notes').select('*').order('updated_at', { ascending: false }),
         supabase.from('folders').select('*').order('name', { ascending: true }),
-        loadAllAttachments(),
+        refreshAttachments(),
       ]);
 
       if (notesRes.error) throw notesRes.error;
@@ -364,19 +397,16 @@ export function useAppData(userId: string | null) {
       setLoadedAccountId(accountId);
       setNotes(mergedNotes);
       setFolders(mergedFolders);
-      setAttachments(cloudAttachments);
 
       // Cache locally for offline use
       await Promise.all([
         localDb.putNotes(accountId, mergedNotes),
         ...mergedFolders.map((f) => localDb.putFolder(accountId, f)),
-        localDb.putAttachments(accountId, cloudAttachments),
       ]);
     } catch (err) {
       cloudReadyRef.current = false;
       console.warn('Cloud load failed, falling back to local cache:', err);
       if (activeAccountId.current !== accountId) return;
-      const localAttachments = await localDb.getAllAttachments(accountId);
       const recovered = new Map(localNotes.map((note) => [note.id, note]));
       pendingNotes.current.forEach((draft, id) => recovered.set(id, draft));
       recovered.forEach((note) => {
@@ -385,14 +415,13 @@ export function useAppData(userId: string | null) {
       setLoadedAccountId(accountId);
       setNotes(Array.from(recovered.values()));
       setFolders(localFolders);
-      setAttachments(localAttachments);
     } finally {
       if (activeAccountId.current === accountId) {
         setSyncing(false);
         setLoaded(true);
       }
     }
-  }, [userId]);
+  }, [userId, refreshAttachments]);
 
   // Initial load
   useEffect(() => {
@@ -411,10 +440,18 @@ export function useAppData(userId: string | null) {
     setLoaded(false);
     setLoadedAccountId(null);
     if (!userId) return;
+    const sync = createAttachmentSync(userId, localDb, (values) => {
+      if (activeAccountId.current === userId) setAttachments(values);
+    }, (error) => console.warn('Attachment cache write failed:', error));
+    attachmentSync.current = sync;
     (async () => {
       await migrateLocalData();
       await loadFromCloud();
     })();
+    return () => {
+      sync.dispose();
+      if (attachmentSync.current === sync) attachmentSync.current = null;
+    };
   }, [userId, migrateLocalData, loadFromCloud]);
 
   // Realtime subscription for cross-device sync
@@ -425,6 +462,8 @@ export function useAppData(userId: string | null) {
     let initialRealtimeRefreshStarted = false;
     let notesChannel: ReturnType<typeof supabase.channel> | null = null;
     let foldersChannel: ReturnType<typeof supabase.channel> | null = null;
+    let attachmentsChannel: ReturnType<typeof supabase.channel> | null = null;
+    const sync = attachmentSync.current;
 
     const onChannelStatus = (channelName: 'notes' | 'folders') =>
       (status: string, error?: Error) => {
@@ -449,6 +488,8 @@ export function useAppData(userId: string | null) {
         notesChannelError: null,
         foldersChannelStatus: 'waiting for session',
         foldersChannelError: null,
+        attachmentsChannelStatus: 'waiting for session',
+        attachmentsChannelError: null,
       });
 
       // Verify the session before opening the socket. realtime-js starts its
@@ -471,6 +512,7 @@ export function useAppData(userId: string | null) {
           sessionError: invalidReason,
           notesChannelStatus: 'not subscribed',
           foldersChannelStatus: 'not subscribed',
+          attachmentsChannelStatus: 'not subscribed',
         });
         realtimeDebug('realtime subscription skipped: invalid session', invalidReason);
         return;
@@ -489,6 +531,7 @@ export function useAppData(userId: string | null) {
           sessionError: message,
           notesChannelStatus: 'not subscribed',
           foldersChannelStatus: 'not subscribed',
+          attachmentsChannelStatus: 'not subscribed',
         });
         realtimeDebug('realtime authentication failed', message);
         return;
@@ -674,6 +717,32 @@ export function useAppData(userId: string | null) {
           }
         )
         .subscribe(onChannelStatus('folders'));
+
+      attachmentsChannel = supabase
+        .channel(`attachments-sync:${accountId}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'attachments', filter: `user_id=eq.${accountId}` },
+          (payload) => {
+            if (disposed || activeAccountId.current !== accountId || sync?.accountId !== accountId) return;
+            if (!sync.receive(payload)) return;
+            updateRealtimeDiagnostics({
+              lastAttachmentsEventAt: new Date().toISOString(),
+              lastAttachmentsEventType: payload.eventType,
+            });
+          }
+        )
+        .subscribe((status, error) => {
+          if (disposed || activeAccountId.current !== accountId) return;
+          updateRealtimeDiagnostics({
+            attachmentsChannelStatus: status,
+            attachmentsChannelError: error?.message ?? null,
+          });
+          // Refresh after THIS channel joins, not after notes/folders join.
+          // Also reconcile missed deletes on every reconnect, without touching
+          // note drafts or restarting the existing note/folder subscriptions.
+          if (status === 'SUBSCRIBED') void refreshAttachments();
+        });
     };
 
     void subscribe();
@@ -683,8 +752,9 @@ export function useAppData(userId: string | null) {
       realtimeDebug('removing realtime channels', accountId);
       if (notesChannel) void supabase.removeChannel(notesChannel);
       if (foldersChannel) void supabase.removeChannel(foldersChannel);
+      if (attachmentsChannel) void supabase.removeChannel(attachmentsChannel);
     };
-  }, [loaded, userId, loadFromCloud, updateRealtimeDiagnostics]);
+  }, [loaded, userId, loadFromCloud, refreshAttachments, updateRealtimeDiagnostics]);
 
   // ===== Cloud sync helpers =====
   const syncNoteToCloud = useCallback((note: Note): Promise<void> => {
@@ -984,7 +1054,7 @@ export function useAppData(userId: string | null) {
         pendingNotes.current.delete(id);
         confirmedRevisions.current.delete(id);
         setNotes((prev) => prev.filter((item) => item.id !== id));
-        setAttachments((prev) => prev.filter((item) => item.noteId !== id));
+        if (attachmentSync.current?.accountId === userId) attachmentSync.current.removeForNote(id);
 
         try {
           await Promise.all([
@@ -1186,10 +1256,14 @@ export function useAppData(userId: string | null) {
   // ===== Attachment operations =====
   const addAttachment = useCallback(
     async (noteId: string, file: File): Promise<Attachment | null> => {
+      const sync = attachmentSync.current;
+      if (!userId || sync?.accountId !== userId) return null;
+      const version = sync.version;
       try {
         const attachment = await uploadAttachment(noteId, file);
-        setAttachments((prev) => [...prev, attachment]);
-        if (userId) await localDb.putAttachment(userId, attachment);
+        if (activeAccountId.current !== userId || attachmentSync.current !== sync) return null;
+        sync.upsert(attachment, version);
+        await sync.settled();
         return attachment;
       } catch (err) {
         console.error('Attachment upload failed:', err);
@@ -1201,6 +1275,9 @@ export function useAppData(userId: string | null) {
 
   // Keep a renamed file's storage path unchanged; only its display name changes.
   const renameAttachment = useCallback(async (id: string, name: string): Promise<boolean> => {
+    const sync = attachmentSync.current;
+    if (!userId || sync?.accountId !== userId) return false;
+    const version = sync.version;
     const trimmed = name.trim();
     if (!trimmed) return false;
     const { error } = await supabase.from('attachments').update({ name: trimmed }).eq('id', id);
@@ -1208,21 +1285,20 @@ export function useAppData(userId: string | null) {
       console.error('Attachment rename failed:', error);
       return false;
     }
-    setAttachments((prev) => prev.map((a) => {
-      if (a.id !== id) return a;
-      const updated = { ...a, name: trimmed };
-      if (userId) void localDb.putAttachment(userId, updated);
-      return updated;
-    }));
+    if (activeAccountId.current !== userId || attachmentSync.current !== sync) return false;
+    sync.rename(id, trimmed, version);
     return true;
   }, [userId]);
 
   const removeAttachment = useCallback(
     async (id: string) => {
+      const sync = attachmentSync.current;
+      if (!userId || sync?.accountId !== userId) throw new Error('Sign in before deleting an attachment.');
       // Do not report success or erase the offline record until Supabase confirms deletion.
       await deleteAttachment(id);
-      if (userId) await localDb.deleteAttachmentRecord(userId, id);
-      setAttachments((prev) => prev.filter((a) => a.id !== id));
+      if (activeAccountId.current !== userId || attachmentSync.current !== sync) return;
+      sync.remove(id);
+      await sync.settled();
     },
     [userId]
   );

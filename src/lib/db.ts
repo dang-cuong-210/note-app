@@ -171,6 +171,21 @@ export async function getAttachmentsByNote(accountId: string, noteId: string) {
 }
 export function putAttachment(accountId: string, attachment: Attachment) { return storeRequest(ATTACHMENTS_STORE, 'readwrite', (store) => store.put(scope(accountId, attachment))); }
 export function putAttachments(accountId: string, attachments: Attachment[]) { return putMany(ATTACHMENTS_STORE, accountId, attachments); }
+export async function replaceAttachments(accountId: string, attachments: Attachment[]) {
+  const db = await openDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(ATTACHMENTS_STORE, 'readwrite');
+    const store = transaction.objectStore(ATTACHMENTS_STORE);
+    const keys = store.index('accountId').getAllKeys(accountId);
+    keys.onsuccess = () => {
+      keys.result.forEach((id) => store.delete(id));
+      attachments.forEach((attachment) => store.put(scope(accountId, attachment)));
+    };
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error ?? new Error('Attachment cache transaction aborted'));
+  });
+}
 export function deleteAttachmentRecord(accountId: string, id: string) { return storeRequest(ATTACHMENTS_STORE, 'readwrite', (store) => store.delete(key(accountId, id))); }
 export async function deleteAttachmentsByNote(accountId: string, noteId: string) {
   const rows = await getAttachmentsByNote(accountId, noteId);

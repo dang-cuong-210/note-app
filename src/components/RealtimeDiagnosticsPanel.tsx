@@ -34,9 +34,13 @@ export function RealtimeDiagnosticsPanel({ diagnostics }: { diagnostics: Realtim
         <DiagnosticRow label="Notes error" value={diagnostics.notesChannelError} />
         <DiagnosticRow label="Folders channel" value={diagnostics.foldersChannelStatus} />
         <DiagnosticRow label="Folders error" value={diagnostics.foldersChannelError} />
+        <DiagnosticRow label="Attachments channel" value={diagnostics.attachmentsChannelStatus} />
+        <DiagnosticRow label="Attachments error" value={diagnostics.attachmentsChannelError} />
         <DiagnosticRow label="WebSocket" value={diagnostics.websocketState} />
         <DiagnosticRow label="Last notes event" value={diagnostics.lastNotesEventAt} />
         <DiagnosticRow label="Last folders event" value={diagnostics.lastFoldersEventAt} />
+        <DiagnosticRow label="Last attachment event" value={diagnostics.lastAttachmentsEventAt} />
+        <DiagnosticRow label="Attachment event type" value={diagnostics.lastAttachmentsEventType} />
         <DiagnosticRow label="Event type" value={diagnostics.lastEventType} />
         <DiagnosticRow label="Row ID" value={diagnostics.lastRowId} />
         <DiagnosticRow label="Received revision" value={diagnostics.receivedRevision} />

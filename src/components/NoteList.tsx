@@ -133,8 +133,7 @@ export function NoteList({
   const showAddButton = view.kind !== 'trash' && view.kind !== 'settings' && view.kind !== 'archived';
 
   return (
-    <div className="h-full w-full max-lg:min-w-0 max-lg:max-w-full flex flex-col bg-appcurl -I http://localhost:5173/
-    " style={{ backgroundColor: 'var(--bg)' }}>
+    <div className="h-full w-full max-lg:min-w-0 max-lg:max-w-full flex flex-col bg-app" style={{ backgroundColor: 'var(--bg)' }}>
       {/* Search bar */}
       {view.kind !== 'trash' && (
       <div className="flex items-center gap-2 px-4 pt-4 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
@@ -148,7 +147,7 @@ export function NoteList({
                                                             >
                                                                       <Menu size={20} aria-hidden="true" />
                                                                             </button>
-                                                                                  <div className="relative flex-1 min-w-0 lg:hidden">      <div className="relative flex-1 min-w-0 lg:hidden">
+          <div className="relative flex-1 min-w-0 lg:hidden">
 
             <Search
               size={16}
@@ -173,7 +172,7 @@ export function NoteList({
             )}
           </div>
         </div>
-      </div>      )}
+      )}
 
       {/* Notes list */}
       <div className="flex-1 overflow-y-auto px-2">

@@ -733,6 +733,7 @@ export function NoteEditor({
         return;
       }
       node.classList.remove('noted-attachment-missing');
+      node.title = 'Tap to open · Long press to move or resize';
       const name = node.querySelector<HTMLElement>('.noted-inline-attachment-name');
       if (name) name.textContent = att.name;
       const size = node.querySelector<HTMLElement>('.noted-inline-attachment-size');
