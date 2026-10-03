@@ -1,7 +1,9 @@
 import type { Note, Folder, Settings, Attachment } from '@/types';
+import type { FolderRecord } from '@/lib/folderSync';
 
 const DB_NAME = 'noted-db';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
+const FOLDER_SYNC_STORE = 'user-folder-sync';
 const LEGACY_NOTES_STORE = 'notes';
 const LEGACY_FOLDERS_STORE = 'folders';
 const LEGACY_ATTACHMENTS_STORE = 'attachments';
@@ -20,6 +22,10 @@ function openDB(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
+      if (!db.objectStoreNames.contains(FOLDER_SYNC_STORE)) {
+        const store = db.createObjectStore(FOLDER_SYNC_STORE, { keyPath: 'scopedId' });
+        store.createIndex('accountId', 'accountId');
+      }
       // Preserve v2 stores as a recovery source. New data only enters scoped stores.
       if (!db.objectStoreNames.contains(NOTES_STORE)) {
         const store = db.createObjectStore(NOTES_STORE, { keyPath: 'scopedId' });
@@ -38,7 +44,10 @@ function openDB(): Promise<IDBDatabase> {
         db.createObjectStore(SETTINGS_STORE, { keyPath: 'key' });
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      req.result.onversionchange = () => { req.result.close(); dbPromise = null; };
+      resolve(req.result);
+    };
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
@@ -154,6 +163,40 @@ export function getAllFolders(accountId: string) { return getForAccount<Folder>(
 export function putFolder(accountId: string, folder: Folder) { return storeRequest(FOLDERS_STORE, 'readwrite', (store) => store.put(scope(accountId, folder))); }
 export function putFolders(accountId: string, folders: Folder[]) { return putMany(FOLDERS_STORE, accountId, folders); }
 export function deleteFolder(accountId: string, id: string) { return storeRequest(FOLDERS_STORE, 'readwrite', (store) => store.delete(key(accountId, id))); }
+
+// One transaction protects pending intent, acknowledgements and the displayed
+// cache together, including concurrent tabs and a crash between writes.
+export async function changeFolderRecords(accountId: string, change: (rows: FolderRecord[]) => FolderRecord[]) {
+  const db = await openDB();
+  return new Promise<FolderRecord[]>((resolve, reject) => {
+    const tx = db.transaction([FOLDER_SYNC_STORE, FOLDERS_STORE], 'readwrite');
+    const records = tx.objectStore(FOLDER_SYNC_STORE);
+    const folders = tx.objectStore(FOLDERS_STORE);
+    let next: FolderRecord[] = [];
+    const read = records.index('accountId').getAll(accountId);
+    read.onsuccess = () => {
+      try {
+        const current = (read.result as Scoped<FolderRecord>[]).map(unScope<FolderRecord>);
+        next = change(current);
+        if (next === current) return; // A queue refresh needs no cache rewrite.
+        read.result.forEach((r: Scoped<FolderRecord>) => records.delete(r.scopedId));
+        const keys = folders.index('accountId').getAllKeys(accountId);
+        keys.onsuccess = () => {
+          keys.result.forEach((id) => folders.delete(id));
+          next.forEach((r) => {
+            records.put(scope(accountId, r));
+            const value = r.pending ? r.pending.kind === 'save' ? r.pending.value : null
+              : r.remote && !r.remote.deleted ? r.remote : null;
+            if (value) folders.put(scope(accountId, value));
+          });
+        };
+      } catch (error) { tx.abort(); reject(error); }
+    };
+    tx.oncomplete = () => resolve(next);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Folder operation was not saved to this device'));
+  });
+}
 
 // These preferences are intentionally device-wide. They contain no account data.
 export async function getSettings() {

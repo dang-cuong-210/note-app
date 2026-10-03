@@ -9,6 +9,7 @@ import { NoteList } from '@/components/NoteList';
 import { NoteEditor } from '@/components/NoteEditor';
 import { SettingsView } from '@/components/SettingsView';
 import { RealtimeDiagnosticsPanel } from '@/components/RealtimeDiagnosticsPanel';
+import { FolderSyncNotice } from '@/components/FolderSyncNotice';
 import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ViewType } from '@/lib/navigation';
@@ -210,6 +211,7 @@ function AppContent() {
 
   return (
     <div className="h-screen flex overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
+      <FolderSyncNotice conflicts={data.folderConflicts} error={data.folderSyncError} onResolve={data.resolveFolderConflict} />
       {/* The note editor already has a Back button on mobile. */}
             {/* Sidebar - desktop */}
       <aside className="hidden lg:flex w-60 flex-shrink-0 border-r" style={{ borderColor: 'var(--border)' }}>

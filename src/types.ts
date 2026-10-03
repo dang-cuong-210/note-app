@@ -18,6 +18,7 @@ export interface Folder {
   name: string;
   parentId: string | null;
   createdAt: number;
+  revision?: number;
 }
 
 export interface Settings {

@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { uid, createNote, applyTheme, applyFontSize } from '@/lib/utils';
 import { deleteAllNoteImages } from '@/lib/images';
 import { createAttachmentSync } from '@/lib/attachmentSync';
+import { createFolderSync, mapRemoteFolder, type FolderRecord } from '@/lib/folderSync';
 import {
   uploadAttachment,
   deleteAttachment,
@@ -50,15 +51,6 @@ function mapNote(row: NoteRow): Note {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     revision: row.revision ?? 0,
-  };
-}
-
-function mapFolder(row: FolderRow): Folder {
-  return {
-    id: row.id,
-    name: row.name,
-    parentId: row.parent_id,
-    createdAt: row.created_at,
   };
 }
 
@@ -169,7 +161,9 @@ export function useAppData(userId: string | null) {
   const [syncing, setSyncing] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  const folderSaveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const folderSync = useRef<ReturnType<typeof createFolderSync> | null>(null);
+  const [folderConflicts, setFolderConflicts] = useState<FolderRecord[]>([]);
+  const [folderSyncError, setFolderSyncError] = useState<string | null>(null);
   const migratedRef = useRef(false);
   // Unsynced drafts remain in IndexedDB until the server confirms the write.
   const pendingNotes = useRef(new Map<string, Note>());
@@ -291,12 +285,8 @@ export function useAppData(userId: string | null) {
       return;
     }
 
-    // Upload local data to cloud
-    if (localFolders.length > 0) {
-      const rows = localFolders.map(folderToRow);
-      const { error } = await supabase.from('folders').upsert(rows, { onConflict: 'id' });
-      if (error) console.warn('Folder migration error:', error.message);
-    }
+    // Unmarked cached folders are never interpreted as creates. Folder recovery
+    // and new operations use the durable folder queue, separate from note CAS.
     // Never resurrect known synced notes removed on another device.
     const toMigrate = localNotes.filter((n) => n.syncPending || n.revision === undefined);
     if (toMigrate.length > 0) {
@@ -326,19 +316,31 @@ export function useAppData(userId: string | null) {
   }, [userId]);
 
   // Load all data from cloud, merging with any local-only changes
+  const refreshFolders = useCallback(async () => {
+    const session = folderSync.current;
+    if (!userId || activeAccountId.current !== userId || session?.accountId !== userId) return;
+    await session.ready;
+    const token = session.beginSnapshot();
+    const { data, error } = await supabase.from('folders').select('*').eq('user_id', userId);
+    if (error) return; // Keep durable pending work and cache; timer/online retries.
+    await session.snapshot((data as Record<string, unknown>[]).map(mapRemoteFolder), token);
+    await session.flush();
+  }, [userId]);
+
   const loadFromCloud = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || activeAccountId.current !== userId) return;
     const accountId = userId;
     setSyncing(true);
     // Load local cache first — used for merge and as fallback
-    const [localNotes, localFolders] = await Promise.all([
-      localDb.getAllNotes(accountId),
-      localDb.getAllFolders(accountId),
-    ]);
+    const folderSession = folderSync.current;
+    if (folderSession?.accountId !== accountId) return;
+    await folderSession?.ready;
+    const folderSnapshot = folderSession?.beginSnapshot();
+    const localNotes = await localDb.getAllNotes(accountId);
     try {
       const [notesRes, foldersRes] = await Promise.all([
         supabase.from('notes').select('*').order('updated_at', { ascending: false }),
-        supabase.from('folders').select('*').order('name', { ascending: true }),
+        supabase.from('folders').select('*').eq('user_id', accountId).order('name', { ascending: true }),
         refreshAttachments(),
       ]);
 
@@ -346,7 +348,7 @@ export function useAppData(userId: string | null) {
       if (foldersRes.error) throw foldersRes.error;
 
       const cloudNotes = (notesRes.data as NoteRow[]).map(mapNote);
-      const cloudFolders = (foldersRes.data as FolderRow[]).map(mapFolder);
+      const cloudFolders = (foldersRes.data as Record<string, unknown>[]).map(mapRemoteFolder);
 
       // Merge: for each note, keep whichever (local vs cloud) has a newer updatedAt.
       // This prevents losing local edits that haven't synced yet.
@@ -385,23 +387,15 @@ export function useAppData(userId: string | null) {
         }
       }
 
-      const mergedFolders = [...cloudFolders];
-      for (const lf of localFolders) {
-        if (!mergedFolders.find((f) => f.id === lf.id)) {
-          mergedFolders.push(lf);
-        }
-      }
-
+      if (folderSnapshot) await folderSession?.snapshot(cloudFolders, folderSnapshot);
       if (activeAccountId.current !== accountId) return;
       cloudReadyRef.current = true;
       setLoadedAccountId(accountId);
       setNotes(mergedNotes);
-      setFolders(mergedFolders);
 
       // Cache locally for offline use
       await Promise.all([
         localDb.putNotes(accountId, mergedNotes),
-        ...mergedFolders.map((f) => localDb.putFolder(accountId, f)),
       ]);
     } catch (err) {
       cloudReadyRef.current = false;
@@ -414,7 +408,6 @@ export function useAppData(userId: string | null) {
       });
       setLoadedAccountId(accountId);
       setNotes(Array.from(recovered.values()));
-      setFolders(localFolders);
     } finally {
       if (activeAccountId.current === accountId) {
         setSyncing(false);
@@ -426,9 +419,7 @@ export function useAppData(userId: string | null) {
   // Initial load
   useEffect(() => {
     saveTimers.current.forEach(clearTimeout);
-    folderSaveTimers.current.forEach(clearTimeout);
     saveTimers.current.clear();
-    folderSaveTimers.current.clear();
     pendingNotes.current.clear();
     confirmedRevisions.current.clear();
     deletingNotes.current.clear();
@@ -436,6 +427,8 @@ export function useAppData(userId: string | null) {
     migratedRef.current = false;
     setNotes([]);
     setFolders([]);
+    setFolderConflicts([]);
+    setFolderSyncError(null);
     setAttachments([]);
     setLoaded(false);
     setLoadedAccountId(null);
@@ -444,11 +437,36 @@ export function useAppData(userId: string | null) {
       if (activeAccountId.current === userId) setAttachments(values);
     }, (error) => console.warn('Attachment cache write failed:', error));
     attachmentSync.current = sync;
+    const folders = createFolderSync(userId, localDb, async (op) => {
+      if (activeAccountId.current !== userId) throw new Error('Account changed');
+      const { data, error } = await supabase.rpc('write_folder_versioned', {
+        p_account: userId, p_folder: folderToRow(op.value), p_expected: op.expected,
+        p_operation: op.id, p_delete: op.kind === 'delete',
+      });
+      if (error) throw error;
+      if (!data || !['saved', 'deleted', 'conflict'].includes(data.status)) throw new Error('Invalid folder acknowledgement');
+      if (activeAccountId.current === userId) setFolderSyncError(null);
+      return { status: data.status, folder: data.folder ? mapRemoteFolder(data.folder) : null };
+    }, (values, conflicts) => {
+      if (activeAccountId.current !== userId) return;
+      setFolders(values);
+      setFolderConflicts(conflicts);
+    }, (error) => {
+      console.warn('Folder sync pending:', error);
+      if (activeAccountId.current === userId) setFolderSyncError('Folder changes could not be saved or synced. Keep this window open if device storage is unavailable.');
+    });
+    folderSync.current = folders;
+    const retry = window.setInterval(() => { if (navigator.onLine) void folders.flush(); }, 5000);
     (async () => {
       await migrateLocalData();
+      await folders.ready;
       await loadFromCloud();
+      if (navigator.onLine) void folders.flush();
     })();
     return () => {
+      window.clearInterval(retry);
+      folders.dispose();
+      if (folderSync.current === folders) folderSync.current = null;
       sync.dispose();
       if (attachmentSync.current === sync) attachmentSync.current = null;
     };
@@ -681,42 +699,23 @@ export function useAppData(userId: string | null) {
             });
             return;
           }
+          if (disposed) return;
           if (payload.eventType === 'DELETE') {
-            if (!oldRow.id) {
-              updateRealtimeDiagnostics({
-                decision: 'ignored',
-                ignoreReason: 'DELETE payload has no row ID',
-              });
-              return;
+            if (oldRow.id && (!oldRow.user_id || oldRow.user_id === accountId)) {
+              void folderSync.current?.remoteDelete(oldRow.id).catch(() => {});
             }
-            setFolders((prev) => prev.filter((f) => f.id !== oldRow.id));
-            void localDb.deleteFolder(accountId, oldRow.id);
-            updateRealtimeDiagnostics({ decision: 'accepted', ignoreReason: null });
-          } else {
-            if (newRow.user_id && newRow.user_id !== accountId) {
-              updateRealtimeDiagnostics({
-                decision: 'ignored',
-                ignoreReason: 'row belongs to another account',
-              });
-              realtimeDebug('folders change ignored for another account', newRow.id);
-              return;
-            }
-            const folder = mapFolder(newRow as FolderRow);
-            setFolders((prev) => {
-              const idx = prev.findIndex((f) => f.id === folder.id);
-              if (idx >= 0) {
-                const next = [...prev];
-                next[idx] = folder;
-                return next;
-              }
-              return [...prev, folder];
-            });
-            void localDb.putFolder(accountId, folder);
-            updateRealtimeDiagnostics({ decision: 'accepted', ignoreReason: null });
+          } else if (newRow.user_id === accountId && newRow.id) {
+            void folderSync.current?.receive(mapRemoteFolder(payload.new)).catch(() => {});
           }
           }
         )
-        .subscribe(onChannelStatus('folders'));
+        .subscribe((status, error) => {
+          if (disposed || activeAccountId.current !== accountId) return;
+          onChannelStatus('folders')(status, error);
+          if (status === 'SUBSCRIBED' && !disposed && activeAccountId.current === accountId) {
+            void refreshFolders().catch(() => {});
+          }
+        });
 
       attachmentsChannel = supabase
         .channel(`attachments-sync:${accountId}`)
@@ -754,7 +753,7 @@ export function useAppData(userId: string | null) {
       if (foldersChannel) void supabase.removeChannel(foldersChannel);
       if (attachmentsChannel) void supabase.removeChannel(attachmentsChannel);
     };
-  }, [loaded, userId, loadFromCloud, refreshAttachments, updateRealtimeDiagnostics]);
+  }, [loaded, userId, loadFromCloud, refreshAttachments, refreshFolders, updateRealtimeDiagnostics]);
 
   // ===== Cloud sync helpers =====
   const syncNoteToCloud = useCallback((note: Note): Promise<void> => {
@@ -864,24 +863,6 @@ export function useAppData(userId: string | null) {
   const syncNoteToCloudRef = useRef(syncNoteToCloud);
   syncNoteToCloudRef.current = syncNoteToCloud;
 
-  const syncFolderToCloud = useCallback(async (folder: Folder) => {
-    try {
-      const { error } = await supabase.from('folders').upsert(folderToRow(folder), { onConflict: 'id' });
-      if (error) console.warn('Folder sync error:', error.message);
-    } catch (err) {
-      console.warn('Folder sync failed:', err);
-    }
-  }, []);
-
-  const deleteFolderFromCloud = useCallback(async (id: string) => {
-    try {
-      const { error } = await supabase.from('folders').delete().eq('id', id);
-      if (error) console.warn('Folder delete error:', error.message);
-    } catch (err) {
-      console.warn('Folder delete failed:', err);
-    }
-  }, []);
-
   // Debounced save: local + cloud
   const saveNote = useCallback(
     (note: Note) => {
@@ -902,20 +883,13 @@ export function useAppData(userId: string | null) {
     [syncNoteToCloud, userId]
   );
 
-  const saveFolder = useCallback(
-    (folder: Folder) => {
-      if (!userId) return;
-      void localDb.putFolder(userId, folder);
-      const existing = folderSaveTimers.current.get(folder.id);
-      if (existing) clearTimeout(existing);
-      const timer = setTimeout(() => {
-        syncFolderToCloud(folder);
-        folderSaveTimers.current.delete(folder.id);
-      }, 400);
-      folderSaveTimers.current.set(folder.id, timer);
-    },
-    [syncFolderToCloud, userId]
-  );
+  // Persist intent before scheduling any network work. flush always rereads the
+  // durable queue, so no captured debounce callback can resurrect a deleted ID.
+  const saveFolder = useCallback((folder: Folder) => {
+    const session = folderSync.current;
+    if (!userId || activeAccountId.current !== userId || session?.accountId !== userId) return;
+    void session.save(folder).then(() => { if (navigator.onLine) void session.flush(); }).catch(() => {});
+  }, [userId]);
 
   const notesRef = useRef(notes);
   notesRef.current = notes;
@@ -1158,6 +1132,7 @@ export function useAppData(userId: string | null) {
 
   const removeFolder = useCallback(
     (id: string) => {
+      if (!userId || activeAccountId.current !== userId) return;
       setFolders((prev) => prev.filter((f) => f.id !== id));
       // Move notes in this folder to no folder
       setNotes((prev) =>
@@ -1168,10 +1143,13 @@ export function useAppData(userId: string | null) {
           return updated;
         })
       );
-      if (userId) void localDb.deleteFolder(userId, id);
-      deleteFolderFromCloud(id);
+      const folder = folders.find((f) => f.id === id);
+      const session = folderSync.current;
+      if (folder && session) void session.remove(folder).then(() => {
+        if (navigator.onLine) void session.flush();
+      }).catch(() => {});
     },
-    [saveNote, deleteFolderFromCloud, userId]
+    [saveNote, folders, userId]
   );
 
   // ===== Settings =====
@@ -1191,8 +1169,7 @@ export function useAppData(userId: string | null) {
       if (data.folders) {
         setFolders(data.folders);
         data.folders.forEach((f) => {
-          if (userId) void localDb.putFolder(userId, f);
-          syncFolderToCloud(f);
+          saveFolder(f);
         });
       }
       if (data.notes) {
@@ -1210,19 +1187,19 @@ export function useAppData(userId: string | null) {
         localDb.saveSettings(data.settings);
       }
     },
-    [saveNote, syncFolderToCloud, userId]
+    [saveNote, saveFolder, userId]
   );
 
   const flushAll = useCallback(async () => {
     // Sync any pending note changes before clearing timers
     saveTimers.current.forEach((timer) => clearTimeout(timer));
     saveTimers.current.clear();
-    folderSaveTimers.current.forEach((timer) => clearTimeout(timer));
-    folderSaveTimers.current.clear();
+    const folderTask = folderSync.current?.flush();
     // Never re-upload every cached note: stale tabs could overwrite current data.
     for (const note of Array.from(pendingNotes.current.values())) {
       await syncNoteToCloud(note);
     }
+    await folderTask;
   }, [syncNoteToCloud]);
 
   // Flush pending changes when the page is hidden or unloaded
@@ -1317,6 +1294,15 @@ export function useAppData(userId: string | null) {
     syncing,
     online,
     syncConflicts,
+    folderConflicts: loadedAccountId === userId ? folderConflicts : [],
+    folderSyncError: loadedAccountId === userId ? folderSyncError : null,
+    resolveFolderConflict: async (id: string, choice: 'server' | 'copy' | 'delete') => {
+      const session = folderSync.current;
+      if (!userId || activeAccountId.current !== userId || session?.accountId !== userId) return;
+      const shownRevision = folderConflicts.find((r) => r.id === id)?.remote?.revision;
+      await session?.resolve(id, choice, choice === 'copy' ? uid() : undefined, shownRevision);
+      if (navigator.onLine) await session?.flush();
+    },
     realtimeDiagnostics,
     dismissSyncConflicts: () => setSyncConflicts(0),
     addNote,
