@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   FileText,
   Pin,
@@ -54,6 +54,8 @@ export function Sidebar({
   const [tagsExpanded, setTagsExpanded] = useState(true);
   const [foldersExpanded, setFoldersExpanded] = useState(true);
   const [folderMenuFor, setFolderMenuFor] = useState<string | null>(null);
+  const folderMenuRef = useRef<HTMLDivElement>(null);
+  const folderMenuTriggerRef = useRef<HTMLButtonElement>(null);
 
   const activeNotes = notes.filter((n) => !n.trashed);
   const tags = getAllTags(activeNotes);
@@ -63,9 +65,17 @@ export function Sidebar({
 
   useEffect(() => {
     if (!folderMenuFor) return;
-    const handler = () => setFolderMenuFor(null);
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const handler = (event: PointerEvent) => {
+      const target = event.target;
+      // Let menu actions and the active trigger finish their own click handling.
+      if (target instanceof Node && (
+        folderMenuRef.current?.contains(target) ||
+        folderMenuTriggerRef.current?.contains(target)
+      )) return;
+      setFolderMenuFor(null);
+    };
+    document.addEventListener('pointerdown', handler, true);
+    return () => document.removeEventListener('pointerdown', handler, true);
   }, [folderMenuFor]);
 
   const handleAddFolder = () => {
@@ -241,6 +251,9 @@ export function Sidebar({
                           {count > 0 && <span className="text-xs text-tertiary">{count}</span>}
                         </button>
                         <button
+                          ref={folderMenuFor === folder.id ? folderMenuTriggerRef : undefined}
+                          aria-label={`Folder actions for ${folder.name}`}
+                          aria-expanded={folderMenuFor === folder.id}
                           onClick={(e) => {
                             e.stopPropagation();
                             setFolderMenuFor(folderMenuFor === folder.id ? null : folder.id);
@@ -252,6 +265,7 @@ export function Sidebar({
                         </button>
                         {folderMenuFor === folder.id && (
                           <div
+                            ref={folderMenuRef}
                             className="absolute right-0 top-8 z-50 w-36 rounded-lg shadow-xl border py-1 animate-scale-in"
                             style={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)' }}
                             onClick={(e) => e.stopPropagation()}
