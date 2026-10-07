@@ -966,4 +966,8 @@
   .tanooki-sheet-primary { background: var(--accent); color: white; }
   .tanooki-sheet-primary:disabled { opacity: .5; }
   .tanooki-mobile-editor :focus-visible, .tanooki-mobile-bottom-sheet :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tanooki-mobile-editor .tanooki-mobile-editor-title input:focus,
+  .tanooki-mobile-editor .tanooki-mobile-editor-title input:focus-visible,
+  .tanooki-mobile-editor .tanooki-mobile-editor-canvas .note-content:focus,
+  .tanooki-mobile-editor .tanooki-mobile-editor-canvas .note-content:focus-visible { outline: none; box-shadow: none; border-color: transparent; }
 }
