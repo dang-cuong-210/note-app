@@ -10,7 +10,7 @@ import { DesktopSidebar } from '@/components/DesktopSidebar';
 import { TanookiDashboard } from '@/components/TanookiDashboard';
 import { NoteList } from '@/components/NoteList';
 import { NoteEditor } from '@/components/NoteEditor';
-import { DesktopNoteInfoPanel } from '@/components/DesktopNoteInfoPanel';
+import { DesktopEditorToolsPanel } from '@/components/DesktopEditorToolsPanel';
 import { SettingsView } from '@/components/SettingsView';
 import { RealtimeDiagnosticsPanel } from '@/components/RealtimeDiagnosticsPanel';
 import { FolderSyncNotice } from '@/components/FolderSyncNotice';
@@ -34,7 +34,7 @@ function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileDestination, setMobileDestination] = useState<MobileDestination>('home');
   const [focusSearchPending, setFocusSearchPending] = useState(false);
-  const [infoPanelOpen, setInfoPanelOpen] = useState(false);
+  const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
   const { toast } = useToast();
   const diagnosticsPanel = import.meta.env.DEV ? (
     <RealtimeDiagnosticsPanel diagnostics={data.realtimeDiagnostics} />
@@ -441,8 +441,8 @@ function AppContent() {
                 onBack={() => setSelectedNoteId(null)}
                 desktopPresentation={isDesktop}
                 breadcrumb={getDesktopViewLabel(view, data.folders)}
-                onToggleInfoPanel={() => setInfoPanelOpen((open) => !open)}
-                infoPanelOpen={infoPanelOpen}
+                onToggleToolsPanel={() => setToolsPanelOpen((open) => !open)}
+                toolsPanelOpen={toolsPanelOpen}
               />
             </div>
           </>
@@ -481,12 +481,14 @@ function AppContent() {
         )}
       </main>
       {isDesktop && selectedNote && view.kind !== 'home' && view.kind !== 'settings' && view.kind !== 'trash' && (
-        <DesktopNoteInfoPanel
+        <DesktopEditorToolsPanel
           note={selectedNote}
           folders={data.folders}
           attachments={data.getAttachmentsForNote(selectedNote.id)}
-          onClose={() => setInfoPanelOpen(false)}
-          isOpen={infoPanelOpen}
+          onClose={() => setToolsPanelOpen(false)}
+          isOpen={toolsPanelOpen}
+          onArchive={data.archiveNote}
+          onMove={data.moveNote}
         />
       )}
       {showMobileBottomNav && (

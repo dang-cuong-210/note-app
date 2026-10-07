@@ -26,7 +26,7 @@ import {
   ArrowUp,
   ArrowDown,
   Edit3,
-  Info,
+  SlidersHorizontal,
 } from 'lucide-react';
 import type { Note, Folder, Attachment } from '@/types';
 import { useToast } from '@/contexts/ToastContext';
@@ -115,8 +115,8 @@ interface NoteEditorProps {
   onBack: () => void;
   desktopPresentation?: boolean;
   breadcrumb?: string;
-  onToggleInfoPanel?: () => void;
-  infoPanelOpen?: boolean;
+  onToggleToolsPanel?: () => void;
+  toolsPanelOpen?: boolean;
 }
 
 export function NoteEditor({
@@ -134,8 +134,8 @@ export function NoteEditor({
   onBack,
   desktopPresentation = false,
   breadcrumb = 'Tất cả ghi chú',
-  onToggleInfoPanel,
-  infoPanelOpen = false,
+  onToggleToolsPanel,
+  toolsPanelOpen = false,
 }: NoteEditorProps) {
   const [title, setTitle] = useState('');
   const [syncConflict, setSyncConflict] = useState<Note | null>(null);
@@ -1072,7 +1072,7 @@ export function NoteEditor({
 
         <div className="flex items-center gap-1">
           {desktopPresentation && note.syncPending === true && <span className="tanooki-editor-sync-status" role="status">Đang chờ đồng bộ</span>}
-          {desktopPresentation && onToggleInfoPanel && <button type="button" onClick={onToggleInfoPanel} aria-label="Thông tin ghi chú" aria-expanded={infoPanelOpen} className="tanooki-editor-action tanooki-info-toggle" title="Thông tin ghi chú"><Info size={18} /></button>}
+          {desktopPresentation && onToggleToolsPanel && <button type="button" onClick={onToggleToolsPanel} aria-label="Công cụ chỉnh sửa" aria-controls="tanooki-desktop-editor-tools" aria-expanded={toolsPanelOpen} className="tanooki-editor-action tanooki-info-toggle" title="Công cụ chỉnh sửa"><SlidersHorizontal size={18} /></button>}
           <button
             onClick={() => onTogglePin(note.id)}
             className={`p-2 rounded-lg hover-bg text-secondary transition-colors ${desktopPresentation ? 'tanooki-editor-action' : ''}`}
