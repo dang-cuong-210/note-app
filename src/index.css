@@ -713,6 +713,10 @@
   .tanooki-desktop-sidebar :focus-visible,
   .tanooki-dashboard :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .tanooki-dashboard { background: var(--bg); color: var(--text); }
+  .tanooki-dashboard-columns { grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 1200px) {
+    .tanooki-dashboard-columns { grid-template-columns: minmax(0, 2.65fr) minmax(250px, 1fr); }
+  }
   .tanooki-dashboard-panel {
     min-width: 0;
     padding: 18px;
@@ -721,6 +725,9 @@
     background: var(--bg);
     box-shadow: 0 4px 18px rgb(107 74 58 / 4%);
   }
+  .tanooki-dashboard-pinned-panel.is-empty { padding-block: 12px; }
+  .tanooki-dashboard-pinned-panel.is-empty .tanooki-dashboard-section-heading { margin-bottom: 5px; }
+  .tanooki-dashboard-pinned-panel.is-empty .tanooki-dashboard-empty { padding-block: 2px; }
   .tanooki-dashboard-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 15px; }
   .tanooki-dashboard-section-heading h2 { display: flex; min-width: 0; align-items: center; gap: 9px; font-size: 17px; font-weight: 600; }
   .tanooki-dashboard-section-heading h2 > svg { flex: none; color: var(--accent); }

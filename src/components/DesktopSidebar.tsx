@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Archive, FileText, Folder as FolderIcon, LogOut, MoreHorizontal, Pin, Plus, Search, Settings as SettingsIcon, Tag as TagIcon, Trash2 } from 'lucide-react';
+import { Archive, Clock3, FileText, Folder as FolderIcon, LogOut, MoreHorizontal, Pin, Plus, Search, Settings as SettingsIcon, Tag as TagIcon, Trash2 } from 'lucide-react';
 import { TanookiMark } from '@/components/TanookiBrand';
 import type { Folder, Note } from '@/types';
 import type { ViewType } from '@/lib/navigation';
@@ -25,7 +25,7 @@ const navItems = [
   { label: 'Trang chủ', icon: FileText, view: { kind: 'home' } as ViewType },
   { label: 'Tất cả ghi chú', icon: FileText, view: { kind: 'all' } as ViewType, count: 'all' },
   { label: 'Đã ghim', icon: Pin, view: { kind: 'pinned' } as ViewType, count: 'pinned' },
-  { label: 'Gần đây', icon: Archive, view: { kind: 'recent' } as ViewType },
+  { label: 'Gần đây', icon: Clock3, view: { kind: 'recent' } as ViewType },
   { label: 'Lưu trữ', icon: Archive, view: { kind: 'archived' } as ViewType, count: 'archived' },
   { label: 'Thùng rác', icon: Trash2, view: { kind: 'trash' } as ViewType, count: 'trash' },
 ];
@@ -90,13 +90,13 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
       <button type="button" onClick={onAddNote} className="tanooki-desktop-create"><Plus size={18} />Ghi chú mới</button>
     </div>
 
-    <div className="px-4 pb-3">
+    {currentView.kind !== 'home' && <div className="px-4 pb-3">
       <form onSubmit={(event) => { event.preventDefault(); onSearchSubmit(searchQuery.trim()); }} className="relative">
         <label htmlFor="tanooki-sidebar-search" className="sr-only">Tìm kiếm ghi chú</label>
         <Search size={16} aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-tertiary" />
         <input id="tanooki-sidebar-search" data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm ghi chú..." className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm outline-none focus-visible:ring-2" style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }} />
       </form>
-    </div>
+    </div>}
 
     <nav aria-label="Điều hướng chính" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-2">
       <div className="space-y-1">

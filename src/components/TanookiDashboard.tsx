@@ -60,9 +60,9 @@ export function TanookiDashboard({ notes, folders, searchQuery, onSearchChange, 
       </form>
     </div>
 
-    <div className="grid grid-cols-1 gap-5 px-5 pb-8 xl:grid-cols-[minmax(0,1fr)_minmax(250px,0.34fr)] xl:px-7 2xl:px-9">
+    <div className="tanooki-dashboard-columns grid gap-5 px-5 pb-8 xl:px-7 2xl:px-9">
       <div className="min-w-0 space-y-5">
-        <section className="tanooki-dashboard-panel" aria-labelledby="dashboard-pinned-heading">
+        <section className={`tanooki-dashboard-panel tanooki-dashboard-pinned-panel${pinnedNotes.length ? '' : ' is-empty'}`} aria-labelledby="dashboard-pinned-heading">
           <div className="tanooki-dashboard-section-heading">
             <h2 id="dashboard-pinned-heading"><Pin size={19} aria-hidden="true" /> Ghi chú đã ghim</h2>
             <button type="button" onClick={() => onViewChange({ kind: 'pinned' })} className="tanooki-dashboard-view-all">Xem tất cả <ArrowRight size={15} /></button>
