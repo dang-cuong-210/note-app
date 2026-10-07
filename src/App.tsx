@@ -329,7 +329,7 @@ function AppContent() {
       )}
 
       {/* Main area */}
-      <main className="max-lg:w-full max-lg:min-w-0 max-lg:max-w-full flex-1 flex overflow-hidden relative">
+      <main className="max-lg:w-full max-lg:min-w-0 max-lg:max-w-full flex-1 min-w-0 flex overflow-hidden relative">
         {/* Offline indicator */}
         {!data.online && (
           <div
