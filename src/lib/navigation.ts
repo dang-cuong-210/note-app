@@ -1,7 +1,9 @@
 import type { LucideIcon } from 'lucide-react';
 
 export type ViewType =
+  | { kind: 'home' }
   | { kind: 'all' }
+  | { kind: 'recent' }
   | { kind: 'pinned' }
   | { kind: 'archived' }
   | { kind: 'trash' }

@@ -6,6 +6,8 @@ import { AuthProvider } from '@/components/AuthProvider';
 import { TanookiLoading } from '@/components/TanookiBrand';
 import { AuthScreen } from '@/components/AuthScreen';
 import { Sidebar } from '@/components/Sidebar';
+import { DesktopSidebar } from '@/components/DesktopSidebar';
+import { TanookiDashboard } from '@/components/TanookiDashboard';
 import { NoteList } from '@/components/NoteList';
 import { NoteEditor } from '@/components/NoteEditor';
 import { SettingsView } from '@/components/SettingsView';
@@ -14,12 +16,14 @@ import { FolderSyncNotice } from '@/components/FolderSyncNotice';
 import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ViewType } from '@/lib/navigation';
-import { noteHasTag } from '@/lib/utils';
+import { getInitialView, getDashboardSearchDestination, getDashboardNoteDestination, shouldAutoSelectNote } from '@/lib/dashboardData.js';
+import { noteHasTag, searchNotes } from '@/lib/utils';
 
 function AppContent() {
   const { user, loading: authLoading, signOut } = useAuth();
   const data = useAppData(user?.id ?? null);
-  const [view, setView] = useState<ViewType>({ kind: 'all' });
+  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
+  const [view, setView] = useState<ViewType>(() => getInitialView(window.innerWidth >= 1024));
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -27,6 +31,16 @@ function AppContent() {
   const diagnosticsPanel = (
     <RealtimeDiagnosticsPanel diagnostics={data.realtimeDiagnostics} />
   );
+  useEffect(() => {
+    const onResize = () => {
+      const desktop = window.innerWidth >= 1024;
+      setIsDesktop(desktop);
+      if (!desktop) setView((current) => current.kind === 'home' ? { kind: 'all' } : current);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   useEffect(() => {
     if (data.syncConflicts > 0) {
       toast('A sync conflict was detected. Both versions were preserved as separate notes.');
@@ -38,20 +52,21 @@ function AppContent() {
   // Select first note when view changes (desktop only)
   useEffect(() => {
     if (!data.loaded) return;
-    if (window.innerWidth >= 1024) {
-      if (view.kind !== 'settings' && view.kind !== 'trash') {
+    if (isDesktop) {
+      if (shouldAutoSelectNote(view)) {
         const visibleNotes = getVisibleNotes();
         if (visibleNotes.length > 0 && !visibleNotes.find((n) => n.id === selectedNoteId)) {
           setSelectedNoteId(visibleNotes[0].id);
         }
       }
     }
-  }, [view, data.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, data.loaded, isDesktop]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function getVisibleNotes() {
-    return data.notes.filter((n) => {
+    const visible = data.notes.filter((n) => {
       switch (view.kind) {
         case 'all': return !n.trashed && !n.archived;
+        case 'recent': return !n.trashed && !n.archived;
         case 'pinned': return !n.trashed && !n.archived && n.pinned;
         case 'archived': return !n.trashed && n.archived;
         case 'trash': return n.trashed;
@@ -60,6 +75,8 @@ function AppContent() {
         default: return false;
       }
     });
+    const queryFiltered = searchQuery ? searchNotes(visible, searchQuery) : visible;
+    return view.kind === 'recent' ? queryFiltered.sort((a, b) => b.updatedAt - a.updatedAt) : queryFiltered;
   }
 
   const selectedNote = data.notes.find((n) => n.id === selectedNoteId) || null;
@@ -67,12 +84,26 @@ function AppContent() {
   const handleViewChange = (v: ViewType) => {
     setView(v);
     setSearchQuery('');
-    if (v.kind === 'settings') setSelectedNoteId(null);
+    if (v.kind === 'settings' || v.kind === 'home' || v.kind === 'recent') setSelectedNoteId(null);
+  };
+
+  const handleSearchSubmit = (query: string) => {
+    const destination = getDashboardSearchDestination(query);
+    setSearchQuery(destination.query);
+    setView(destination.view);
+    setSelectedNoteId(null);
   };
 
   const handleAddNote = () => {
     const folderId = view.kind === 'folder' ? view.id : null;
     const note = data.addNote(folderId);
+    setSelectedNoteId(note.id);
+  };
+
+  const handleDashboardAddNote = () => {
+    const folderId = view.kind === 'folder' ? view.id : null;
+    const note = data.addNote(folderId);
+    if (view.kind !== 'folder') setView({ kind: 'all' });
     setSelectedNoteId(note.id);
   };
 
@@ -132,9 +163,8 @@ function AppContent() {
 
       if (modifier && key === 'k') {
         if (isTyping) return;
-        const searchInput = document.querySelector<HTMLInputElement>(
-          'input[placeholder="Search notes"]'
-        );
+        const searchInput = Array.from(document.querySelectorAll<HTMLInputElement>('[data-global-search]'))
+          .find((input) => input.getClientRects().length > 0);
         if (searchInput) {
           event.preventDefault();
           searchInput.focus();
@@ -154,6 +184,7 @@ function AppContent() {
         ) return;
         const folderId = view.kind === 'folder' ? view.id : null;
         const note = addNoteShortcut(folderId);
+        if (view.kind === 'home') setView({ kind: 'all' });
         setSelectedNoteId(note.id);
         return;
       }
@@ -200,7 +231,8 @@ function AppContent() {
     );
   }
 
-  const showEditor = view.kind !== 'settings' && view.kind !== 'trash';
+  const showHome = view.kind === 'home' && isDesktop;
+  const showEditor = view.kind !== 'settings' && view.kind !== 'trash' && !showHome;
   const showSettings = view.kind === 'settings';
 
   return (
@@ -208,21 +240,22 @@ function AppContent() {
       <FolderSyncNotice conflicts={data.folderConflicts} error={data.folderSyncError} onResolve={data.resolveFolderConflict} />
       {/* The note editor already has a Back button on mobile. */}
             {/* Sidebar - desktop */}
-      <aside className="hidden lg:flex w-60 flex-shrink-0 border-r" style={{ borderColor: 'var(--border)' }}>
-        <Sidebar
+      <div className="hidden lg:flex border-r" style={{ borderColor: 'var(--border)' }}>
+        <DesktopSidebar
           notes={data.notes}
           folders={data.folders}
           currentView={view}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onSearchSubmit={handleSearchSubmit}
           onViewChange={handleViewChange}
+          onAddNote={handleDashboardAddNote}
           onAddFolder={data.addFolder}
           onRenameFolder={data.renameFolder}
           onDeleteFolder={data.removeFolder}
-          userEmail={user.email}
           onSignOut={signOut}
         />
-      </aside>
+      </div>
 
       {/* Sidebar - mobile drawer */}
       {sidebarOpen && (
@@ -263,7 +296,17 @@ function AppContent() {
           </div>
         )}
 
-        {showSettings ? (
+        {showHome ? (
+          <TanookiDashboard
+            notes={data.notes}
+            folders={data.folders}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onSearchSubmit={handleSearchSubmit}
+            onViewChange={handleViewChange}
+            onOpenNote={(id) => { const destination = getDashboardNoteDestination(id); setView(destination.view); setSelectedNoteId(destination.selectedNoteId); }}
+          />
+        ) : showSettings ? (
           <SettingsView
             settings={data.settings}
             notes={data.notes}
@@ -373,3 +416,4 @@ export default function App() {
     </AuthProvider>
   );
 }
+

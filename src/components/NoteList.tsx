@@ -11,6 +11,7 @@ import {
     Menu,
   RotateCcw,
   Search,
+  Clock3,
   X,
   Plus,
   ChevronRight,
@@ -68,6 +69,7 @@ export function NoteList({
   const filteredNotes = notes.filter((n) => {
     switch (view.kind) {
       case 'all': return !n.trashed && !n.archived;
+      case 'recent': return !n.trashed && !n.archived;
       case 'pinned': return !n.trashed && !n.archived && n.pinned;
       case 'archived': return !n.trashed && n.archived;
       case 'trash': return n.trashed;
@@ -85,7 +87,11 @@ export function NoteList({
       })
     : filteredNotes;
 
-  const sorted = view.kind === 'trash' ? [...searched].sort((a, b) => (b.trashedAt || 0) - (a.trashedAt || 0)) : sortNotes(searched, settings);
+  const sorted = view.kind === 'trash'
+    ? [...searched].sort((a, b) => (b.trashedAt || 0) - (a.trashedAt || 0))
+    : view.kind === 'recent'
+      ? [...searched].sort((a, b) => b.updatedAt - a.updatedAt)
+      : sortNotes(searched, settings);
 
   const folderName = (id: string | null) => folders.find((f) => f.id === id)?.name || null;
 
@@ -158,6 +164,8 @@ export function NoteList({
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Search notes"
+              aria-label="Search notes"
+              data-global-search
               className="w-full bg-secondary text-app text-sm rounded-lg pl-9 pr-8 py-2 outline-none transition-colors placeholder:text-tertiary"
               style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text)' }}
             />
@@ -377,6 +385,10 @@ function EmptyState({ view, hasSearch }: { view: ViewType; hasSearch: boolean })
     title = `No notes tagged #${view.name}`;
     message = 'Add #tag to a note to see it here.';
     icon = <FolderIcon size={40} />;
+  } else if (view.kind === 'recent') {
+    title = 'Chưa có ghi chú gần đây';
+    message = 'Các ghi chú đang hoạt động sẽ xuất hiện ở đây.';
+    icon = <Clock3 size={40} />;
   }
 
   return (

@@ -669,6 +669,93 @@
 }
 /* Keep keyboard outlines even where existing utilities specify outline-none. */
 .tanooki-auth :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* PASS 02: desktop workspace shell and data-backed dashboard. */
+@layer components {
+  .tanooki-desktop-sidebar {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    color: var(--text);
+  }
+  .tanooki-desktop-sidebar .tanooki-mark { width: 42px; }
+  .tanooki-desktop-wordmark { font-family: var(--font-brand); font-size: 23px; font-weight: 800; line-height: 1.1; }
+  .tanooki-desktop-create {
+    display: flex;
+    width: 100%;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: var(--radius-button);
+    background: var(--accent);
+    color: var(--auth-on-primary);
+    font-size: 14px;
+    font-weight: 600;
+    transition: background-color var(--motion-interaction) ease-out;
+  }
+  .tanooki-desktop-create:hover { background: var(--accent-hover); }
+  .tanooki-desktop-nav-item {
+    display: flex;
+    width: 100%;
+    min-height: 38px;
+    align-items: center;
+    gap: 11px;
+    border-radius: 9px;
+    padding: 8px 10px;
+    color: var(--text-secondary);
+    text-align: left;
+    font-size: 14px;
+    transition: background-color var(--motion-interaction) ease-out, color var(--motion-interaction) ease-out;
+  }
+  .tanooki-desktop-nav-item:hover { background: var(--bg-hover); color: var(--text); }
+  .tanooki-desktop-nav-item.is-active { background: var(--accent-light); color: var(--accent); font-weight: 600; }
+  .tanooki-desktop-sidebar :focus-visible,
+  .tanooki-dashboard :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tanooki-dashboard { background: var(--bg); color: var(--text); }
+  .tanooki-dashboard-panel {
+    min-width: 0;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--bg);
+    box-shadow: 0 4px 18px rgb(107 74 58 / 4%);
+  }
+  .tanooki-dashboard-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 15px; }
+  .tanooki-dashboard-section-heading h2 { display: flex; min-width: 0; align-items: center; gap: 9px; font-size: 17px; font-weight: 600; }
+  .tanooki-dashboard-section-heading h2 > svg { flex: none; color: var(--accent); }
+  .tanooki-dashboard-view-all { display: inline-flex; flex: none; align-items: center; gap: 5px; color: var(--text-secondary); font-size: 12px; }
+  .tanooki-dashboard-view-all:hover { color: var(--accent); }
+  .tanooki-dashboard-note-card { min-width: 0; padding: 11px; border: 1px solid var(--border); border-radius: 11px; background: var(--bg); transition: background-color var(--motion-interaction) ease-out, border-color var(--motion-interaction) ease-out; }
+  .tanooki-dashboard-note-card:hover { border-color: var(--accent); background: var(--bg-secondary); }
+  .tanooki-dashboard-note-open { display: flex; width: 100%; min-width: 0; flex-direction: column; align-items: flex-start; text-align: left; }
+  .tanooki-dashboard-note-icon { display: grid; width: 100%; height: 72px; place-items: center; margin-bottom: 9px; border-radius: 8px; background: var(--bg-secondary); color: var(--tanooki-brown); }
+  .tanooki-dashboard-note-title { display: block; width: 100%; overflow: hidden; color: var(--text); font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .tanooki-dashboard-preview { display: -webkit-box; width: 100%; overflow: hidden; margin-top: 3px; color: var(--text-secondary); font-size: 12px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .tanooki-dashboard-updated { margin-top: 8px; color: var(--text-tertiary); font-size: 11px; }
+  .tanooki-dashboard-tag { display: inline-flex; min-width: 0; align-items: center; gap: 5px; border-radius: var(--radius-pill); background: var(--bg-secondary); padding: 5px 9px; color: var(--text-secondary); font-size: 11px; line-height: 1.2; }
+  .tanooki-dashboard-tag:hover { background: var(--accent-light); color: var(--accent); }
+  .tanooki-dashboard-tag-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--accent); }
+  .tanooki-dashboard-empty { padding: 10px 2px; color: var(--text-tertiary); font-size: 13px; }
+  .tanooki-dashboard-recent-row { display: flex; min-width: 0; align-items: center; gap: 15px; padding: 10px 2px; }
+  .tanooki-dashboard-recent-open { display: flex; min-width: 0; flex: 1; align-items: center; gap: 12px; text-align: left; }
+  .tanooki-dashboard-recent-icon { display: grid; width: 42px; height: 42px; flex: none; place-items: center; border-radius: 9px; background: var(--bg-secondary); color: var(--tanooki-brown); }
+  .tanooki-dashboard-folder { display: flex; min-width: 0; min-height: 62px; align-items: center; gap: 9px; border: 1px solid var(--border); border-radius: 10px; padding: 9px; text-align: left; }
+  .tanooki-dashboard-folder:hover { background: var(--bg-secondary); border-color: var(--accent); }
+  .tanooki-dashboard-quote { position: relative; display: flex; min-height: 142px; align-items: center; justify-content: space-between; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-card); background: linear-gradient(135deg, var(--bg-secondary), color-mix(in srgb, var(--tanooki-orange) 12%, var(--bg))); padding: 17px; }
+  .tanooki-dashboard-quote p { font-size: 15px; font-style: italic; line-height: 1.55; }
+  .tanooki-dashboard-quote span { display: block; margin-top: 7px; color: var(--text-secondary); font-size: 11px; }
+  .tanooki-dashboard-quote .tanooki-mark { width: 54px; }
+  @media (max-width: 1279px) {
+    .tanooki-desktop-sidebar { width: 250px; }
+    .tanooki-dashboard-header { padding: 22px; }
+  }
+  @media (max-width: 1023px) {
+    .tanooki-dashboard-header { padding: 18px; }
+    .tanooki-dashboard-panel { padding: 14px; }
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .tanooki-auth *, .tanooki-loading * { animation: none !important; transition: none !important; }
+  .tanooki-desktop-sidebar *, .tanooki-dashboard * { scroll-behavior: auto !important; transition: none !important; }
 }
