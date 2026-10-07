@@ -772,6 +772,7 @@
   .tanooki-mobile-home-header { padding: 6px 2px 20px; }
   .tanooki-mobile-home-brand { display: flex; align-items: center; gap: 9px; font-family: var(--font-brand, 'Nunito', sans-serif); font-size: 24px; font-weight: 800; }
   .tanooki-mobile-home-brand .tanooki-mark { width: 36px; height: 36px; }
+  .dark .tanooki-mobile-home-brand .tanooki-mark { background: transparent; }
   .tanooki-mobile-home-header > p, .tanooki-mobile-page-heading p { margin-top: 3px; color: var(--text-secondary); font-size: 13px; }
   .tanooki-mobile-search { display: flex; height: 48px; align-items: center; gap: 10px; margin-top: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); padding: 0 12px; color: var(--text-tertiary); }
   .tanooki-mobile-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 14px; }
@@ -784,16 +785,16 @@
   .tanooki-mobile-section-heading > button { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary); font-size: 12px; }
   .tanooki-mobile-pinned-strip { display: flex; gap: 10px; overflow-x: auto; margin-inline: -16px; padding: 0 16px 5px; scroll-snap-type: x mandatory; scrollbar-width: none; }
   .tanooki-mobile-pinned-strip::-webkit-scrollbar { display: none; }
-  .tanooki-mobile-pinned-card { display: flex; width: min(76vw, 290px); min-height: 154px; flex: 0 0 auto; flex-direction: column; align-items: flex-start; scroll-snap-align: start; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); padding: 13px; text-align: left; }
+  .tanooki-mobile-pinned-card { display: flex; width: min(76vw, 290px); min-height: 140px; flex: 0 0 auto; flex-direction: column; align-items: flex-start; scroll-snap-align: start; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); padding: 12px; text-align: left; }
   .tanooki-mobile-card-icon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 9px; background: var(--accent-light); color: var(--accent); }
-  .tanooki-mobile-card-title { width: 100%; overflow: hidden; margin-top: 9px; font-size: 14px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+  .tanooki-mobile-card-title { width: 100%; overflow: hidden; margin-top: 7px; font-size: 14px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
   .tanooki-mobile-card-preview { display: -webkit-box; overflow: hidden; margin-top: 3px; color: var(--text-secondary); font-size: 12px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
   .tanooki-mobile-card-time { margin-top: auto; padding-top: 8px; color: var(--text-tertiary); font-size: 11px; }
   .tanooki-mobile-empty { border: 1px dashed var(--border); border-radius: 11px; padding: 13px; color: var(--text-tertiary); font-size: 13px; }
   .tanooki-mobile-recent-list { overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); }
-  .tanooki-mobile-recent-row { display: flex; width: 100%; min-width: 0; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); padding: 11px; text-align: left; }
+  .tanooki-mobile-recent-row { display: flex; width: 100%; min-width: 0; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); padding: 9px 11px; text-align: left; }
   .tanooki-mobile-recent-row:last-child { border-bottom: 0; }
-  .tanooki-mobile-recent-icon { display: grid; width: 38px; height: 38px; flex: none; place-items: center; border-radius: 10px; background: var(--bg); color: var(--tanooki-brown); }
+  .tanooki-mobile-recent-icon { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border-radius: 10px; background: var(--bg); color: var(--tanooki-brown); }
   .tanooki-mobile-recent-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
   .tanooki-mobile-recent-copy strong, .tanooki-mobile-recent-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tanooki-mobile-recent-copy strong { font-size: 13px; font-weight: 600; }

@@ -28,7 +28,7 @@ export function MobileHome({ notes, searchQuery, onSearchChange, onSearchSubmit,
       <p>Ý tưởng của bạn, được lưu giữ dịu dàng.</p>
       <form className="tanooki-mobile-search" onSubmit={submit}>
         <Search size={19} aria-hidden="true" />
-        <input data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm ghi chú, thư mục..." aria-label="Tìm ghi chú, thư mục" />
+        <input data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm kiếm ghi chú..." aria-label="Tìm kiếm ghi chú" />
         <button type="submit" aria-label="Tìm kiếm"><ArrowRight size={18} /></button>
       </form>
     </header>

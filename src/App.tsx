@@ -33,9 +33,9 @@ function AppContent() {
   const [mobileDestination, setMobileDestination] = useState<MobileDestination>('home');
   const [focusSearchPending, setFocusSearchPending] = useState(false);
   const { toast } = useToast();
-  const diagnosticsPanel = (
+  const diagnosticsPanel = import.meta.env.DEV ? (
     <RealtimeDiagnosticsPanel diagnostics={data.realtimeDiagnostics} />
-  );
+  ) : null;
   useEffect(() => {
     const onResize = () => {
       const desktop = window.innerWidth >= 1024;
