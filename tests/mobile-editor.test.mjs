@@ -59,6 +59,8 @@ test('bottom sheets are accessible dialogs with close, Escape, focus handling an
 
 test('mobile editor styles are scoped below 1024px and desktop tools remain unchanged', () => {
   assert.match(css, /@media \(max-width: 1023px\)[\s\S]*?\.tanooki-mobile-editor-canvas/);
+  assert.match(app, /max-lg:w-full max-lg:min-w-0 max-lg:max-w-full flex-1 min-w-0 overflow-hidden/);
+  assert.match(css, /\.tanooki-mobile-editor \{ display: flex; width: 100%; max-width: 100%; min-width: 0; flex: 1 1 0%; height: 100dvh;/);
   assert.match(editor, /tanooki-mobile-editor-scroll/);
   assert.doesNotMatch(editor, /min-h-\[200px\]/);
   assert.match(editor, /event\.target !== event\.currentTarget/);
