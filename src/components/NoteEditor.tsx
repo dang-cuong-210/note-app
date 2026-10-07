@@ -246,8 +246,22 @@ export function NoteEditor({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleRef = useRef(title);
   const contentRef = useRef(content);
+  const flushCurrentDraftRef = useRef<() => void>(() => {});
   titleRef.current = title;
   contentRef.current = content;
+
+  const flushCurrentDraft = () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    const baseline = acceptedRef.current;
+    if (!note || conflictRef.current || baseline?.id !== note.id || displayedNoteId.current !== note.id) return;
+    const currentTitle = titleRef.current;
+    const currentContent = contentRef.current;
+    if (currentTitle === baseline.title && currentContent === baseline.content) return;
+    onUpdate(note.id, currentTitle, currentContent);
+    acceptedRef.current = { id: note.id, title: currentTitle, content: currentContent };
+  };
+  flushCurrentDraftRef.current = flushCurrentDraft;
 
   useEffect(() => {
     if (!note || conflictRef.current) return;
@@ -264,14 +278,7 @@ export function NoteEditor({
 
 
   // Flush the current note's unsaved changes when the editor unmounts.
-  useEffect(() => () => {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    const baseline = acceptedRef.current;
-    if (baseline?.id === displayedNoteId.current && !conflictRef.current &&
-        (titleRef.current !== baseline.title || contentRef.current !== baseline.content)) {
-      onUpdate(baseline.id, titleRef.current, contentRef.current);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => flushCurrentDraftRef.current(), []);
 
   // Close menu on outside click/touch
   useEffect(() => {
@@ -1176,7 +1183,11 @@ export function NoteEditor({
       </div>
 
       {!desktopPresentation && <header className="tanooki-mobile-editor-header">
-        <button type="button" className="tanooki-mobile-editor-icon" onClick={onBack} aria-label="Quay lại" title="Quay lại"><ChevronLeft size={21} /></button>
+        <button type="button" className="tanooki-mobile-editor-icon" onClick={() => {
+          flushCurrentDraft();
+          clearSelection();
+          onBack();
+        }} aria-label="Quay lại" title="Quay lại"><ChevronLeft size={21} /></button>
         <div className="tanooki-mobile-editor-title">
           {mobileWriting
             ? <input value={title} onChange={(event) => setTitle(event.target.value)} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" />
@@ -1184,6 +1195,7 @@ export function NoteEditor({
         </div>
         <button type="button" className="tanooki-mobile-editor-mode" onClick={() => {
           if (mobileWriting) {
+            flushCurrentDraft();
             clearSelection();
             (document.activeElement as HTMLElement | null)?.blur?.();
             setMobileWriting(false);

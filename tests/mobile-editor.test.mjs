@@ -20,6 +20,26 @@ test('mobile editor has local Reading/Writing state and the new-note action star
   assert.match(app, /startInWritingMode=\{!isDesktop && mobileNewNoteId === selectedNote\?\.id\}/);
 });
 
+test('mobile Back and Done flush the latest title/body before navigation or mode exit', () => {
+  const flush = editor.match(/const flushCurrentDraft = \(\) => \{([\s\S]*?)\n  \};/)?.[1];
+  assert.ok(flush);
+  assert.match(flush, /clearTimeout\(saveTimer\.current\)/);
+  assert.match(flush, /titleRef\.current/);
+  assert.match(flush, /contentRef\.current/);
+  assert.match(flush, /currentTitle === baseline\.title && currentContent === baseline\.content/);
+  assert.match(flush, /onUpdate\(note\.id, currentTitle, currentContent\)/);
+  assert.match(editor, /flushCurrentDraftRef\.current = flushCurrentDraft/);
+  assert.match(editor, /useEffect\(\(\) => \(\) => flushCurrentDraftRef\.current\(\), \[\]\)/);
+
+  const back = editor.match(/className="tanooki-mobile-editor-icon" onClick=\{\(\) => \{([\s\S]*?)\}\} aria-label="Quay lại"/)?.[1];
+  assert.ok(back);
+  assert.ok(back.indexOf('flushCurrentDraft();') < back.indexOf('clearSelection();'));
+  assert.ok(back.indexOf('clearSelection();') < back.indexOf('onBack();'));
+
+  const doneButton = editor.slice(editor.indexOf('className="tanooki-mobile-editor-mode"'));
+  assert.ok(doneButton.indexOf('flushCurrentDraft();') < doneButton.indexOf('setMobileWriting(false)'));
+});
+
 test('mobile tools use existing image and attachment picker inputs and display current note metadata', () => {
   assert.match(editor, /onChooseImage=\{\(\) => imageInputRef\.current\?\.click\(\)\}/);
   assert.match(editor, /onChooseFile=\{\(\) => fileInputRef\.current\?\.click\(\)\}/);
