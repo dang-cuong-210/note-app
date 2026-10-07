@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Menu, CloudOff, RefreshCw } from 'lucide-react';
+import { Menu, CloudOff } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { ToastProvider } from '@/components/ToastProvider';
 import { AuthProvider } from '@/components/AuthProvider';
+import { TanookiLoading } from '@/components/TanookiBrand';
 import { AuthScreen } from '@/components/AuthScreen';
 import { Sidebar } from '@/components/Sidebar';
 import { NoteList } from '@/components/NoteList';
@@ -180,9 +181,7 @@ function AppContent() {
   if (authLoading) {
     return (
       <>
-        <div className="h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg)' }}>
-          <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading…</div>
-        </div>
+        <TanookiLoading>Đang mở Tanooki…</TanookiLoading>
         {diagnosticsPanel}
       </>
     );
@@ -195,12 +194,7 @@ function AppContent() {
   if (!data.loaded) {
     return (
       <>
-        <div className="h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg)' }}>
-          <div className="flex flex-col items-center gap-3">
-            <RefreshCw size={24} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
-            <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>Syncing your notes…</div>
-          </div>
-        </div>
+        <TanookiLoading>Đang đồng bộ ghi chú của bạn…</TanookiLoading>
         {diagnosticsPanel}
       </>
     );

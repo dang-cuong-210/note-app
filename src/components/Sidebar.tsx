@@ -130,7 +130,7 @@ export function Sidebar({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-4">
         <h1 className="text-lg font-bold text-app" style={{ color: 'var(--text)' }}>
-          Noted
+          Tanooki
         </h1>
         {onClose && (
           <button

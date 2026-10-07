@@ -4,41 +4,64 @@
 
 @layer base {
   :root {
-    --bg: #ffffff;
-    --bg-secondary: #f7f7f5;
-    --bg-tertiary: #ededeb;
-    --bg-hover: #f0f0ee;
-    --bg-active: #e5e5e3;
-    --text: #1c1c1e;
-    --text-secondary: #6e6e73;
-    --text-tertiary: #a1a1a6;
-    --accent: #2c7a51;
-    --accent-hover: #236441;
-    --accent-light: #e8f3ee;
-    --border: #e5e5e3;
-    --danger: #c0392b;
-    --danger-light: #fdf0ee;
-    --warning: #b7791f;
-    --selection: #e8f3ee;
+    --tanooki-paper: #FFFFFF;
+    --tanooki-red: #C94A3D;
+    --tanooki-orange: #D98245;
+    --tanooki-ochre: #C49A52;
+    --tanooki-brown: #6B4A3A;
+    --tanooki-beige: #F7F3EC;
+    --tanooki-gray: #E5E5E5;
+    --tanooki-ink: #25211F;
+    --font-ui: 'Inter', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-brand: 'Nunito', 'Noto Sans JP', sans-serif;
+    --font-code: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+    --radius-input: 8px;
+    --radius-button: 10px;
+    --radius-card: 12px;
+    --radius-modal: 16px;
+    --radius-pill: 999px;
+    --motion-interaction: 180ms;
+    --motion-panel: 240ms;
+    --bg: var(--tanooki-paper);
+    --bg-secondary: var(--tanooki-beige);
+    --bg-tertiary: #EFE8DE;
+    --bg-hover: #F2EDE6;
+    --bg-active: #E8E2DA;
+    --text: var(--tanooki-ink);
+    --text-secondary: #77716C;
+    --text-tertiary: #77716C;
+    --accent: var(--tanooki-red);
+    --accent-hover: #AD3C31;
+    --accent-light: #FBECE9;
+    --border: #E8E2DA;
+    --danger: #B33228;
+    --danger-light: #FBECE9;
+    --warning: #865E22;
+    --selection: #F4D6D0;
+    --auth-muted: #6D655F;
+    --auth-on-primary: #FFFFFF;
+    --auth-shadow: 0 8px 32px rgb(107 74 58 / 5%);
   }
 
   .dark {
-    --bg: #1c1c1e;
-    --bg-secondary: #2c2c2e;
-    --bg-tertiary: #3a3a3c;
-    --bg-hover: #333335;
-    --bg-active: #3a3a3c;
-    --text: #f5f5f7;
-    --text-secondary: #a1a1a6;
-    --text-tertiary: #6e6e73;
-    --accent: #4ca583;
-    --accent-hover: #5fbb97;
-    --accent-light: #1e3a30;
-    --border: #3a3a3c;
-    --danger: #e57373;
-    --danger-light: #3d2422;
-    --warning: #d4a943;
-    --selection: #1e3a30;
+    --bg: #25211F;
+    --bg-secondary: #302A26;
+    --bg-tertiary: #3C342E;
+    --bg-hover: #3A302B;
+    --bg-active: #493A32;
+    --text: #F7F3EC;
+    --text-secondary: #C2B6AA;
+    --text-tertiary: #B5A89B;
+    --accent: #F08A7C;
+    --accent-hover: #FFA99D;
+    --accent-light: #492D29;
+    --border: #50443B;
+    --danger: #FF9A91;
+    --danger-light: #4A2926;
+    --warning: #C49A52;
+    --selection: #624039;
+    --auth-muted: #C2B6AA;
+    --auth-on-primary: #25211F;
   }
 
   * {
@@ -48,7 +71,7 @@
   body {
     background-color: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-family: var(--font-ui);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     /* Safe area support for PWA on iPhone */
@@ -158,12 +181,12 @@
   padding: 0.75em 1em;
   margin: 0.5em 0;
   overflow-x: auto;
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-code);
   font-size: 0.875em;
   line-height: 1.5;
 }
 .editor-content code {
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-code);
   font-size: 0.875em;
 }
 .editor-content pre code {
@@ -572,3 +595,75 @@
 .noted-inline-attachment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
 .noted-inline-attachment-size { font-size: 11px; color: var(--text-tertiary); }
 .noted-attachment-missing { opacity: .65; border-style: dashed !important; }
+
+/* Tanooki PASS 01: presentation primitives and responsive auth only. */
+@layer components {
+  .tanooki-paper { background: var(--bg); color: var(--text); }
+  .tanooki-surface { background: var(--bg-secondary); color: var(--text); }
+  .tanooki-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-card); }
+  .tanooki-field {
+    display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 56px;
+    padding: 4px 12px 4px 16px; border: 1px solid var(--border); border-radius: var(--radius-modal);
+    background: var(--bg); color: var(--auth-muted);
+    transition: border-color var(--motion-interaction) ease-out;
+  }
+  .tanooki-field > svg { flex-shrink: 0; }
+  .tanooki-field input { width: 100%; min-width: 0; padding: 12px 0; background: transparent; color: var(--text); font-size: 16px; }
+  .tanooki-field input::placeholder { color: var(--auth-muted); opacity: 1; }
+  .tanooki-field:focus-within { border-color: var(--accent); }
+  .tanooki-button-primary, .tanooki-button-secondary {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 52px; padding: 12px 24px; border: 1px solid var(--accent); border-radius: var(--radius-modal);
+    font-size: 16px; font-weight: 600; transition: background-color var(--motion-interaction) ease-out;
+  }
+  .tanooki-button-primary { background: var(--accent); color: var(--auth-on-primary); }
+  .tanooki-button-primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .tanooki-button-secondary { color: var(--accent); background: var(--bg); }
+  .tanooki-button-ghost { color: var(--accent); font-weight: 600; min-height: 44px; padding: 8px 4px; }
+  .tanooki-button-ghost:hover:not(:disabled) { text-decoration: underline; }
+  .tanooki-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: var(--radius-button); }
+  .tanooki-icon-button:hover:not(:disabled) { background: var(--bg-hover); }
+  .tanooki-auth button:disabled, .tanooki-auth input:disabled { opacity: .6; cursor: not-allowed; }
+  .tanooki-divider { display: flex; align-items: center; gap: 16px; color: var(--auth-muted); font-size: 14px; margin: 24px 0 16px; }
+  .tanooki-divider::before, .tanooki-divider::after { content: ''; height: 1px; background: var(--border); flex: 1; }
+  .tanooki-auth { min-height: 100vh; min-height: 100dvh; color: var(--text); background: var(--bg); font-size: 16px; line-height: 1.6; }
+  .tanooki-auth-brand { display: none; }
+  .tanooki-brand { display: flex; align-items: center; flex-direction: column; gap: 8px; }
+  .tanooki-logo-slot { display: grid; place-items: center; width: 120px; height: 88px; border: 1px dashed var(--border); border-radius: var(--radius-modal); color: var(--auth-muted); font-size: 12px; }
+  .tanooki-wordmark { font-family: var(--font-brand); font-weight: 800; font-size: 42px; line-height: 1.15; }
+  .tanooki-auth-panel { min-width: 0; padding: 24px 20px; }
+  .tanooki-auth-card { width: 100%; max-width: 540px; margin: auto; border: 0; }
+  .tanooki-mobile-brand { margin-bottom: 24px; }
+  .tanooki-auth-heading { text-align: center; margin-bottom: 28px; }
+  .tanooki-auth-heading h1 { font-size: 28px; font-weight: 700; line-height: 1.25; margin-bottom: 12px; }
+  .tanooki-auth-heading p { color: var(--auth-muted); max-width: 380px; margin: auto; }
+  .tanooki-auth-form { display: flex; flex-direction: column; gap: 16px; }
+  .tanooki-session-note { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; color: var(--auth-muted); }
+  .tanooki-session-note svg { flex-shrink: 0; margin-top: 3px; color: var(--accent); }
+  .tanooki-session-note small { font-size: 12px; }
+  .tanooki-auth-error { color: var(--danger); border-left: 3px solid currentColor; padding-left: 12px; font-size: 14px; }
+  .tanooki-auth-notice { color: var(--text); background: var(--bg-secondary); padding: 12px; border-radius: var(--radius-input); font-size: 14px; }
+  .tanooki-auth-help { display: flex; gap: 16px; padding: 20px; background: var(--bg-secondary); border-radius: var(--radius-modal); }
+  .tanooki-auth-help > svg { flex-shrink: 0; color: var(--accent); }
+  .tanooki-auth-help h2 { font-size: 16px; font-weight: 600; }
+  .tanooki-auth-help p { font-size: 14px; color: var(--auth-muted); margin-top: 4px; }
+  .tanooki-auth-footer { text-align: center; color: var(--auth-muted); border-top: 1px solid var(--border); margin-top: 24px; padding-top: 16px; font-size: 14px; }
+  .tanooki-loading { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 24px; background: var(--bg); color: var(--text); text-align: center; }
+  .tanooki-loading p { color: var(--auth-muted); }
+  @media (min-width: 1024px) {
+    .tanooki-auth { display: grid; grid-template-columns: 55% 45%; background: var(--bg-secondary); }
+    .tanooki-auth-brand { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 32px; min-width: 0; }
+    .tanooki-auth-brand .tanooki-logo-slot { width: 180px; height: 144px; }
+    .tanooki-auth-brand .tanooki-wordmark { font-size: 56px; }
+    .tanooki-tagline { font-size: 20px; font-weight: 600; text-align: center; margin: 24px 0; }
+    .tanooki-art-slot { display: grid; place-items: center; width: 100%; min-height: 260px; flex: 1; max-height: 420px; border: 1px dashed var(--border); border-radius: var(--radius-modal); text-align: center; padding: 32px; color: var(--auth-muted); font-size: 14px; }
+    .tanooki-auth-panel { display: flex; align-items: center; padding: 32px 32px 32px 0; }
+    .tanooki-auth-card { padding: 36px 32px; border: 1px solid var(--border); border-radius: 28px; box-shadow: var(--auth-shadow); }
+    .tanooki-mobile-brand { display: none; }
+  }
+}
+/* Keep keyboard outlines even where existing utilities specify outline-none. */
+.tanooki-auth :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .tanooki-auth *, .tanooki-loading * { animation: none !important; transition: none !important; }
+}

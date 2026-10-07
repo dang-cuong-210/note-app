@@ -1,13 +1,13 @@
 {
-  "name": "Noted — Simple Notes",
-  "short_name": "Noted",
-  "description": "A clean, minimal note-taking app with cloud sync across all your devices.",
+  "name": "Tanooki — Ghi chú của bạn",
+  "short_name": "Tanooki",
+  "description": "Ghi chú cho chính mình, một cuộc sống nhẹ nhàng hơn.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#ffffff",
-  "theme_color": "#2c7a51",
+  "theme_color": "#C94A3D",
   "categories": ["productivity", "utilities"],
   "icons": [
     {
@@ -31,8 +31,8 @@
   ],
   "shortcuts": [
     {
-      "name": "New Note",
-      "short_name": "New",
+      "name": "Ghi chú mới",
+      "short_name": "Mới",
       "url": "/?action=new"
     }
   ]

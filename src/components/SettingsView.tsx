@@ -179,7 +179,7 @@ export function SettingsView({
           {/* About */}
           <div className="text-center pt-4 pb-8">
             <p className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>
-              Noted · {notes.length} notes · {folders.length} folders
+              Tanooki · {notes.length} notes · {folders.length} folders
             </p>
             <p className="text-xs text-tertiary mt-1" style={{ color: 'var(--text-tertiary)' }}>
               Synced across your devices via cloud storage
