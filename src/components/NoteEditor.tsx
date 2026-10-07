@@ -26,11 +26,13 @@ import {
   ArrowUp,
   ArrowDown,
   Edit3,
+  Info,
 } from 'lucide-react';
 import type { Note, Folder, Attachment } from '@/types';
 import { useToast } from '@/contexts/ToastContext';
 import { isAcceptedImageType, uploadNoteImage, deleteNoteImage } from '@/lib/images';
 import { formatFileSize, getFileIcon, refreshAttachmentUrl } from '@/lib/attachments';
+import { extractTags } from '@/lib/utils';
 
 // Attachment display settings travel inside note HTML, so no database migration is needed.
 // The marker is a comment, never a visible or editable element.
@@ -111,6 +113,10 @@ interface NoteEditorProps {
   onRemoveAttachment: (id: string) => Promise<void>;
   onRenameAttachment: (id: string, name: string) => Promise<boolean>;
   onBack: () => void;
+  desktopPresentation?: boolean;
+  breadcrumb?: string;
+  onToggleInfoPanel?: () => void;
+  infoPanelOpen?: boolean;
 }
 
 export function NoteEditor({
@@ -126,6 +132,10 @@ export function NoteEditor({
   onRemoveAttachment,
   onRenameAttachment,
   onBack,
+  desktopPresentation = false,
+  breadcrumb = 'Tất cả ghi chú',
+  onToggleInfoPanel,
+  infoPanelOpen = false,
 }: NoteEditorProps) {
   const [title, setTitle] = useState('');
   const [syncConflict, setSyncConflict] = useState<Note | null>(null);
@@ -1022,11 +1032,11 @@ export function NoteEditor({
 
   if (!note) {
     return (
-      <div className="h-full flex items-center justify-center bg-app" style={{ backgroundColor: 'var(--bg)' }}>
+      <div className={`h-full flex items-center justify-center bg-app ${desktopPresentation ? 'tanooki-desktop-empty-editor' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
         <div className="text-center">
           <FileText size={48} className="mx-auto mb-3 text-tertiary" style={{ color: 'var(--text-tertiary)' }} />
           <p className="text-sm text-secondary" style={{ color: 'var(--text-secondary)' }}>
-            Select a note or create a new one
+            {desktopPresentation ? 'Chọn một ghi chú để bắt đầu.' : 'Select a note or create a new one'}
           </p>
         </div>
       </div>
@@ -1034,12 +1044,13 @@ export function NoteEditor({
   }
 
   const folderName = folders.find((f) => f.id === note.folderId)?.name || null;
+  const desktopTags = desktopPresentation ? extractTags(note.content) : [];
 
   return (
-    <div className="h-full flex flex-col bg-app" style={{ backgroundColor: 'var(--bg)' }}>
+    <div className={`h-full min-w-0 flex flex-col bg-app ${desktopPresentation ? 'tanooki-desktop-editor' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
       {/* Toolbar */}
       <div
-        className="flex items-center justify-between px-3 py-2 border-b flex-shrink-0"
+        className={`flex items-center justify-between gap-3 px-3 py-2 border-b flex-shrink-0 ${desktopPresentation ? 'tanooki-editor-topbar' : ''}`}
         style={{ borderColor: 'var(--border)' }}
       >
         <div className="flex items-center gap-1">
@@ -1051,19 +1062,22 @@ export function NoteEditor({
           >
             <ChevronLeft size={20} />
           </button>
-          {folderName && (
+          {folderName && !desktopPresentation && (
             <span className="text-xs text-tertiary px-2 hidden sm:inline" style={{ color: 'var(--text-tertiary)' }}>
               {folderName}
             </span>
           )}
+          {desktopPresentation && <div className="tanooki-editor-breadcrumb"><span>{breadcrumb}</span><span aria-hidden="true">/</span><strong>{title.trim() || 'Chưa có tiêu đề'}</strong></div>}
         </div>
 
         <div className="flex items-center gap-1">
+          {desktopPresentation && note.syncPending === true && <span className="tanooki-editor-sync-status" role="status">Đang chờ đồng bộ</span>}
+          {desktopPresentation && onToggleInfoPanel && <button type="button" onClick={onToggleInfoPanel} aria-label="Thông tin ghi chú" aria-expanded={infoPanelOpen} className="tanooki-editor-action tanooki-info-toggle" title="Thông tin ghi chú"><Info size={18} /></button>}
           <button
             onClick={() => onTogglePin(note.id)}
-            className="p-2 rounded-lg hover-bg text-secondary transition-colors"
+            className={`p-2 rounded-lg hover-bg text-secondary transition-colors ${desktopPresentation ? 'tanooki-editor-action' : ''}`}
             style={{ color: note.pinned ? 'var(--accent)' : 'var(--text-secondary)' }}
-            aria-label={note.pinned ? 'Unpin' : 'Pin'}
+            aria-label={note.pinned ? (desktopPresentation ? 'Bỏ ghim' : 'Unpin') : (desktopPresentation ? 'Ghim' : 'Pin')}
           >
             {note.pinned ? <Pin size={18} fill="currentColor" /> : <Pin size={18} />}
           </button>
@@ -1074,7 +1088,7 @@ export function NoteEditor({
               onClick={() => { setMenuOpen(!menuOpen); setMoveOpen(false); }}
               className="p-2 rounded-lg hover-bg text-secondary transition-colors"
               style={{ color: 'var(--text-secondary)' }}
-              aria-label="More options"
+              aria-label={desktopPresentation ? 'Tùy chọn ghi chú' : 'More options'}
             >
               <MoreHorizontal size={18} />
             </button>
@@ -1087,12 +1101,12 @@ export function NoteEditor({
               >
                 <MenuBtn
                   icon={note.pinned ? <PinOff size={15} /> : <Pin size={15} />}
-                  label={note.pinned ? 'Unpin' : 'Pin'}
+                  label={note.pinned ? (desktopPresentation ? 'Bỏ ghim' : 'Unpin') : (desktopPresentation ? 'Ghim' : 'Pin')}
                   onClick={() => { onTogglePin(note.id); setMenuOpen(false); }}
                 />
                 <MenuBtn
                   icon={note.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
-                  label={note.archived ? 'Unarchive' : 'Archive'}
+                  label={note.archived ? (desktopPresentation ? 'Bỏ lưu trữ' : 'Unarchive') : (desktopPresentation ? 'Lưu trữ' : 'Archive')}
                   onClick={() => { onArchive(note.id, !note.archived); setMenuOpen(false); }}
                 />
 
@@ -1104,7 +1118,7 @@ export function NoteEditor({
                     onClick={() => setMoveOpen(!moveOpen)}
                   >
                     <FolderIcon size={15} />
-                    <span className="flex-1">Move to...</span>
+                    <span className="flex-1">{desktopPresentation ? 'Chuyển đến...' : 'Move to...'}</span>
                     <ChevronRight size={14} style={{ color: 'var(--text-tertiary)' }} />
                   </button>
                   {moveOpen && (
@@ -1114,7 +1128,7 @@ export function NoteEditor({
                       onClick={(e) => e.stopPropagation()}
                     >
                       <MenuBtn
-                        label="No folder"
+                        label={desktopPresentation ? 'Không có thư mục' : 'No folder'}
                         onClick={() => { onMove(note.id, null); setMenuOpen(false); setMoveOpen(false); }}
                       />
                       {folders.map((f) => (
@@ -1132,7 +1146,7 @@ export function NoteEditor({
                 <div className="h-px my-1" style={{ backgroundColor: 'var(--border)' }} />
                 <MenuBtn
                   icon={<Trash2 size={15} />}
-                  label="Move to trash"
+                  label={desktopPresentation ? 'Chuyển vào thùng rác' : 'Move to trash'}
                   danger
                   onClick={() => { onTrash(note.id); setMenuOpen(false); }}
                 />
@@ -1141,6 +1155,13 @@ export function NoteEditor({
           </div>
         </div>
       </div>
+
+      {desktopPresentation && <section className="tanooki-editor-document-header">
+        <div className="tanooki-editor-document-title-row">
+          <input value={title} onChange={(e) => setTitle(e.target.value)} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" className="tanooki-editor-title" style={{ color: 'var(--text)' }} />
+        </div>
+        {desktopTags.length > 0 && <div className="tanooki-editor-tags" aria-label="Thẻ của ghi chú">{desktopTags.map((tag) => <span key={tag}>#{tag}</span>)}</div>}
+      </section>}
 
       {syncConflict && <div role="alert" className="mx-3 my-2 rounded-lg border border-amber-400 bg-amber-50 p-3 text-sm text-amber-950">
         This note also changed on another device. Autosave is paused to protect your edits.
@@ -1165,16 +1186,16 @@ export function NoteEditor({
       </div>}
 
       {/* Editor area */}
-      <div ref={editorScrollRef} className="flex-1 overflow-y-auto" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 pb-32">
-          <input
+      <div ref={editorScrollRef} className={`flex-1 overflow-y-auto ${desktopPresentation ? 'tanooki-editor-scroll' : ''}`} onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
+        <div className={desktopPresentation ? 'tanooki-editor-canvas' : 'max-w-3xl mx-auto px-4 sm:px-6 py-4 pb-32'}>
+          {!desktopPresentation && <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onPaste={handlePaste}
             placeholder="Title"
             className="w-full text-2xl font-bold bg-transparent outline-none text-app mb-3 placeholder:text-tertiary"
             style={{ color: 'var(--text)' }}
-          />
+          />}
           <div
             ref={editorRef}
             contentEditable
@@ -1219,8 +1240,8 @@ export function NoteEditor({
                 if (selectedImage !== e.target) selectImage(e.target);
               } else { clearSelection(); rememberCaret(); }
             }}
-            data-placeholder="Start writing..."
-            className="note-content w-full min-h-[200px] outline-none text-app text-sm leading-relaxed"
+            data-placeholder={desktopPresentation ? 'Bắt đầu viết ghi chú của bạn...' : 'Start writing...'}
+            className={`note-content w-full outline-none text-app leading-relaxed ${desktopPresentation ? '' : 'min-h-[200px] text-sm'}`}
             style={{ color: 'var(--text)' }}
           />
 
@@ -1406,7 +1427,7 @@ export function NoteEditor({
 
       {/* Bottom attachment bar */}
       <div
-        className="flex items-center gap-2 px-3 py-2 border-t flex-shrink-0"
+        className={`flex items-center gap-2 px-3 py-2 border-t flex-shrink-0 ${desktopPresentation ? 'tanooki-editor-attachment-bar' : ''}`}
         style={{ borderColor: 'var(--border)' }}
       >
         <input
@@ -1432,7 +1453,7 @@ export function NoteEditor({
           style={{ color: 'var(--text-secondary)' }}
         >
           {uploading ? <Loader2 size={15} className="animate-spin" /> : <Paperclip size={15} />}
-          <span className="hidden sm:inline">Attach file</span>
+          <span className="hidden sm:inline">{desktopPresentation ? 'Đính kèm tệp' : 'Attach file'}</span>
         </button>
         <button
           onPointerDown={rememberCaret}
@@ -1442,11 +1463,11 @@ export function NoteEditor({
           style={{ color: 'var(--text-secondary)' }}
         >
           <ImageIcon size={15} />
-          <span className="hidden sm:inline">Add image</span>
+          <span className="hidden sm:inline">{desktopPresentation ? 'Thêm hình ảnh' : 'Add image'}</span>
         </button>
         {uploading && (
           <span className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>
-            Uploading {uploadsInProgress} file{uploadsInProgress === 1 ? '' : 's'}...
+          {desktopPresentation ? `Đang tải ${uploadsInProgress} tệp...` : `Uploading ${uploadsInProgress} file${uploadsInProgress === 1 ? '' : 's'}...`}
           </span>
         )}
       </div>

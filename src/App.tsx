@@ -10,6 +10,7 @@ import { DesktopSidebar } from '@/components/DesktopSidebar';
 import { TanookiDashboard } from '@/components/TanookiDashboard';
 import { NoteList } from '@/components/NoteList';
 import { NoteEditor } from '@/components/NoteEditor';
+import { DesktopNoteInfoPanel } from '@/components/DesktopNoteInfoPanel';
 import { SettingsView } from '@/components/SettingsView';
 import { RealtimeDiagnosticsPanel } from '@/components/RealtimeDiagnosticsPanel';
 import { FolderSyncNotice } from '@/components/FolderSyncNotice';
@@ -20,6 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { ViewType } from '@/lib/navigation';
 import { getInitialView, getDashboardNoteDestination, shouldAutoSelectNote } from '@/lib/dashboardData.js';
 import { getMobileDestinationAfterView, getMobileFolderState, getMobileNewNoteState, getMobileRecentState, getMobileSearchState, shouldShowMobileBottomNav } from '@/lib/mobileNavigation.js';
+import { getDesktopViewLabel } from '@/lib/desktopWorkspace.js';
 import { noteHasTag, searchNotes } from '@/lib/utils';
 
 function AppContent() {
@@ -32,6 +34,7 @@ function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileDestination, setMobileDestination] = useState<MobileDestination>('home');
   const [focusSearchPending, setFocusSearchPending] = useState(false);
+  const [infoPanelOpen, setInfoPanelOpen] = useState(false);
   const { toast } = useToast();
   const diagnosticsPanel = import.meta.env.DEV ? (
     <RealtimeDiagnosticsPanel diagnostics={data.realtimeDiagnostics} />
@@ -277,7 +280,7 @@ function AppContent() {
   };
 
   return (
-    <div className="h-screen flex overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
+    <div className="h-screen flex overflow-hidden relative" style={{ backgroundColor: 'var(--bg)' }}>
       <FolderSyncNotice conflicts={data.folderConflicts} error={data.folderSyncError} onResolve={data.resolveFolderConflict} />
       {/* The note editor already has a Back button on mobile. */}
             {/* Sidebar - desktop */}
@@ -295,6 +298,7 @@ function AppContent() {
           onRenameFolder={data.renameFolder}
           onDeleteFolder={data.removeFolder}
           onSignOut={signOut}
+          hideSearch={isDesktop}
         />
       </div>
 
@@ -384,7 +388,7 @@ function AppContent() {
             <div
               className={`${
                 selectedNoteId ? 'hidden lg:flex' : 'flex'
-              } w-full max-lg:min-w-0 max-lg:max-w-full lg:w-80 xl:w-96 flex-shrink-0 border-r flex-col relative`}
+              } w-full max-lg:min-w-0 max-lg:max-w-full lg:w-[300px] xl:w-[320px] 2xl:w-[340px] flex-shrink-0 border-r flex-col relative`}
               style={{ borderColor: 'var(--border)' }}
             >
               {/* Mobile menu button */}
@@ -414,12 +418,14 @@ function AppContent() {
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 mobileSearchMode={!isDesktop && mobileDestination === 'search' && view.kind === 'all'}
-                hideAddButton={showMobileBottomNav}
+                hideAddButton={showMobileBottomNav || isDesktop}
+                desktopMode={isDesktop}
+                contextTitle={getDesktopViewLabel(view, data.folders)}
               />
             </div>
 
             {/* Editor panel */}
-        <div className={`${selectedNoteId ? 'flex' : 'hidden lg:flex'} max-lg:w-full max-lg:min-w-0 max-lg:max-w-full flex-1 overflow-hidden`}>
+        <div className={`${selectedNoteId ? 'flex' : 'hidden lg:flex'} max-lg:w-full max-lg:min-w-0 max-lg:max-w-full flex-1 min-w-0 overflow-hidden`}>
               <NoteEditor
                 note={selectedNote}
                 folders={data.folders}
@@ -433,6 +439,10 @@ function AppContent() {
                 onRemoveAttachment={data.removeAttachment}
                 onRenameAttachment={data.renameAttachment}
                 onBack={() => setSelectedNoteId(null)}
+                desktopPresentation={isDesktop}
+                breadcrumb={getDesktopViewLabel(view, data.folders)}
+                onToggleInfoPanel={() => setInfoPanelOpen((open) => !open)}
+                infoPanelOpen={infoPanelOpen}
               />
             </div>
           </>
@@ -464,10 +474,21 @@ function AppContent() {
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               hideAddButton={showMobileBottomNav}
+              desktopMode={isDesktop}
+              contextTitle={getDesktopViewLabel(view, data.folders)}
             />
           </div>
         )}
       </main>
+      {isDesktop && selectedNote && view.kind !== 'home' && view.kind !== 'settings' && view.kind !== 'trash' && (
+        <DesktopNoteInfoPanel
+          note={selectedNote}
+          folders={data.folders}
+          attachments={data.getAttachmentsForNote(selectedNote.id)}
+          onClose={() => setInfoPanelOpen(false)}
+          isOpen={infoPanelOpen}
+        />
+      )}
       {showMobileBottomNav && (
         <MobileBottomNav
           active={mobileDestination}

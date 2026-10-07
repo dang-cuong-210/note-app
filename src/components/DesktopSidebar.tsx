@@ -19,6 +19,7 @@ interface DesktopSidebarProps {
   onRenameFolder: (id: string, name: string) => void;
   onDeleteFolder: (id: string) => void;
   onSignOut: () => void;
+  hideSearch?: boolean;
 }
 
 const navItems = [
@@ -31,7 +32,7 @@ const navItems = [
 ];
 
 export function DesktopSidebar(props: DesktopSidebarProps) {
-  const { notes, folders, currentView, searchQuery, onSearchChange, onSearchSubmit, onViewChange, onAddNote, onAddFolder, onRenameFolder, onDeleteFolder, onSignOut } = props;
+  const { notes, folders, currentView, searchQuery, onSearchChange, onSearchSubmit, onViewChange, onAddNote, onAddFolder, onRenameFolder, onDeleteFolder, onSignOut, hideSearch = false } = props;
   const [folderInputOpen, setFolderInputOpen] = useState(false);
   const [folderName, setFolderName] = useState('');
   const [folderMenuFor, setFolderMenuFor] = useState<string | null>(null);
@@ -90,7 +91,7 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
       <button type="button" onClick={onAddNote} className="tanooki-desktop-create"><Plus size={18} />Ghi chú mới</button>
     </div>
 
-    {currentView.kind !== 'home' && <div className="px-4 pb-3">
+    {currentView.kind !== 'home' && !hideSearch && <div className="px-4 pb-3">
       <form onSubmit={(event) => { event.preventDefault(); onSearchSubmit(searchQuery.trim()); }} className="relative">
         <label htmlFor="tanooki-sidebar-search" className="sr-only">Tìm kiếm ghi chú</label>
         <Search size={16} aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-tertiary" />
