@@ -888,6 +888,8 @@
   .tanooki-tools-tags > div span { border-radius: var(--radius-pill); background: var(--accent-light); padding: 4px 8px; color: var(--accent); font-size: 11px; }
   .tanooki-tools-tags > p { color: var(--text-tertiary); font-size: 12px; }
   .tanooki-desktop-editor :focus-visible, .tanooki-desktop-note-list :focus-visible, .tanooki-desktop-tools-panel :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tanooki-desktop-editor .tanooki-editor-title:focus,
+  .tanooki-desktop-editor .tanooki-editor-title:focus-visible { outline: none; box-shadow: none; border-color: transparent; }
   @media (max-width: 1279px) and (min-width: 1024px) {
     .tanooki-editor-document-header { padding-inline: 22px; }
     .tanooki-editor-canvas { padding-inline: 22px; }
