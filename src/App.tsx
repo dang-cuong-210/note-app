@@ -413,6 +413,8 @@ function AppContent() {
                 onMove={data.moveNote}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
+                mobileSearchMode={!isDesktop && mobileDestination === 'search' && view.kind === 'all'}
+                hideAddButton={showMobileBottomNav}
               />
             </div>
 
@@ -461,6 +463,7 @@ function AppContent() {
               onMove={data.moveNote}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
+              hideAddButton={showMobileBottomNav}
             />
           </div>
         )}

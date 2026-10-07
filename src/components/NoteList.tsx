@@ -39,6 +39,8 @@ interface NoteListProps {
   searchQuery: string;
     onOpenSidebar?: () => void;
     onSearchChange: (q: string) => void;
+  mobileSearchMode?: boolean;
+  hideAddButton?: boolean;
 }
 
 export function NoteList({
@@ -59,6 +61,8 @@ export function NoteList({
   searchQuery,
   onSearchChange,
     onOpenSidebar,
+  mobileSearchMode = false,
+  hideAddButton = false,
   }: NoteListProps) {
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [moveFor, setMoveFor] = useState<string | null>(null);
@@ -136,13 +140,15 @@ export function NoteList({
     }
   };
 
-  const showAddButton = view.kind !== 'trash' && view.kind !== 'settings' && view.kind !== 'archived';
+  const showAddButton = !hideAddButton && view.kind !== 'trash' && view.kind !== 'settings' && view.kind !== 'archived';
 
   return (
     <div className="h-full w-full max-lg:min-w-0 max-lg:max-w-full max-lg:pb-[calc(72px+env(safe-area-inset-bottom))] flex flex-col bg-app" style={{ backgroundColor: 'var(--bg)' }}>
       {/* Search bar */}
       {view.kind !== 'trash' && (
-      <div className="flex items-center gap-2 px-4 pt-4 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
+      <div className="px-4 pt-4 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
+      {mobileSearchMode && <h1 className="mb-3 px-1 text-xl font-bold" style={{ color: 'var(--text)' }}>Tìm kiếm</h1>}
+      <div className="flex items-center gap-2">
       <button
               type="button"
                       aria-label="Open navigation menu"
@@ -163,8 +169,8 @@ export function NoteList({
             <input
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search notes"
-              aria-label="Search notes"
+              placeholder={mobileSearchMode ? 'Tìm kiếm ghi chú...' : 'Search notes'}
+              aria-label={mobileSearchMode ? 'Tìm kiếm ghi chú' : 'Search notes'}
               data-global-search
               className="w-full bg-secondary text-app text-sm rounded-lg pl-9 pr-8 py-2 outline-none transition-colors placeholder:text-tertiary"
               style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text)' }}
@@ -179,6 +185,7 @@ export function NoteList({
               </button>
             )}
           </div>
+        </div>
         </div>
       )}
 
@@ -209,7 +216,7 @@ export function NoteList({
                         className={`font-semibold text-sm truncate ${selected ? 'text-accent' : 'text-app'}`}
                         style={{ color: selected ? 'var(--accent)' : 'var(--text)' }}
                       >
-                        {note.title || 'Untitled'}
+                        {note.title.trim() || (mobileSearchMode ? 'Chưa có tiêu đề' : 'Untitled')}
                       </h3>
                       <span className="text-xs text-tertiary flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>
                         {view.kind === 'trash' ? formatTime(note.trashedAt || note.updatedAt) : formatTime(note.updatedAt)}
@@ -219,7 +226,7 @@ export function NoteList({
                       className="note-preview text-secondary text-xs"
                       style={{ color: 'var(--text-secondary)' }}
                     >
-                      {getPreview(note.content) || 'No additional text'}
+                      {getPreview(note.content) || (mobileSearchMode ? 'Chưa có nội dung' : 'No additional text')}
                     </p>
                     <div className="flex items-center gap-2 mt-1.5">
                       {note.pinned && (
