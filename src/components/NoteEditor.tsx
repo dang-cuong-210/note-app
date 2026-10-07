@@ -1225,7 +1225,7 @@ export function NoteEditor({
       </div>}
 
       {/* Editor area */}
-      <div ref={editorScrollRef} className={`flex-1 overflow-y-auto ${desktopPresentation ? 'tanooki-editor-scroll' : ''}`} onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
+      <div ref={editorScrollRef} className={`flex-1 overflow-y-auto ${desktopPresentation ? 'tanooki-editor-scroll' : 'tanooki-mobile-editor-scroll'}`} onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
         <div className={desktopPresentation ? 'tanooki-editor-canvas' : 'tanooki-mobile-editor-canvas'}>
           <div
             ref={editorRef}
