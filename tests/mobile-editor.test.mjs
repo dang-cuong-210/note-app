@@ -60,9 +60,13 @@ test('bottom sheets are accessible dialogs with close, Escape, focus handling an
 test('mobile editor styles are scoped below 1024px and desktop tools remain unchanged', () => {
   assert.match(css, /@media \(max-width: 1023px\)[\s\S]*?\.tanooki-mobile-editor-canvas/);
   assert.match(editor, /tanooki-mobile-editor-scroll/);
+  assert.doesNotMatch(editor, /min-h-\[200px\]/);
+  assert.match(editor, /event\.target !== event\.currentTarget/);
+  assert.match(editor, /range\.selectNodeContents\(editor\)/);
   assert.match(css, /\.tanooki-mobile-editor-scroll \{ display: flex; width: 100%; min-height: 0; flex: 1 1 0; flex-direction: column; overflow-y: auto; \}/);
-  assert.match(css, /\.tanooki-mobile-editor-canvas \{ display: flex; width: 100%; min-width: 0; max-width: none; flex: 1 0 auto; flex-direction: column;/);
-  assert.match(css, /\.tanooki-mobile-editor-canvas > \.note-content \{ width: 100%; min-width: 0; min-height: 0; flex: 1 0 auto;/);
+  assert.match(css, /\.tanooki-mobile-editor-canvas \{ display: flex; width: 100%; min-width: 0; max-width: none; min-height: 100%; flex: 1 0 auto; flex-direction: column;/);
+  assert.match(css, /\.tanooki-mobile-editor-canvas > \.note-content \{ width: 100%; min-width: 0;/);
+  assert.doesNotMatch(css, /\.tanooki-mobile-editor-canvas > \.note-content \{[^}]*min-height:/);
   assert.doesNotMatch(css, /\.tanooki-mobile-editor > \.flex-1\.overflow-y-auto/);
   assert.doesNotMatch(css, /\.tanooki-mobile-editor-canvas(?: >)? \.note-content \{[^}]*min-height: 100%|\.tanooki-mobile-editor-canvas > \.note-content \{[^}]*min-height: 55vh/);
   assert.match(css, /@media \(min-width: 1400px\)[\s\S]*?\.tanooki-desktop-tools-panel \{ display: flex; \}/);

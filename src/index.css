@@ -922,8 +922,8 @@
   .tanooki-mobile-editor-title input::placeholder { color: var(--text-tertiary); }
   .tanooki-mobile-editor-mode { display: inline-flex; min-width: 40px; height: 40px; flex: none; align-items: center; justify-content: center; gap: 4px; border-radius: 10px; padding: 0 8px; color: var(--accent); font-size: 12px; font-weight: 650; }
   .tanooki-mobile-editor-scroll { display: flex; width: 100%; min-height: 0; flex: 1 1 0; flex-direction: column; overflow-y: auto; }
-  .tanooki-mobile-editor-canvas { display: flex; width: 100%; min-width: 0; max-width: none; flex: 1 0 auto; flex-direction: column; margin: 0; background: var(--bg); padding: 18px 16px 28px; }
-  .tanooki-mobile-editor-canvas > .note-content { width: 100%; min-width: 0; min-height: 0; flex: 1 0 auto; overflow-wrap: anywhere; font-size: 16px; line-height: 1.65; }
+  .tanooki-mobile-editor-canvas { display: flex; width: 100%; min-width: 0; max-width: none; min-height: 100%; flex: 1 0 auto; flex-direction: column; margin: 0; background: var(--bg); padding: 18px 16px 28px; }
+  .tanooki-mobile-editor-canvas > .note-content { width: 100%; min-width: 0; overflow-wrap: anywhere; font-size: 16px; line-height: 1.65; }
   .tanooki-mobile-editor-canvas .note-content table { width: 100%; max-width: 100%; table-layout: fixed; }
   .tanooki-mobile-editor-canvas .note-content th, .tanooki-mobile-editor-canvas .note-content td { overflow-wrap: anywhere; }
   .tanooki-mobile-writing-toolbar { min-height: 52px; justify-content: space-around; background: var(--bg); padding: 6px 10px calc(6px + env(safe-area-inset-bottom)); }

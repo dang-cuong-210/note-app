@@ -1226,7 +1226,18 @@ export function NoteEditor({
 
       {/* Editor area */}
       <div ref={editorScrollRef} className={`flex-1 overflow-y-auto ${desktopPresentation ? 'tanooki-editor-scroll' : 'tanooki-mobile-editor-scroll'}`} onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
-        <div className={desktopPresentation ? 'tanooki-editor-canvas' : 'tanooki-mobile-editor-canvas'}>
+        <div className={desktopPresentation ? 'tanooki-editor-canvas' : 'tanooki-mobile-editor-canvas'} onPointerDown={(event) => {
+          if (desktopPresentation || !mobileWriting || event.target !== event.currentTarget) return;
+          const editor = editorRef.current;
+          if (!editor) return;
+          editor.focus();
+          const selection = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(editor);
+          range.collapse(false);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+        }}>
           <div
             ref={editorRef}
             contentEditable={canEdit}
@@ -1276,7 +1287,7 @@ export function NoteEditor({
               } else { clearSelection(); rememberCaret(); }
             }}
             data-placeholder={desktopPresentation ? 'Bắt đầu viết ghi chú của bạn...' : 'Start writing...'}
-            className={`note-content w-full outline-none text-app leading-relaxed ${desktopPresentation ? '' : 'min-h-[200px] text-sm'}`}
+            className={`note-content w-full outline-none text-app leading-relaxed ${desktopPresentation ? '' : 'text-sm'}`}
             style={{ color: 'var(--text)' }}
           />
 
