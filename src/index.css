@@ -913,7 +913,7 @@
 }
 
 @media (max-width: 1023px) {
-  .tanooki-mobile-editor { height: 100dvh; min-height: 0; overflow: hidden; }
+  .tanooki-mobile-editor { display: flex; height: 100dvh; min-height: 0; flex-direction: column; overflow: hidden; }
   .tanooki-mobile-editor-header { display: flex; min-height: 54px; flex: none; align-items: center; gap: 5px; border-bottom: 1px solid var(--border); background: var(--bg); padding: max(5px, env(safe-area-inset-top)) 8px 6px; }
   .tanooki-mobile-editor-icon { display: grid; width: 38px; height: 40px; flex: none; place-items: center; border-radius: 10px; color: var(--text-secondary); }
   .tanooki-mobile-editor-title { min-width: 0; flex: 1; overflow: hidden; }
@@ -921,8 +921,9 @@
   .tanooki-mobile-editor-title input { width: 100%; min-width: 0; border: 0; background: transparent; color: var(--text); font-size: 15px; font-weight: 650; outline: none; }
   .tanooki-mobile-editor-title input::placeholder { color: var(--text-tertiary); }
   .tanooki-mobile-editor-mode { display: inline-flex; min-width: 40px; height: 40px; flex: none; align-items: center; justify-content: center; gap: 4px; border-radius: 10px; padding: 0 8px; color: var(--accent); font-size: 12px; font-weight: 650; }
-  .tanooki-mobile-editor-canvas { width: 100%; max-width: none; min-height: 100%; margin: 0; background: var(--bg); padding: 18px 16px 28px; }
-  .tanooki-mobile-editor-canvas .note-content { min-height: 55vh; overflow-wrap: anywhere; font-size: 16px; line-height: 1.65; }
+  .tanooki-mobile-editor > .flex-1.overflow-y-auto { display: flex; min-height: 0; flex: 1 1 0%; flex-direction: column; }
+  .tanooki-mobile-editor-canvas { display: flex; width: 100%; max-width: none; min-height: 100%; flex: 1 1 auto; flex-direction: column; margin: 0; background: var(--bg); padding: 18px 16px 28px; }
+  .tanooki-mobile-editor-canvas .note-content { width: 100%; min-height: 100%; flex: 1 1 auto; overflow-wrap: anywhere; font-size: 16px; line-height: 1.65; }
   .tanooki-mobile-editor-canvas .note-content table { width: 100%; max-width: 100%; table-layout: fixed; }
   .tanooki-mobile-editor-canvas .note-content th, .tanooki-mobile-editor-canvas .note-content td { overflow-wrap: anywhere; }
   .tanooki-mobile-writing-toolbar { min-height: 52px; justify-content: space-around; background: var(--bg); padding: 6px 10px calc(6px + env(safe-area-inset-bottom)); }
