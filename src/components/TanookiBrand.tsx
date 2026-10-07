@@ -1,7 +1,13 @@
-/** Asset slots remain neutral until approved production artwork is supplied. */
+export function TanookiMark() {
+  return <picture className="tanooki-mark">
+    <source srcSet="/brand/tanooki-mark.svg" type="image/svg+xml" />
+    <img src="/brand/tanooki-mark.png" width="1254" height="1254" alt="" />
+  </picture>;
+}
+
 export function TanookiBrand() {
   return <div className="tanooki-brand">
-    <div className="tanooki-logo-slot" aria-label="Logo tạm thời: đang chờ tài nguyên Tanooki chính thức">Logo tạm thời</div>
+    <TanookiMark />
     <span className="tanooki-wordmark">Tanooki</span>
   </div>;
 }

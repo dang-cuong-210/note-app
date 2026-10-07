@@ -629,7 +629,10 @@
   .tanooki-auth { min-height: 100vh; min-height: 100dvh; color: var(--text); background: var(--bg); font-size: 16px; line-height: 1.6; }
   .tanooki-auth-brand { display: none; }
   .tanooki-brand { display: flex; align-items: center; flex-direction: column; gap: 8px; }
-  .tanooki-logo-slot { display: grid; place-items: center; width: 120px; height: 88px; border: 1px dashed var(--border); border-radius: var(--radius-modal); color: var(--auth-muted); font-size: 12px; }
+  .tanooki-mark { display: block; width: 120px; flex-shrink: 0; background: var(--tanooki-paper); border-radius: var(--radius-card); }
+  .tanooki-mark img { display: block; width: 100%; height: auto; }
+  .tanooki-sidebar-brand { display: flex; align-items: center; gap: 8px; font-family: var(--font-brand); font-weight: 800; }
+  .tanooki-sidebar-brand .tanooki-mark { width: 32px; }
   .tanooki-wordmark { font-family: var(--font-brand); font-weight: 800; font-size: 42px; line-height: 1.15; }
   .tanooki-auth-panel { min-width: 0; padding: 24px 20px; }
   .tanooki-auth-card { width: 100%; max-width: 540px; margin: auto; border: 0; }
@@ -653,7 +656,7 @@
   @media (min-width: 1024px) {
     .tanooki-auth { display: grid; grid-template-columns: 55% 45%; background: var(--bg-secondary); }
     .tanooki-auth-brand { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 32px; min-width: 0; }
-    .tanooki-auth-brand .tanooki-logo-slot { width: 180px; height: 144px; }
+    .tanooki-auth-brand .tanooki-mark { width: 180px; }
     .tanooki-auth-brand .tanooki-wordmark { font-size: 56px; }
     .tanooki-tagline { font-size: 20px; font-weight: 600; text-align: center; margin: 24px 0; }
     .tanooki-art-slot { display: grid; place-items: center; width: 100%; min-height: 260px; flex: 1; max-height: 420px; border: 1px dashed var(--border); border-radius: var(--radius-modal); text-align: center; padding: 32px; color: var(--auth-muted); font-size: 14px; }

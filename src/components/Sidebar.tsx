@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { TanookiMark } from '@/components/TanookiBrand';
 import {
   FileText,
   Pin,
@@ -129,8 +130,8 @@ export function Sidebar({
     <div className="h-full flex flex-col bg-secondary" style={{ backgroundColor: 'var(--bg-secondary)' }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-4">
-        <h1 className="text-lg font-bold text-app" style={{ color: 'var(--text)' }}>
-          Tanooki
+        <h1 className="tanooki-sidebar-brand text-lg text-app" style={{ color: 'var(--text)' }}>
+          <TanookiMark /><span>Tanooki</span>
         </h1>
         {onClose && (
           <button
