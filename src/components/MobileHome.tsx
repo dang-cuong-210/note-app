@@ -1,9 +1,10 @@
-import type { FormEvent } from 'react';
-import { ArrowRight, Clock3, FileText, Folder as FolderIcon, Pin, Search } from 'lucide-react';
+import { useState, type FormEvent } from 'react';
+import { ArrowRight, Clock3, FileText, Folder as FolderIcon, Pin, Plus, Search } from 'lucide-react';
 import type { Folder, Note } from '@/types';
 import { formatTime, getPreview } from '@/lib/utils';
 import { getDashboardPinnedNotes, getDashboardRecentNotes } from '@/lib/dashboardData.js';
 import { TanookiMark } from '@/components/TanookiBrand';
+import { MobileCreateFolderSheet } from '@/components/MobileEditorSheets';
 
 interface MobileHomeProps {
   notes: Note[];
@@ -58,9 +59,10 @@ export function MobileHome({ notes, searchQuery, onSearchChange, onSearchSubmit,
   </div>;
 }
 
-export function MobileFoldersView({ folders, notes, onOpenFolder }: { folders: Folder[]; notes: Note[]; onOpenFolder: (id: string) => void }) {
+export function MobileFoldersView({ folders, notes, onOpenFolder, onAddFolder }: { folders: Folder[]; notes: Note[]; onOpenFolder: (id: string) => void; onAddFolder: (name: string) => void }) {
+  const [createOpen, setCreateOpen] = useState(false);
   return <div className="tanooki-mobile-page">
-    <header className="tanooki-mobile-page-heading"><h1>Thư mục</h1><p>Ghi chú được sắp xếp theo chủ đề.</p></header>
+    <header className="tanooki-mobile-page-heading"><div><h1>Thư mục</h1><p>Ghi chú được sắp xếp theo chủ đề.</p></div><button type="button" aria-label="Tạo thư mục" onClick={() => setCreateOpen(true)}><Plus size={20} /></button></header>
     {folders.length ? <div className="tanooki-mobile-folder-list">
       {folders.map((folder, index) => {
         const count = notes.filter((note) => note.folderId === folder.id && !note.trashed && !note.archived).length;
@@ -71,5 +73,6 @@ export function MobileFoldersView({ folders, notes, onOpenFolder }: { folders: F
         </button>;
       })}
     </div> : <p className="tanooki-mobile-empty">Chưa có thư mục nào.</p>}
+    <MobileCreateFolderSheet open={createOpen} onClose={() => setCreateOpen(false)} onCreate={onAddFolder} />
   </div>;
 }

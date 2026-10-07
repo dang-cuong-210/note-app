@@ -30,6 +30,7 @@ function AppContent() {
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
   const [view, setView] = useState<ViewType>(() => getInitialView());
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [mobileNewNoteId, setMobileNewNoteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileDestination, setMobileDestination] = useState<MobileDestination>('home');
@@ -166,6 +167,7 @@ function AppContent() {
   };
 
   const handleSelectNote = (id: string) => {
+    setMobileNewNoteId(null);
     setSelectedNoteId(id);
   };
 
@@ -273,6 +275,7 @@ function AppContent() {
   };
   const createMobileNote = () => {
     const note = data.addNote(null);
+    setMobileNewNoteId(note.id);
     const destination = getMobileNewNoteState(note.id);
     setView(destination.view);
     setMobileDestination(destination.destination);
@@ -365,6 +368,7 @@ function AppContent() {
             folders={data.folders}
             notes={data.notes}
             onOpenFolder={(id) => { const destination = getMobileFolderState(id); setView(destination.view); setMobileDestination(destination.destination); setSelectedNoteId(destination.selectedNoteId); }}
+            onAddFolder={data.addFolder}
           />
         ) : showMobileMore ? (
           <MobileMoreView
@@ -420,6 +424,7 @@ function AppContent() {
                 mobileSearchMode={!isDesktop && mobileDestination === 'search' && view.kind === 'all'}
                 hideAddButton={showMobileBottomNav || isDesktop}
                 desktopMode={isDesktop}
+                mobileMode={!isDesktop}
                 contextTitle={getDesktopViewLabel(view, data.folders)}
               />
             </div>
@@ -438,8 +443,10 @@ function AppContent() {
                 onAddAttachment={data.addAttachment}
                 onRemoveAttachment={data.removeAttachment}
                 onRenameAttachment={data.renameAttachment}
-                onBack={() => setSelectedNoteId(null)}
+                onDuplicate={handleDuplicate}
+                onBack={() => { setMobileNewNoteId(null); setSelectedNoteId(null); }}
                 desktopPresentation={isDesktop}
+                startInWritingMode={!isDesktop && mobileNewNoteId === selectedNote?.id}
                 breadcrumb={getDesktopViewLabel(view, data.folders)}
                 onToggleToolsPanel={() => setToolsPanelOpen((open) => !open)}
                 toolsPanelOpen={toolsPanelOpen}
@@ -475,6 +482,7 @@ function AppContent() {
               onSearchChange={setSearchQuery}
               hideAddButton={showMobileBottomNav}
               desktopMode={isDesktop}
+                mobileMode={!isDesktop}
               contextTitle={getDesktopViewLabel(view, data.folders)}
             />
           </div>

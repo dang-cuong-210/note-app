@@ -20,6 +20,7 @@ import type { Note, Folder } from '@/types';
 import type { ViewType } from '@/lib/navigation';
 import { sortNotes, formatTime, getPreview, htmlToText, noteHasTag } from '@/lib/utils';
 import { useToast } from '@/contexts/ToastContext';
+import { MobileNoteActionsSheet, MobileTrashActionsSheet } from '@/components/MobileEditorSheets';
 
 interface NoteListProps {
   notes: Note[];
@@ -42,6 +43,7 @@ interface NoteListProps {
   mobileSearchMode?: boolean;
   hideAddButton?: boolean;
   desktopMode?: boolean;
+  mobileMode?: boolean;
   contextTitle?: string;
 }
 
@@ -66,6 +68,7 @@ export function NoteList({
   mobileSearchMode = false,
   hideAddButton = false,
   desktopMode = false,
+  mobileMode = false,
   contextTitle = 'Tất cả ghi chú',
   }: NoteListProps) {
   const [menuFor, setMenuFor] = useState<string | null>(null);
@@ -100,6 +103,7 @@ export function NoteList({
     : view.kind === 'recent'
       ? [...searched].sort((a, b) => b.updatedAt - a.updatedAt)
       : sortNotes(searched, settings);
+  const menuNote = sorted.find((note) => note.id === menuFor) || null;
 
   const folderName = (id: string | null) => folders.find((f) => f.id === id)?.name || null;
   const localized = desktopMode || mobileSearchMode;
@@ -109,7 +113,7 @@ export function NoteList({
 
   // Close menu on outside click/touch
   useEffect(() => {
-    if (!menuFor) return;
+    if (!menuFor || mobileMode) return;
     const handler = (e: Event) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuFor(null);
@@ -122,7 +126,7 @@ export function NoteList({
       document.removeEventListener('mousedown', handler);
       document.removeEventListener('touchstart', handler);
     };
-  }, [menuFor]);
+  }, [menuFor, mobileMode]);
 
   const handleTrash = (note: Note) => {
     onTrash(note.id);
@@ -269,14 +273,14 @@ export function NoteList({
                         backgroundColor: selected || menuFor === note.id ? 'var(--accent-light)' : 'var(--bg)',
                         opacity: menuFor === note.id ? 1 : undefined,
                       }}
-                      aria-label="Note actions"
+                      aria-label={desktopMode ? 'Thao tác ghi chú' : 'Thao tác ghi chú'}
                     >
                       <MoreHorizontal size={16} />
                     </button>
                   </div>
 
                   {/* Dropdown menu */}
-                  {menuFor === note.id && (
+                  {menuFor === note.id && !mobileMode && (
                     <div
                       className="absolute right-2 top-9 z-50 w-48 rounded-xl shadow-xl border border-app py-1 animate-scale-in"
                       style={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)', boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}
@@ -345,6 +349,19 @@ export function NoteList({
           <Plus size={24} />
         </button>
       )}
+
+      {mobileMode && menuNote && view.kind === 'trash' && <MobileTrashActionsSheet note={menuNote} open onClose={() => setMenuFor(null)} onRestore={onRestore} onPermanentDelete={() => { void handleDelete(menuNote); }} />}
+      {mobileMode && menuNote && view.kind !== 'trash' && <MobileNoteActionsSheet
+        note={menuNote}
+        folders={folders}
+        open
+        onClose={() => setMenuFor(null)}
+        onTogglePin={onTogglePin}
+        onArchive={() => handleArchive(menuNote)}
+        onMove={onMove}
+        onDuplicate={onDuplicate}
+        onTrash={(id) => { const target = sorted.find((item) => item.id === id); if (target) handleTrash(target); }}
+      />}
     </div>
   );
 }

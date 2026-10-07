@@ -33,6 +33,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { isAcceptedImageType, uploadNoteImage, deleteNoteImage } from '@/lib/images';
 import { formatFileSize, getFileIcon, refreshAttachmentUrl } from '@/lib/attachments';
 import { extractTags } from '@/lib/utils';
+import { MobileEditorToolsSheet, MobileNoteActionsSheet } from '@/components/MobileEditorSheets';
 
 // Attachment display settings travel inside note HTML, so no database migration is needed.
 // The marker is a comment, never a visible or editable element.
@@ -112,8 +113,10 @@ interface NoteEditorProps {
   onAddAttachment: (noteId: string, file: File) => Promise<Attachment | null>;
   onRemoveAttachment: (id: string) => Promise<void>;
   onRenameAttachment: (id: string, name: string) => Promise<boolean>;
+  onDuplicate: (id: string) => void;
   onBack: () => void;
   desktopPresentation?: boolean;
+  startInWritingMode?: boolean;
   breadcrumb?: string;
   onToggleToolsPanel?: () => void;
   toolsPanelOpen?: boolean;
@@ -131,8 +134,10 @@ export function NoteEditor({
   onAddAttachment,
   onRemoveAttachment,
   onRenameAttachment,
+  onDuplicate,
   onBack,
   desktopPresentation = false,
+  startInWritingMode = false,
   breadcrumb = 'Tất cả ghi chú',
   onToggleToolsPanel,
   toolsPanelOpen = false,
@@ -144,6 +149,8 @@ export function NoteEditor({
   const displayedNoteId = useRef<string | null>(null);
   const [content, setContent] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileWriting, setMobileWriting] = useState(startInWritingMode);
+  const [mobileSheet, setMobileSheet] = useState<'tools' | 'actions' | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
   const [imageViewer, setImageViewer] = useState<string | null>(null);
   const [uploadsInProgress, setUploadsInProgress] = useState(0);
@@ -177,6 +184,18 @@ export function NoteEditor({
   const activeNoteId = useRef<string | undefined>(note?.id);
   activeNoteId.current = note?.id;
   const { toast } = useToast();
+  const canEdit = desktopPresentation || mobileWriting;
+
+  useEffect(() => {
+    setMobileWriting(startInWritingMode);
+    setMobileSheet(null);
+  }, [note?.id, startInWritingMode]);
+
+  useEffect(() => {
+    if (desktopPresentation || !mobileWriting) return;
+    const frame = window.requestAnimationFrame(() => editorRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [desktopPresentation, mobileWriting, note?.id]);
 
   // Reconcile remote updates without resetting the caret or overwriting unsaved typing.
   // This prevents a second device's changes from silently replacing local edits.
@@ -1047,10 +1066,10 @@ export function NoteEditor({
   const desktopTags = desktopPresentation ? extractTags(note.content) : [];
 
   return (
-    <div className={`h-full min-w-0 flex flex-col bg-app ${desktopPresentation ? 'tanooki-desktop-editor' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
+    <div className={`${desktopPresentation ? 'h-full' : 'h-[100dvh] tanooki-mobile-editor'} min-h-0 min-w-0 flex flex-col bg-app ${desktopPresentation ? 'tanooki-desktop-editor' : mobileWriting ? 'is-writing' : 'is-reading'}`} style={{ backgroundColor: 'var(--bg)' }}>
       {/* Toolbar */}
       <div
-        className={`flex items-center justify-between gap-3 px-3 py-2 border-b flex-shrink-0 ${desktopPresentation ? 'tanooki-editor-topbar' : ''}`}
+        className={`${desktopPresentation ? 'flex items-center justify-between gap-3 px-3 py-2 border-b flex-shrink-0 tanooki-editor-topbar' : 'hidden'}`}
         style={{ borderColor: 'var(--border)' }}
       >
         <div className="flex items-center gap-1">
@@ -1093,7 +1112,7 @@ export function NoteEditor({
               <MoreHorizontal size={18} />
             </button>
 
-            {menuOpen && (
+            {desktopPresentation && menuOpen && (
               <div
                 className="absolute right-0 top-10 z-50 w-48 rounded-xl shadow-xl border py-1 animate-scale-in"
                 style={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)', boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}
@@ -1156,6 +1175,26 @@ export function NoteEditor({
         </div>
       </div>
 
+      {!desktopPresentation && <header className="tanooki-mobile-editor-header">
+        <button type="button" className="tanooki-mobile-editor-icon" onClick={onBack} aria-label="Quay lại" title="Quay lại"><ChevronLeft size={21} /></button>
+        <div className="tanooki-mobile-editor-title">
+          {mobileWriting
+            ? <input value={title} onChange={(event) => setTitle(event.target.value)} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" />
+            : <strong>{title.trim() || 'Chưa có tiêu đề'}</strong>}
+        </div>
+        <button type="button" className="tanooki-mobile-editor-mode" onClick={() => {
+          if (mobileWriting) {
+            clearSelection();
+            (document.activeElement as HTMLElement | null)?.blur?.();
+            setMobileWriting(false);
+          } else setMobileWriting(true);
+        }} aria-label={mobileWriting ? 'Xong chỉnh sửa' : 'Chỉnh sửa ghi chú'} title={mobileWriting ? 'Xong' : 'Chỉnh sửa'}>
+          {mobileWriting ? 'Xong' : <><Edit3 size={16} /><span>Chỉnh sửa</span></>}
+        </button>
+        <button type="button" className="tanooki-mobile-editor-icon" onClick={() => setMobileSheet('tools')} aria-label="Công cụ chỉnh sửa" title="Công cụ"><SlidersHorizontal size={19} /></button>
+        <button type="button" className="tanooki-mobile-editor-icon" onClick={() => setMobileSheet('actions')} aria-label="Thao tác ghi chú" title="Thêm thao tác"><MoreHorizontal size={20} /></button>
+      </header>}
+
       {desktopPresentation && <section className="tanooki-editor-document-header">
         <div className="tanooki-editor-document-title-row">
           <input value={title} onChange={(e) => setTitle(e.target.value)} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" className="tanooki-editor-title" style={{ color: 'var(--text)' }} />
@@ -1187,19 +1226,12 @@ export function NoteEditor({
 
       {/* Editor area */}
       <div ref={editorScrollRef} className={`flex-1 overflow-y-auto ${desktopPresentation ? 'tanooki-editor-scroll' : ''}`} onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
-        <div className={desktopPresentation ? 'tanooki-editor-canvas' : 'max-w-3xl mx-auto px-4 sm:px-6 py-4 pb-32'}>
-          {!desktopPresentation && <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onPaste={handlePaste}
-            placeholder="Title"
-            className="w-full text-2xl font-bold bg-transparent outline-none text-app mb-3 placeholder:text-tertiary"
-            style={{ color: 'var(--text)' }}
-          />}
+        <div className={desktopPresentation ? 'tanooki-editor-canvas' : 'tanooki-mobile-editor-canvas'}>
           <div
             ref={editorRef}
-            contentEditable
+            contentEditable={canEdit}
             suppressContentEditableWarning
+            aria-readonly={!canEdit}
             onInput={() => {
               commitEditor();
 
@@ -1208,14 +1240,16 @@ export function NoteEditor({
             onKeyUp={rememberCaret}
             onMouseUp={rememberCaret}
             onTouchEnd={rememberCaret}
-            onPointerDown={e => { if (!onInlinePointerDown(e)) onImagePointerDown(e); }}
-            onPointerMove={e => { if (!onInlinePointerMove(e)) onImagePointerMove(e); }}
-            onPointerUp={e => { if (!onInlinePointerEnd(e)) onImagePointerUp(e); rememberCaret(); }}
+            onPointerDown={e => { if (!canEdit) return; if (!onInlinePointerDown(e)) onImagePointerDown(e); }}
+            onPointerMove={e => { if (!canEdit) return; if (!onInlinePointerMove(e)) onImagePointerMove(e); }}
+            onPointerUp={e => { if (!canEdit) return; if (!onInlinePointerEnd(e)) onImagePointerUp(e); rememberCaret(); }}
             onPointerCancel={(e) => {
+              if (!canEdit) return;
               onInlinePointerEnd(e, true);
               onImagePointerUp(e, true);
             }}
             onContextMenu={(e) => {
+              if (!canEdit) return;
               const inlineNode = (e.target as HTMLElement).closest<HTMLElement>(attachmentSelector);
               if (inlineNode) { e.preventDefault(); selectInlineAttachment(inlineNode); }
               else if (e.target instanceof HTMLImageElement) { e.preventDefault(); selectImage(e.target); }
@@ -1237,7 +1271,8 @@ export function NoteEditor({
                   if (att) void handleOpenAttachment(att);
                 }
               } else if (e.target instanceof HTMLImageElement) {
-                if (selectedImage !== e.target) selectImage(e.target);
+                if (!canEdit) { setImageViewer(e.target.src); setViewerScale(1); }
+                else if (selectedImage !== e.target) selectImage(e.target);
               } else { clearSelection(); rememberCaret(); }
             }}
             data-placeholder={desktopPresentation ? 'Bắt đầu viết ghi chú của bạn...' : 'Start writing...'}
@@ -1252,6 +1287,7 @@ export function NoteEditor({
                 Files not placed in text ({unplacedAttachments.length})
               </h3>
               <div className="space-y-2" onPointerMove={(e) => {
+                if (!canEdit) return;
                 const g = attachmentGesture.current;
                 if (!g || selectedAttachmentId !== g.id) return;
                 if (g.mode === 'resize') {
@@ -1262,6 +1298,7 @@ export function NoteEditor({
                   if (card) { card.style.transform = `translateY(${e.clientY - g.y}px)`; card.style.position = 'relative'; card.style.zIndex = '5'; }
                 }
               }} onPointerUp={(e) => {
+                if (!canEdit) return;
                 const g = attachmentGesture.current;
                 if (g?.mode === 'drag') {
                   const card = [...e.currentTarget.querySelectorAll<HTMLElement>('[data-attachment-id]')].find(el => el.dataset.attachmentId === g.id);
@@ -1271,10 +1308,11 @@ export function NoteEditor({
                   if (target && target !== g.id) moveAttachment(g.id, target);
                 }
                 attachmentGesture.current = null;
-              }} onPointerCancel={() => { attachmentGesture.current = null; }}>
+              }} onPointerCancel={() => { if (canEdit) attachmentGesture.current = null; }}>
                 {unplacedAttachments.map((att, index) => (
                   <div key={att.id} data-attachment-id={att.id} className="relative" style={{ width: `${attachmentLayout.widths[att.id] || 100}%`, maxWidth: '100%', touchAction: selectedAttachmentId === att.id ? 'none' : 'auto' }}
                     onPointerDown={(e) => {
+                      if (!canEdit) return;
                       if ((e.target as HTMLElement).closest('.noted-attachment-toolbar, .noted-attachment-resize-handle, button[aria-label="Remove attachment"], button[aria-label="Open file"]')) return;
                       if (selectedAttachmentId === att.id) {
                         attachmentGesture.current = { id: att.id, x: e.clientX, y: e.clientY, width: attachmentLayout.widths[att.id] || 100, mode: 'drag' };
@@ -1294,25 +1332,28 @@ export function NoteEditor({
                       }
                     }}
                     onPointerMove={(e) => {
+                      if (!canEdit) return;
                       const start = attachmentPressStart.current;
                       if (attachmentLongPress.current && start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 9) {
                         clearTimeout(attachmentLongPress.current); attachmentLongPress.current = null;
                       }
                     }}
                     onPointerUp={() => {
+                      if (!canEdit) return;
                       if (attachmentLongPress.current) clearTimeout(attachmentLongPress.current);
                       attachmentLongPress.current = null;
                       attachmentPressStart.current = null;
                     }}
                     onPointerCancel={() => {
+                      if (!canEdit) return;
                       if (attachmentLongPress.current) clearTimeout(attachmentLongPress.current);
                       attachmentLongPress.current = null;
                       attachmentPressStart.current = null;
                       attachmentGesture.current = null;
                     }}
-                    onContextMenu={(e) => { e.preventDefault(); setSelectedAttachmentId(att.id); }}>
-                    <div className="mb-1 flex justify-end"><button type="button" className="text-xs px-2 py-1 rounded-lg border" onClick={() => insertAttachmentAtCaret(att)}>Insert at cursor ↑</button></div>
-                    <AttachmentItem attachment={att} selected={selectedAttachmentId === att.id}
+                    onContextMenu={(e) => { if (!canEdit) return; e.preventDefault(); setSelectedAttachmentId(att.id); }}>
+                    {canEdit && <div className="mb-1 flex justify-end"><button type="button" className="text-xs px-2 py-1 rounded-lg border" onClick={() => insertAttachmentAtCaret(att)}>Insert at cursor ↑</button></div>}
+                    <AttachmentItem attachment={att} selected={selectedAttachmentId === att.id} actionsEnabled={canEdit}
                       onSelect={() => { setSelectedImage(null); setSelectedAttachmentId(att.id); }}
                       onOpen={() => { if (selectedAttachmentId !== att.id) void handleOpenAttachment(att); }}
                       onDelete={() => handleDeleteAttachment(att)} />
@@ -1427,7 +1468,7 @@ export function NoteEditor({
 
       {/* Bottom attachment bar */}
       <div
-        className={`flex items-center gap-2 px-3 py-2 border-t flex-shrink-0 ${desktopPresentation ? 'tanooki-editor-attachment-bar' : ''}`}
+        className={`${desktopPresentation ? 'flex items-center gap-2 px-3 py-2 border-t flex-shrink-0 tanooki-editor-attachment-bar' : mobileWriting ? 'flex items-center gap-2 px-3 py-2 border-t flex-shrink-0 tanooki-mobile-writing-toolbar' : 'hidden'}`}
         style={{ borderColor: 'var(--border)' }}
       >
         <input
@@ -1453,7 +1494,7 @@ export function NoteEditor({
           style={{ color: 'var(--text-secondary)' }}
         >
           {uploading ? <Loader2 size={15} className="animate-spin" /> : <Paperclip size={15} />}
-          <span className="hidden sm:inline">{desktopPresentation ? 'Đính kèm tệp' : 'Attach file'}</span>
+          <span className={desktopPresentation ? 'hidden sm:inline' : ''}>{desktopPresentation ? 'Đính kèm tệp' : 'Đính kèm'}</span>
         </button>
         <button
           onPointerDown={rememberCaret}
@@ -1463,7 +1504,7 @@ export function NoteEditor({
           style={{ color: 'var(--text-secondary)' }}
         >
           <ImageIcon size={15} />
-          <span className="hidden sm:inline">{desktopPresentation ? 'Thêm hình ảnh' : 'Add image'}</span>
+          <span className={desktopPresentation ? 'hidden sm:inline' : ''}>{desktopPresentation ? 'Thêm hình ảnh' : 'Ảnh'}</span>
         </button>
         {uploading && (
           <span className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>
@@ -1471,6 +1512,11 @@ export function NoteEditor({
           </span>
         )}
       </div>
+
+      {!desktopPresentation && <>
+        <MobileEditorToolsSheet note={note} folders={folders} attachments={attachments} open={mobileSheet === 'tools'} onClose={() => setMobileSheet(null)} onChooseImage={() => imageInputRef.current?.click()} onChooseFile={() => fileInputRef.current?.click()} />
+        <MobileNoteActionsSheet note={note} folders={folders} open={mobileSheet === 'actions'} onClose={() => setMobileSheet(null)} onTogglePin={onTogglePin} onArchive={onArchive} onMove={onMove} onDuplicate={onDuplicate} onTrash={onTrash} />
+      </>}
 
       {/* Image viewer modal */}
       {imageViewer && (
@@ -1484,7 +1530,7 @@ export function NoteEditor({
           >
             <X size={24} />
           </button>
-          <button type="button" className="absolute top-4 left-4 rounded bg-black/70 px-3 py-2 text-white" onClick={() => { handleRemoveImage(imageViewer); setImageViewer(null); }}>Remove image</button>
+          {canEdit && <button type="button" className="absolute top-4 left-4 rounded bg-black/70 px-3 py-2 text-white" onClick={() => { handleRemoveImage(imageViewer); setImageViewer(null); }}>Remove image</button>}
           <img
             src={imageViewer}
             alt="Viewer"
@@ -1537,12 +1583,14 @@ function MenuBtn({
 function AttachmentItem({
   attachment,
   selected,
+  actionsEnabled,
   onSelect,
   onOpen,
   onDelete,
 }: {
   attachment: Attachment;
   selected: boolean;
+  actionsEnabled: boolean;
   onSelect: () => void;
   onOpen: () => void;
   onDelete: () => void;
@@ -1573,7 +1621,7 @@ function AttachmentItem({
       </div>
       <button
         onClick={onOpen}
-        onContextMenu={e => {e.preventDefault(); onSelect();}}
+        onContextMenu={e => { if (!actionsEnabled) return; e.preventDefault(); onSelect(); }}
         className="flex-1 min-w-0 text-left"
       >
         <div className="text-sm font-medium truncate text-app" style={{ color: 'var(--text)' }}>
@@ -1591,14 +1639,14 @@ function AttachmentItem({
       >
         <Download size={16} />
       </button>
-      <button
+      {actionsEnabled && <button
         onClick={onDelete}
         className="flex-shrink-0 p-1.5 rounded-lg hover-bg text-tertiary transition-colors"
         style={{ color: 'var(--text-tertiary)' }}
         aria-label="Remove attachment"
       >
         <X size={16} />
-      </button>
+      </button>}
     </div>
   );
 }
