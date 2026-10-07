@@ -24,7 +24,7 @@ export function MobileHome({ notes, searchQuery, onSearchChange, onSearchSubmit,
 
   return <div className="tanooki-mobile-page">
     <header className="tanooki-mobile-home-header">
-      <div className="tanooki-mobile-brand"><TanookiMark /><span>Tanooki</span></div>
+      <div className="tanooki-mobile-home-brand"><TanookiMark /><span>Tanooki</span></div>
       <p>Ý tưởng của bạn, được lưu giữ dịu dàng.</p>
       <form className="tanooki-mobile-search" onSubmit={submit}>
         <Search size={19} aria-hidden="true" />
