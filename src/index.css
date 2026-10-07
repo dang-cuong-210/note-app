@@ -766,3 +766,71 @@
   .tanooki-auth *, .tanooki-loading * { animation: none !important; transition: none !important; }
   .tanooki-desktop-sidebar *, .tanooki-dashboard * { scroll-behavior: auto !important; transition: none !important; }
 }
+
+@layer components {
+  .tanooki-mobile-page { min-width: 0; width: 100%; height: 100%; overflow-y: auto; padding: 18px 16px calc(104px + env(safe-area-inset-bottom)); color: var(--text); background: var(--bg); }
+  .tanooki-mobile-home-header { padding: 6px 2px 20px; }
+  .tanooki-mobile-brand { display: flex; align-items: center; gap: 9px; font-family: var(--font-brand, 'Nunito', sans-serif); font-size: 24px; font-weight: 800; }
+  .tanooki-mobile-brand .tanooki-mark { width: 36px; height: 36px; }
+  .tanooki-mobile-home-header > p, .tanooki-mobile-page-heading p { margin-top: 3px; color: var(--text-secondary); font-size: 13px; }
+  .tanooki-mobile-search { display: flex; height: 48px; align-items: center; gap: 10px; margin-top: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); padding: 0 12px; color: var(--text-tertiary); }
+  .tanooki-mobile-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 14px; }
+  .tanooki-mobile-search input::placeholder { color: var(--text-tertiary); }
+  .tanooki-mobile-search button { display: grid; width: 34px; height: 34px; flex: none; place-items: center; border-radius: 9px; background: var(--accent); color: white; }
+  .tanooki-mobile-section { margin-top: 18px; }
+  .tanooki-mobile-section-heading { display: flex; min-height: 30px; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .tanooki-mobile-section-heading h2 { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 650; }
+  .tanooki-mobile-section-heading h2 svg { color: var(--accent); }
+  .tanooki-mobile-section-heading > button { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary); font-size: 12px; }
+  .tanooki-mobile-pinned-strip { display: flex; gap: 10px; overflow-x: auto; margin-inline: -16px; padding: 0 16px 5px; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  .tanooki-mobile-pinned-strip::-webkit-scrollbar { display: none; }
+  .tanooki-mobile-pinned-card { display: flex; width: min(76vw, 290px); min-height: 154px; flex: 0 0 auto; flex-direction: column; align-items: flex-start; scroll-snap-align: start; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); padding: 13px; text-align: left; }
+  .tanooki-mobile-card-icon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 9px; background: var(--accent-light); color: var(--accent); }
+  .tanooki-mobile-card-title { width: 100%; overflow: hidden; margin-top: 9px; font-size: 14px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+  .tanooki-mobile-card-preview { display: -webkit-box; overflow: hidden; margin-top: 3px; color: var(--text-secondary); font-size: 12px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .tanooki-mobile-card-time { margin-top: auto; padding-top: 8px; color: var(--text-tertiary); font-size: 11px; }
+  .tanooki-mobile-empty { border: 1px dashed var(--border); border-radius: 11px; padding: 13px; color: var(--text-tertiary); font-size: 13px; }
+  .tanooki-mobile-recent-list { overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); }
+  .tanooki-mobile-recent-row { display: flex; width: 100%; min-width: 0; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); padding: 11px; text-align: left; }
+  .tanooki-mobile-recent-row:last-child { border-bottom: 0; }
+  .tanooki-mobile-recent-icon { display: grid; width: 38px; height: 38px; flex: none; place-items: center; border-radius: 10px; background: var(--bg); color: var(--tanooki-brown); }
+  .tanooki-mobile-recent-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+  .tanooki-mobile-recent-copy strong, .tanooki-mobile-recent-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tanooki-mobile-recent-copy strong { font-size: 13px; font-weight: 600; }
+  .tanooki-mobile-recent-copy > span { color: var(--text-secondary); font-size: 11px; }
+  .tanooki-mobile-recent-row time { flex: none; color: var(--text-tertiary); font-size: 10px; }
+  .tanooki-mobile-page-heading { padding: 8px 2px 18px; }
+  .tanooki-mobile-page-heading h1 { font-size: 25px; font-weight: 700; }
+  .tanooki-mobile-folder-list, .tanooki-mobile-more-list { display: flex; flex-direction: column; gap: 9px; }
+  .tanooki-mobile-folder-list > button, .tanooki-mobile-more-list > button { display: flex; min-height: 64px; width: 100%; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); padding: 10px 12px; text-align: left; }
+  .tanooki-mobile-folder-list > button > span:nth-child(2) { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+  .tanooki-mobile-folder-list strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+  .tanooki-mobile-folder-list small { color: var(--text-tertiary); font-size: 12px; }
+  .tanooki-mobile-folder-list > button > svg { color: var(--text-tertiary); }
+  .tanooki-mobile-folder-icon { display: grid; width: 42px; height: 42px; flex: none; place-items: center; border-radius: 11px; background: var(--accent-light); color: var(--accent); }
+  .tanooki-mobile-folder-icon.tone-1 { color: var(--tanooki-orange); }
+  .tanooki-mobile-folder-icon.tone-2 { color: var(--tanooki-ochre); }
+  .tanooki-mobile-folder-icon.tone-3 { color: var(--tanooki-brown); }
+  .tanooki-mobile-more-list > button > svg { color: var(--accent); }
+  .tanooki-mobile-more-list > button > span:nth-child(2) { flex: 1; font-size: 14px; font-weight: 550; }
+  .tanooki-mobile-more-chevron { color: var(--text-tertiary); font-size: 22px; line-height: 1; }
+  .tanooki-mobile-more-list > button.is-danger, .tanooki-mobile-more-list > button.is-danger > svg { color: var(--danger); }
+  .tanooki-mobile-bottom-nav { position: fixed; z-index: 25; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); height: calc(66px + env(safe-area-inset-bottom)); align-items: start; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 94%, transparent); padding: 7px 8px calc(5px + env(safe-area-inset-bottom)); backdrop-filter: blur(16px); }
+  .tanooki-mobile-bottom-nav > button { display: flex; min-width: 0; height: 48px; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--text-tertiary); font-size: 10px; }
+  .tanooki-mobile-bottom-nav > button.is-active { color: var(--accent); font-weight: 650; }
+  .tanooki-mobile-bottom-nav .tanooki-mobile-new-button { position: relative; z-index: 1; justify-self: center; width: 50px; height: 50px; margin-top: -19px; border: 4px solid var(--bg); border-radius: 17px; background: var(--accent); color: white; box-shadow: 0 3px 12px color-mix(in srgb, var(--accent) 28%, transparent); }
+  .tanooki-mobile-bottom-nav .tanooki-mobile-new-button span { font-size: 9px; line-height: 1; }
+  .tanooki-mobile-settings-wrap { width: 100%; min-width: 0; padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .tanooki-mobile-page :focus-visible, .tanooki-mobile-bottom-nav :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+}
+
+@media (min-width: 1024px) {
+  .tanooki-mobile-bottom-nav { display: none; }
+}
+
+@media (max-width: 374px) {
+  .tanooki-mobile-page { padding-inline: 13px; }
+  .tanooki-mobile-pinned-strip { margin-inline: -13px; padding-inline: 13px; }
+  .tanooki-mobile-recent-row { gap: 8px; padding-inline: 9px; }
+  .tanooki-mobile-recent-row time { max-width: 56px; overflow: hidden; text-overflow: ellipsis; }
+}

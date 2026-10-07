@@ -1,7 +1,7 @@
 import type { Folder, Note, TagInfo } from '../types';
 import type { ViewType } from './navigation';
 
-export function getInitialView(isDesktop: boolean): ViewType;
+export function getInitialView(): ViewType;
 export function shouldAutoSelectNote(view: ViewType): boolean;
 export function getDashboardNoteDestination(noteId: string): { view: ViewType; selectedNoteId: string };
 export function getDashboardActiveNotes(notes: Note[]): Note[];

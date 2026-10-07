@@ -139,7 +139,7 @@ export function NoteList({
   const showAddButton = view.kind !== 'trash' && view.kind !== 'settings' && view.kind !== 'archived';
 
   return (
-    <div className="h-full w-full max-lg:min-w-0 max-lg:max-w-full flex flex-col bg-app" style={{ backgroundColor: 'var(--bg)' }}>
+    <div className="h-full w-full max-lg:min-w-0 max-lg:max-w-full max-lg:pb-[calc(72px+env(safe-area-inset-bottom))] flex flex-col bg-app" style={{ backgroundColor: 'var(--bg)' }}>
       {/* Search bar */}
       {view.kind !== 'trash' && (
       <div className="flex items-center gap-2 px-4 pt-4 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>

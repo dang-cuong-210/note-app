@@ -13,20 +13,25 @@ import { NoteEditor } from '@/components/NoteEditor';
 import { SettingsView } from '@/components/SettingsView';
 import { RealtimeDiagnosticsPanel } from '@/components/RealtimeDiagnosticsPanel';
 import { FolderSyncNotice } from '@/components/FolderSyncNotice';
+import { MobileHome, MobileFoldersView } from '@/components/MobileHome';
+import { MobileBottomNav, MobileMoreView, type MobileDestination } from '@/components/MobileAppNavigation';
 import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ViewType } from '@/lib/navigation';
-import { getInitialView, getDashboardSearchDestination, getDashboardNoteDestination, shouldAutoSelectNote } from '@/lib/dashboardData.js';
+import { getInitialView, getDashboardNoteDestination, shouldAutoSelectNote } from '@/lib/dashboardData.js';
+import { getMobileDestinationAfterView, getMobileFolderState, getMobileNewNoteState, getMobileRecentState, getMobileSearchState, shouldShowMobileBottomNav } from '@/lib/mobileNavigation.js';
 import { noteHasTag, searchNotes } from '@/lib/utils';
 
 function AppContent() {
   const { user, loading: authLoading, signOut } = useAuth();
   const data = useAppData(user?.id ?? null);
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
-  const [view, setView] = useState<ViewType>(() => getInitialView(window.innerWidth >= 1024));
+  const [view, setView] = useState<ViewType>(() => getInitialView());
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mobileDestination, setMobileDestination] = useState<MobileDestination>('home');
+  const [focusSearchPending, setFocusSearchPending] = useState(false);
   const { toast } = useToast();
   const diagnosticsPanel = (
     <RealtimeDiagnosticsPanel diagnostics={data.realtimeDiagnostics} />
@@ -35,11 +40,21 @@ function AppContent() {
     const onResize = () => {
       const desktop = window.innerWidth >= 1024;
       setIsDesktop(desktop);
-      if (!desktop) setView((current) => current.kind === 'home' ? { kind: 'all' } : current);
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  useEffect(() => {
+    if (!focusSearchPending || view.kind !== 'all') return;
+    const frame = window.requestAnimationFrame(() => {
+      const input = Array.from(document.querySelectorAll<HTMLInputElement>('[data-global-search]'))
+        .find((candidate) => candidate.getClientRects().length > 0);
+      input?.focus();
+      setFocusSearchPending(false);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusSearchPending, view]);
 
   useEffect(() => {
     if (data.syncConflicts > 0) {
@@ -83,15 +98,18 @@ function AppContent() {
 
   const handleViewChange = (v: ViewType) => {
     setView(v);
+    setMobileDestination(getMobileDestinationAfterView(v));
     setSearchQuery('');
     if (v.kind === 'settings' || v.kind === 'home' || v.kind === 'recent') setSelectedNoteId(null);
   };
 
   const handleSearchSubmit = (query: string) => {
-    const destination = getDashboardSearchDestination(query);
+    const destination = getMobileSearchState(query);
     setSearchQuery(destination.query);
     setView(destination.view);
-    setSelectedNoteId(null);
+    setMobileDestination(destination.destination);
+    setSelectedNoteId(destination.selectedNoteId);
+    if (!isDesktop) setFocusSearchPending(true);
   };
 
   const handleAddNote = () => {
@@ -232,8 +250,31 @@ function AppContent() {
   }
 
   const showHome = view.kind === 'home' && isDesktop;
-  const showEditor = view.kind !== 'settings' && view.kind !== 'trash' && !showHome;
+  const showMobileHome = !isDesktop && mobileDestination === 'home' && view.kind === 'home';
+  const showMobileFolders = !isDesktop && mobileDestination === 'folders';
+  const showMobileMore = !isDesktop && mobileDestination === 'more' && view.kind !== 'settings';
+  const showEditor = view.kind !== 'settings' && view.kind !== 'trash' && !showHome && !showMobileHome && !showMobileFolders && !showMobileMore;
   const showSettings = view.kind === 'settings';
+  const showMobileBottomNav = shouldShowMobileBottomNav(isDesktop, selectedNoteId, view);
+
+  const openMobileSearch = () => {
+    setMobileDestination('search');
+    setView({ kind: 'all' });
+    setSelectedNoteId(null);
+    setFocusSearchPending(true);
+  };
+  const openMobileHome = () => {
+    setMobileDestination('home');
+    setView({ kind: 'home' });
+    setSelectedNoteId(null);
+  };
+  const createMobileNote = () => {
+    const note = data.addNote(null);
+    const destination = getMobileNewNoteState(note.id);
+    setView(destination.view);
+    setMobileDestination(destination.destination);
+    setSelectedNoteId(destination.selectedNoteId);
+  };
 
   return (
     <div className="h-screen flex overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
@@ -306,7 +347,28 @@ function AppContent() {
             onViewChange={handleViewChange}
             onOpenNote={(id) => { const destination = getDashboardNoteDestination(id); setView(destination.view); setSelectedNoteId(destination.selectedNoteId); }}
           />
+        ) : showMobileHome ? (
+          <MobileHome
+            notes={data.notes}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onSearchSubmit={handleSearchSubmit}
+            onOpenNote={(id) => { const destination = getDashboardNoteDestination(id); setView(destination.view); setMobileDestination('search'); setSelectedNoteId(destination.selectedNoteId); }}
+            onViewRecent={() => { const destination = getMobileRecentState(); setView(destination.view); setMobileDestination(destination.destination); setSelectedNoteId(destination.selectedNoteId); }}
+          />
+        ) : showMobileFolders ? (
+          <MobileFoldersView
+            folders={data.folders}
+            notes={data.notes}
+            onOpenFolder={(id) => { const destination = getMobileFolderState(id); setView(destination.view); setMobileDestination(destination.destination); setSelectedNoteId(destination.selectedNoteId); }}
+          />
+        ) : showMobileMore ? (
+          <MobileMoreView
+            onNavigate={(destination) => { setView(destination); setMobileDestination(getMobileDestinationAfterView(destination)); setSelectedNoteId(null); }}
+            onSignOut={signOut}
+          />
         ) : showSettings ? (
+          <div className="tanooki-mobile-settings-wrap">
           <SettingsView
             settings={data.settings}
             notes={data.notes}
@@ -315,6 +377,7 @@ function AppContent() {
             onImport={data.importData}
             onBack={() => handleViewChange({ kind: 'all' })}
           />
+          </div>
         ) : showEditor ? (
           <>
             {/* Notes list panel */}
@@ -402,6 +465,16 @@ function AppContent() {
           </div>
         )}
       </main>
+      {showMobileBottomNav && (
+        <MobileBottomNav
+          active={mobileDestination}
+          onHome={openMobileHome}
+          onSearch={openMobileSearch}
+          onNew={createMobileNote}
+          onFolders={() => { setMobileDestination('folders'); setSelectedNoteId(null); }}
+          onMore={() => { setMobileDestination('more'); setSelectedNoteId(null); }}
+        />
+      )}
       {diagnosticsPanel}
     </div>
   );

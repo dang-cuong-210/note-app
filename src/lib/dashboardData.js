@@ -1,6 +1,6 @@
 /** Pure dashboard selectors shared by the UI and regression tests. */
-export function getInitialView(isDesktop) {
-  return isDesktop ? { kind: 'home' } : { kind: 'all' };
+export function getInitialView() {
+  return { kind: 'home' };
 }
 
 export function shouldAutoSelectNote(view) {
