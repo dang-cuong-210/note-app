@@ -40,6 +40,18 @@ test('mobile Back and Done flush the latest title/body before navigation or mode
   assert.ok(doneButton.indexOf('flushCurrentDraft();') < doneButton.indexOf('setMobileWriting(false)'));
 });
 
+test('same-note reopen after a null note prop rehydrates editor DOM without rewriting active typing', () => {
+  assert.match(editor, /const currentNoteId = note\?\.id;[\s\S]*?useEffect\(\(\) => \{\s*if \(currentNoteId\) return;\s*displayedNoteId\.current = null;\s*\}, \[currentNoteId\]\)/);
+  const reconcile = editor.match(/\/\/ Reconcile remote updates[\s\S]*?\}, \[note\?\.id, note\?\.title, note\?\.content\]\)/)?.[0];
+  assert.ok(reconcile);
+  assert.match(reconcile, /if \(!idChanged && !remoteContentChanged\) return;/);
+  assert.match(reconcile, /if \(editorRef\.current\) editorRef\.current\.innerHTML = stripLayout\(note\.content \?\? ''\);/);
+  assert.match(reconcile, /titleRef\.current = note\.title;\s*contentRef\.current = note\.content;/);
+  assert.match(reconcile, /const layout = readLayout\(note\.content\);[\s\S]*?setAttachmentLayout\(layout\);/);
+  assert.match(reconcile, /setSelectedImage\(null\);[\s\S]*?setSelectedAttachmentId\(null\);[\s\S]*?setSelectedInlineAttachment\(null\);/);
+  assert.match(reconcile, /if \(!idChanged && localDirty && remoteContentChanged\) \{\s*conflictRef\.current = true;/);
+});
+
 test('mobile tools use existing image and attachment picker inputs and display current note metadata', () => {
   assert.match(editor, /onChooseImage=\{\(\) => imageInputRef\.current\?\.click\(\)\}/);
   assert.match(editor, /onChooseFile=\{\(\) => fileInputRef\.current\?\.click\(\)\}/);

@@ -185,6 +185,7 @@ export function NoteEditor({
   activeNoteId.current = note?.id;
   const { toast } = useToast();
   const canEdit = desktopPresentation || mobileWriting;
+  const currentNoteId = note?.id;
 
   useEffect(() => {
     setMobileWriting(startInWritingMode);
@@ -196,6 +197,11 @@ export function NoteEditor({
     const frame = window.requestAnimationFrame(() => editorRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, [desktopPresentation, mobileWriting, note?.id]);
+
+  useEffect(() => {
+    if (currentNoteId) return;
+    displayedNoteId.current = null;
+  }, [currentNoteId]);
 
   // Reconcile remote updates without resetting the caret or overwriting unsaved typing.
   // This prevents a second device's changes from silently replacing local edits.
