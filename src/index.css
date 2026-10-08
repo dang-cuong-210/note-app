@@ -630,8 +630,6 @@
   .tanooki-auth-brand { display: none; }
   .tanooki-brand { display: flex; align-items: center; flex-direction: column; gap: 8px; }
   .tanooki-mark { display: block; width: 120px; flex-shrink: 0; }
-  /* A soft neutral backdrop keeps the original black artwork legible without a tile. */
-  .dark .tanooki-mark { background: radial-gradient(ellipse at center, #8B8076 45%, transparent 75%); }
   .tanooki-mark img { display: block; width: 100%; height: auto; }
   .tanooki-sidebar-brand { display: flex; align-items: center; gap: 8px; font-family: var(--font-brand); font-weight: 800; }
   .tanooki-sidebar-brand .tanooki-mark { width: 32px; }
@@ -772,7 +770,6 @@
   .tanooki-mobile-home-header { padding: 6px 2px 20px; }
   .tanooki-mobile-home-brand { display: flex; align-items: center; gap: 9px; font-family: var(--font-brand, 'Nunito', sans-serif); font-size: 24px; font-weight: 800; }
   .tanooki-mobile-home-brand .tanooki-mark { width: 36px; height: 36px; }
-  .dark .tanooki-mobile-home-brand .tanooki-mark { background: transparent; }
   .tanooki-mobile-home-header > p, .tanooki-mobile-page-heading p { margin-top: 3px; color: var(--text-secondary); font-size: 13px; }
   .tanooki-mobile-search { display: flex; height: 48px; align-items: center; gap: 10px; margin-top: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); padding: 0 12px; color: var(--text-tertiary); }
   .tanooki-mobile-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 14px; }

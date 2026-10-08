@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Menu, CloudOff } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { ToastProvider } from '@/components/ToastProvider';
@@ -23,10 +23,15 @@ import { getInitialView, getDashboardNoteDestination, shouldAutoSelectNote } fro
 import { getMobileDestinationAfterView, getMobileFolderState, getMobileNewNoteState, getMobileRecentState, getMobileSearchState, shouldShowMobileBottomNav } from '@/lib/mobileNavigation.js';
 import { getDesktopViewLabel } from '@/lib/desktopWorkspace.js';
 import { noteHasTag, searchNotes } from '@/lib/utils';
+import { cleanupExpiredTrashedNotes, isExpiredTrashedNote } from '@/lib/trashRetention.js';
 
 function AppContent() {
   const { user, loading: authLoading, signOut } = useAuth();
   const data = useAppData(user?.id ?? null);
+  const { loaded: accountDataLoaded, online, permanentDelete } = data;
+  const notesRef = useRef(data.notes);
+  notesRef.current = data.notes;
+  const trashCleanupAccountRef = useRef<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
   const [view, setView] = useState<ViewType>(() => getInitialView());
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
@@ -66,6 +71,47 @@ function AppContent() {
       data.dismissSyncConflicts();
     }
   }, [data.syncConflicts]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!user?.id || !accountDataLoaded) {
+      trashCleanupAccountRef.current = null;
+      return;
+    }
+    if (!online || !navigator.onLine || trashCleanupAccountRef.current === user.id) return;
+
+    const accountId = user.id;
+    let cancelled = false;
+    let started = false;
+    trashCleanupAccountRef.current = accountId;
+    const cleanupTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      started = true;
+      void cleanupExpiredTrashedNotes(notesRef.current, {
+        isOnline: () => !cancelled && online && navigator.onLine,
+        isStillExpired: (candidate) => {
+          const current = notesRef.current.find((note) => note.id === candidate.id);
+          return current?.trashedAt === candidate.trashedAt && isExpiredTrashedNote(current);
+        },
+        permanentDelete: (id) => permanentDelete(id),
+        onFailure: (id, error) => console.warn(`Expired trash cleanup failed for note ${id}:`, error),
+      }).then((result) => {
+        if ((result.failedIds.length > 0 || result.stoppedOffline) && trashCleanupAccountRef.current === accountId) {
+          trashCleanupAccountRef.current = null;
+        }
+      });
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(cleanupTimer);
+      if (!started && trashCleanupAccountRef.current === accountId) {
+        trashCleanupAccountRef.current = null;
+      }
+      if (!navigator.onLine && trashCleanupAccountRef.current === accountId) {
+        trashCleanupAccountRef.current = null;
+      }
+    };
+  }, [user?.id, accountDataLoaded, online, permanentDelete]);
 
 
   // Select first note when view changes (desktop only)
