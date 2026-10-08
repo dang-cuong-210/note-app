@@ -33,7 +33,9 @@ import { useToast } from '@/contexts/ToastContext';
 import { isAcceptedImageType, uploadNoteImage, deleteNoteImage } from '@/lib/images';
 import { formatFileSize, getFileIcon, refreshAttachmentUrl } from '@/lib/attachments';
 import { extractTags } from '@/lib/utils';
+import { addTagToContent, readManagedTags, removeTagFromContent, writeManagedTags } from '@/lib/tagUtils.js';
 import { MobileEditorToolsSheet, MobileNoteActionsSheet } from '@/components/MobileEditorSheets';
+import { NoteTagManager } from '@/components/NoteTagManager';
 
 // Attachment display settings travel inside note HTML, so no database migration is needed.
 // The marker is a comment, never a visible or editable element.
@@ -120,6 +122,8 @@ interface NoteEditorProps {
   breadcrumb?: string;
   onToggleToolsPanel?: () => void;
   toolsPanelOpen?: boolean;
+  existingTags: string[];
+  onOpenTag: (tag: string) => void;
 }
 
 export function NoteEditor({
@@ -141,6 +145,8 @@ export function NoteEditor({
   breadcrumb = 'Tất cả ghi chú',
   onToggleToolsPanel,
   toolsPanelOpen = false,
+  existingTags,
+  onOpenTag,
 }: NoteEditorProps) {
   const [title, setTitle] = useState('');
   const [syncConflict, setSyncConflict] = useState<Note | null>(null);
@@ -328,10 +334,28 @@ export function NoteEditor({
   // No rerender of the contentEditable DOM: this preserves the typing caret.
   const commitEditor = (layout = layoutRef.current) => {
     if (!editorRef.current) return;
-    const html = withLayout(editorRef.current.innerHTML, layout);
+    const html = withLayout(writeManagedTags(editorRef.current.innerHTML, readManagedTags(contentRef.current)), layout);
     contentRef.current = html;
     setContent(html);
   };
+  const updateNoteTags = (update: (html: string) => { content: string; changed: boolean }) => {
+    if (!note || conflictRef.current) return;
+    const currentHtml = editorRef.current?.innerHTML ?? stripLayout(contentRef.current);
+    const bodyWithManagedTags = writeManagedTags(currentHtml, readManagedTags(contentRef.current));
+    const result = update(bodyWithManagedTags);
+    if (!result.changed) return;
+    const nextContent = withLayout(result.content, layoutRef.current);
+    if (editorRef.current) editorRef.current.innerHTML = stripLayout(nextContent);
+    contentRef.current = nextContent;
+    setContent(nextContent);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    onUpdate(note.id, titleRef.current, nextContent);
+    acceptedRef.current = { id: note.id, title: titleRef.current, content: nextContent };
+  };
+  const addNoteTag = (tag: string) => updateNoteTags((html) => addTagToContent(html, tag));
+  const removeNoteTag = (tag: string) => updateNoteTags((html) => removeTagFromContent(html, tag));
+  const noteTags = extractTags(content);
   const commitLayout = (next: AttachmentLayout) => {
     layoutRef.current = next;
     setAttachmentLayout(next);
@@ -1076,7 +1100,7 @@ export function NoteEditor({
   }
 
   const folderName = folders.find((f) => f.id === note.folderId)?.name || null;
-  const desktopTags = desktopPresentation ? extractTags(note.content) : [];
+  const desktopTags = desktopPresentation ? noteTags : [];
 
   return (
     <div className={`${desktopPresentation ? 'h-full' : 'h-[100dvh] tanooki-mobile-editor'} min-h-0 min-w-0 flex flex-col bg-app ${desktopPresentation ? 'tanooki-desktop-editor' : mobileWriting ? 'is-writing' : 'is-reading'}`} style={{ backgroundColor: 'var(--bg)' }}>
@@ -1217,7 +1241,7 @@ export function NoteEditor({
         <div className="tanooki-editor-document-title-row">
           <input value={title} onChange={(e) => setTitle(e.target.value)} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" className="tanooki-editor-title" style={{ color: 'var(--text)' }} />
         </div>
-        {desktopTags.length > 0 && <div className="tanooki-editor-tags" aria-label="Thẻ của ghi chú">{desktopTags.map((tag) => <span key={tag}>#{tag}</span>)}</div>}
+        <NoteTagManager className="tanooki-editor-tags" tags={desktopTags} existingTags={existingTags} onAddTag={addNoteTag} onRemoveTag={removeNoteTag} onOpenTag={onOpenTag} />
       </section>}
 
       {syncConflict && <div role="alert" className="mx-3 my-2 rounded-lg border border-amber-400 bg-amber-50 p-3 text-sm text-amber-950">
@@ -1543,7 +1567,7 @@ export function NoteEditor({
       </div>
 
       {!desktopPresentation && <>
-        <MobileEditorToolsSheet note={note} folders={folders} attachments={attachments} open={mobileSheet === 'tools'} onClose={() => setMobileSheet(null)} onChooseImage={() => imageInputRef.current?.click()} onChooseFile={() => fileInputRef.current?.click()} />
+        <MobileEditorToolsSheet note={note} folders={folders} attachments={attachments} tags={noteTags} existingTags={existingTags} onAddTag={addNoteTag} onRemoveTag={removeNoteTag} onOpenTag={onOpenTag} open={mobileSheet === 'tools'} onClose={() => setMobileSheet(null)} onChooseImage={() => imageInputRef.current?.click()} onChooseFile={() => fileInputRef.current?.click()} />
         <MobileNoteActionsSheet note={note} folders={folders} open={mobileSheet === 'actions'} onClose={() => setMobileSheet(null)} onTogglePin={onTogglePin} onArchive={onArchive} onMove={onMove} onDuplicate={onDuplicate} onTrash={onTrash} />
       </>}
 

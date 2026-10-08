@@ -11,6 +11,7 @@ interface DesktopEditorToolsPanelProps {
   isOpen: boolean;
   onArchive: (id: string, archived: boolean) => void;
   onMove: (id: string, folderId: string | null) => void;
+  onOpenTag: (tag: string) => void;
 }
 
 function DateValue({ value }: { value: number }) {
@@ -18,7 +19,7 @@ function DateValue({ value }: { value: number }) {
   return <time dateTime={date.toISOString()}>{date.toLocaleString('vi-VN', { dateStyle: 'medium', timeStyle: 'short' })}</time>;
 }
 
-export function DesktopEditorToolsPanel({ note, folders, attachments, onClose, isOpen, onArchive, onMove }: DesktopEditorToolsPanelProps) {
+export function DesktopEditorToolsPanel({ note, folders, attachments, onClose, isOpen, onArchive, onMove, onOpenTag }: DesktopEditorToolsPanelProps) {
   const properties = getDesktopNoteProperties(note, folders, attachments, htmlToText(note.content), extractTags(note.content));
   return <aside id="tanooki-desktop-editor-tools" className={`tanooki-desktop-tools-panel${isOpen ? ' is-open' : ''}`} aria-label="Công cụ chỉnh sửa">
     <div className="tanooki-desktop-tools-heading"><h2>Công cụ</h2><button type="button" className="tanooki-info-close" onClick={onClose} aria-label="Đóng bảng công cụ"><X size={18} /></button></div>
@@ -51,7 +52,7 @@ export function DesktopEditorToolsPanel({ note, folders, attachments, onClose, i
       </dl>
       <div className="tanooki-tools-tags" aria-labelledby="tanooki-tools-tags-heading">
         <h4 id="tanooki-tools-tags-heading"><Hash size={14} /> Thẻ</h4>
-        {properties.tags.length ? <div>{properties.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div> : <p>Chưa có thẻ trong nội dung.</p>}
+        {properties.tags.length ? <div>{properties.tags.map((tag) => <button type="button" key={tag} onClick={() => onOpenTag(tag)}>#{tag}</button>)}</div> : <p>Chưa có thẻ trong nội dung.</p>}
       </div>
     </section>
   </aside>;

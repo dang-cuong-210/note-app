@@ -1,3 +1,5 @@
+import { extractTagsFromContent } from './tagUtils.js';
+
 const namedEntities = {
   amp: '&',
   apos: "'",
@@ -69,10 +71,7 @@ function isInView(note, view) {
   }
 }
 
-function extractTagsFromHtml(html) {
-  const text = stripHtmlToText(html);
-  return [...new Set((text.match(/#[\p{L}\p{N}_]+/gu) || []).map((tag) => tag.slice(1).toLowerCase()))];
-}
+function extractTagsFromHtml(html) { return extractTagsFromContent(html); }
 
 export function filterSearchRecords(records, { query = '', folderId = 'all', tag = 'all', pinned = 'all', archive = 'current' } = {}, view) {
   const normalizedQuery = normalizeSearchText(query);

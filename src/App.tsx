@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Menu, CloudOff } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { ToastProvider } from '@/components/ToastProvider';
@@ -22,7 +22,7 @@ import type { ViewType } from '@/lib/navigation';
 import { getInitialView, getDashboardNoteDestination, shouldAutoSelectNote } from '@/lib/dashboardData.js';
 import { getMobileDestinationAfterView, getMobileFolderState, getMobileNewNoteState, getMobileRecentState, getMobileSearchState, shouldShowMobileBottomNav } from '@/lib/mobileNavigation.js';
 import { getDesktopViewLabel } from '@/lib/desktopWorkspace.js';
-import { noteHasTag, searchNotes } from '@/lib/utils';
+import { getAllTags, noteHasTag, searchNotes } from '@/lib/utils';
 import { cleanupExpiredTrashedNotes, isExpiredTrashedNote } from '@/lib/trashRetention.js';
 
 function AppContent() {
@@ -145,6 +145,14 @@ function AppContent() {
   }
 
   const selectedNote = data.notes.find((n) => n.id === selectedNoteId) || null;
+  const existingTags = useMemo(() => getAllTags(data.notes).map(({ name }) => name), [data.notes]);
+
+  const handleOpenTag = (tag: string) => {
+    setView({ kind: 'tag', name: tag });
+    setSearchQuery('');
+    setSelectedNoteId(null);
+    setMobileDestination('search');
+  };
 
   const handleViewChange = (v: ViewType) => {
     setView(v);
@@ -496,6 +504,8 @@ function AppContent() {
                 breadcrumb={getDesktopViewLabel(view, data.folders)}
                 onToggleToolsPanel={() => setToolsPanelOpen((open) => !open)}
                 toolsPanelOpen={toolsPanelOpen}
+                existingTags={existingTags}
+                onOpenTag={handleOpenTag}
               />
             </div>
           </>
@@ -543,6 +553,7 @@ function AppContent() {
           isOpen={toolsPanelOpen}
           onArchive={data.archiveNote}
           onMove={data.moveNote}
+          onOpenTag={handleOpenTag}
         />
       )}
       {showMobileBottomNav && (

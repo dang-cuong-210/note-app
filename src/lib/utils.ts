@@ -1,5 +1,6 @@
 import type { Note, Folder, Settings, TagInfo } from '@/types';
 import { normalizeSearchText, stripHtmlToText } from '@/lib/advancedSearch.js';
+import { extractTagsFromContent } from '@/lib/tagUtils.js';
 
 export function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
@@ -51,9 +52,7 @@ export function getPreview(content: string, maxLen = 120): string {
 
 /** Extract #tags from note content (as plain text). */
 export function extractTags(content: string): string[] {
-  const text = htmlToText(content);
-  const matches = text.match(/#[\p{L}\p{N}_]+/gu) || [];
-  return [...new Set(matches.map((m) => m.slice(1).toLowerCase()))];
+  return extractTagsFromContent(content);
 }
 
 /** Get all tags with counts from notes. */

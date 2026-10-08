@@ -3,6 +3,7 @@ import { Archive, ArchiveRestore, CalendarDays, Copy, FileText, Folder, Hash, Im
 import type { Attachment, Folder as NoteFolder, Note } from '@/types';
 import { getDesktopNoteProperties } from '@/lib/desktopWorkspace.js';
 import { extractTags, htmlToText } from '@/lib/utils';
+import { NoteTagManager } from '@/components/NoteTagManager';
 
 interface MobileBottomSheetProps {
   open: boolean;
@@ -67,9 +68,14 @@ interface MobileEditorToolsSheetProps {
   onClose: () => void;
   onChooseImage: () => void;
   onChooseFile: () => void;
+  tags: string[];
+  existingTags: string[];
+  onAddTag: (tag: string) => void;
+  onRemoveTag: (tag: string) => void;
+  onOpenTag: (tag: string) => void;
 }
 
-export function MobileEditorToolsSheet({ note, folders, attachments, open, onClose, onChooseImage, onChooseFile }: MobileEditorToolsSheetProps) {
+export function MobileEditorToolsSheet({ note, folders, attachments, open, onClose, onChooseImage, onChooseFile, tags, existingTags, onAddTag, onRemoveTag, onOpenTag }: MobileEditorToolsSheetProps) {
   const properties = getDesktopNoteProperties(note, folders, attachments, htmlToText(note.content), extractTags(note.content));
   return <MobileBottomSheet open={open} title="Công cụ" onClose={onClose} labelledBy="mobile-editor-tools">
     <section className="tanooki-mobile-sheet-group" aria-labelledby="mobile-tools-insert">
@@ -89,7 +95,7 @@ export function MobileEditorToolsSheet({ note, folders, attachments, open, onClo
         <div><dt><FileText size={15} /> Số từ</dt><dd>{properties.wordCount}</dd></div>
         <div><dt><FileText size={15} /> Ký tự</dt><dd>{properties.characterCount}</dd></div>
       </dl>
-      <div className="tanooki-mobile-sheet-tags"><h4><Hash size={14} /> Thẻ</h4>{properties.tags.length ? properties.tags.map((tag) => <span key={tag}>#{tag}</span>) : <p>Chưa có thẻ trong nội dung.</p>}</div>
+      <div className="tanooki-mobile-sheet-tags"><h4><Hash size={14} /> Thẻ</h4><NoteTagManager mobile tags={tags} existingTags={existingTags} onAddTag={onAddTag} onRemoveTag={onRemoveTag} onOpenTag={onOpenTag} /></div>
     </section>
   </MobileBottomSheet>;
 }
