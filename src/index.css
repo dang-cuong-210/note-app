@@ -783,6 +783,16 @@
   .tanooki-desktop-sidebar *, .tanooki-dashboard * { scroll-behavior: auto !important; transition: none !important; }
 }
 
+/* Search fields keep their normal border; only their external focus ring is suppressed. */
+input[data-global-search]:focus,
+input[data-global-search]:focus-visible {
+  outline: none;
+  box-shadow: none;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-shadow: 0 0 #0000;
+}
+
 @layer components {
   .tanooki-mobile-page { min-width: 0; width: 100%; height: 100%; overflow-y: auto; padding: 18px 16px calc(104px + env(safe-area-inset-bottom)); color: var(--text); background: var(--bg); }
   .tanooki-mobile-home-header { padding: 6px 2px 20px; }
