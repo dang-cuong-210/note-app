@@ -1,10 +1,11 @@
-import type { FormEvent } from 'react';
 import { ArrowRight, Clock3, FileText, Folder as FolderIcon, Pin, Search, Tag as TagIcon } from 'lucide-react';
 import type { Folder, Note, TagInfo } from '@/types';
 import type { ViewType } from '@/lib/navigation';
 import { formatTime, getAllTags, getPreview, noteHasTag } from '@/lib/utils';
 import { getDashboardActiveNotes, getDashboardPinnedNotes, getDashboardQuickTags, getDashboardRecentNotes, getDirectFolderNoteCount } from '@/lib/dashboardData.js';
 import { TanookiMark } from '@/components/TanookiBrand';
+import { LiveSearchResults } from '@/components/LiveSearchResults';
+import { normalizeSearchText } from '@/lib/advancedSearch.js';
 
 interface TanookiDashboardProps {
   notes: Note[];
@@ -37,13 +38,7 @@ export function TanookiDashboard({ notes, folders, searchQuery, onSearchChange, 
   const recentNotes = getDashboardRecentNotes(activeNotes);
   const tags = getAllTags(activeNotes);
   const quickTags = getDashboardQuickTags(tags);
-
-  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const value = searchQuery.trim();
-    onSearchChange(value);
-    onSearchSubmit(value);
-  };
+  const hasQuery = Boolean(normalizeSearchText(searchQuery));
 
   const openTag = (name: string) => onViewChange({ kind: 'tag', name });
 
@@ -53,14 +48,14 @@ export function TanookiDashboard({ notes, folders, searchQuery, onSearchChange, 
         <h1 className="text-3xl font-bold tracking-tight">{greeting()}</h1>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Tiếp tục viết, tiếp tục sáng tạo.</p>
       </div>
-      <form onSubmit={submitSearch} className="tanooki-dashboard-search relative w-full max-w-md">
+      <div className="tanooki-dashboard-search relative w-full max-w-md">
         <label htmlFor="tanooki-dashboard-search" className="sr-only">Tìm kiếm ghi chú</label>
         <Search size={18} aria-hidden="true" className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
-        <input id="tanooki-dashboard-search" data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm kiếm ghi chú..." className="w-full rounded-xl border py-3 pl-11 pr-4 text-sm outline-none transition-colors focus-visible:ring-2" style={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }} />
-      </form>
+        <input id="tanooki-dashboard-search" data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} placeholder="Tìm kiếm ghi chú..." className="w-full rounded-xl border py-3 pl-11 pr-4 text-sm outline-none transition-colors focus-visible:ring-2" style={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text)' }} />
+      </div>
     </div>
 
-    <div className="tanooki-dashboard-columns grid gap-5 px-5 pb-8 xl:px-7 2xl:px-9">
+    {hasQuery ? <div className="px-5 pb-8 xl:px-7 2xl:px-9"><LiveSearchResults notes={activeNotes} query={searchQuery} onOpenNote={onOpenNote} onShowAll={onSearchSubmit} /></div> : <div className="tanooki-dashboard-columns grid gap-5 px-5 pb-8 xl:px-7 2xl:px-9">
       <div className="min-w-0 space-y-5">
         <section className={`tanooki-dashboard-panel tanooki-dashboard-pinned-panel${pinnedNotes.length ? '' : ' is-empty'}`} aria-labelledby="dashboard-pinned-heading">
           <div className="tanooki-dashboard-section-heading">
@@ -120,6 +115,6 @@ export function TanookiDashboard({ notes, folders, searchQuery, onSearchChange, 
           <TanookiMark />
         </section>
       </aside>
-    </div>
+    </div>}
   </div>;
 }

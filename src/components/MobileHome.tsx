@@ -1,10 +1,12 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { ArrowRight, Clock3, FileText, Folder as FolderIcon, Pin, Plus, Search } from 'lucide-react';
 import type { Folder, Note } from '@/types';
 import { formatTime, getPreview } from '@/lib/utils';
 import { getDashboardPinnedNotes, getDashboardRecentNotes } from '@/lib/dashboardData.js';
 import { TanookiMark } from '@/components/TanookiBrand';
 import { MobileCreateFolderSheet } from '@/components/MobileEditorSheets';
+import { LiveSearchResults } from '@/components/LiveSearchResults';
+import { normalizeSearchText } from '@/lib/advancedSearch.js';
 
 interface MobileHomeProps {
   notes: Note[];
@@ -16,25 +18,24 @@ interface MobileHomeProps {
 }
 
 export function MobileHome({ notes, searchQuery, onSearchChange, onSearchSubmit, onOpenNote, onViewRecent }: MobileHomeProps) {
+  const activeNotes = notes.filter((note) => !note.trashed && !note.archived);
+  const hasQuery = Boolean(normalizeSearchText(searchQuery));
   const pinned = getDashboardPinnedNotes(notes, 4);
   const recent = getDashboardRecentNotes(notes, 5);
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    onSearchSubmit(searchQuery);
-  };
 
   return <div className="tanooki-mobile-page">
     <header className="tanooki-mobile-home-header">
       <div className="tanooki-mobile-home-brand"><TanookiMark /><span>Tanooki</span></div>
       <p>Ý tưởng của bạn, được lưu giữ dịu dàng.</p>
-      <form className="tanooki-mobile-search" onSubmit={submit}>
+      <div className="tanooki-mobile-search">
         <Search size={19} aria-hidden="true" />
-        <input data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm kiếm ghi chú..." aria-label="Tìm kiếm ghi chú" />
-        <button type="submit" aria-label="Tìm kiếm"><ArrowRight size={18} /></button>
-      </form>
+        <input data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} placeholder="Tìm kiếm ghi chú..." aria-label="Tìm kiếm ghi chú" />
+      </div>
     </header>
 
-    <section className="tanooki-mobile-section" aria-labelledby="mobile-pinned-heading">
+    {hasQuery && <LiveSearchResults notes={activeNotes} query={searchQuery} onOpenNote={onOpenNote} onShowAll={onSearchSubmit} />}
+
+    {!hasQuery && <section className="tanooki-mobile-section" aria-labelledby="mobile-pinned-heading">
       <div className="tanooki-mobile-section-heading"><h2 id="mobile-pinned-heading"><Pin size={18} /> Đã ghim</h2></div>
       {pinned.length ? <div className="tanooki-mobile-pinned-strip">
         {pinned.map((note) => <button type="button" className="tanooki-mobile-pinned-card" key={note.id} onClick={() => onOpenNote(note.id)}>
@@ -44,9 +45,9 @@ export function MobileHome({ notes, searchQuery, onSearchChange, onSearchSubmit,
           <span className="tanooki-mobile-card-time">{formatTime(note.updatedAt)}</span>
         </button>)}
       </div> : <p className="tanooki-mobile-empty">Ghi chú bạn ghim sẽ xuất hiện ở đây.</p>}
-    </section>
+    </section>}
 
-    <section className="tanooki-mobile-section" aria-labelledby="mobile-recent-heading">
+    {!hasQuery && <section className="tanooki-mobile-section" aria-labelledby="mobile-recent-heading">
       <div className="tanooki-mobile-section-heading"><h2 id="mobile-recent-heading"><Clock3 size={18} /> Gần đây</h2><button type="button" onClick={onViewRecent}>Xem tất cả <ArrowRight size={15} /></button></div>
       {recent.length ? <div className="tanooki-mobile-recent-list">
         {recent.map((note) => <button type="button" className="tanooki-mobile-recent-row" key={note.id} onClick={() => onOpenNote(note.id)}>
@@ -55,7 +56,7 @@ export function MobileHome({ notes, searchQuery, onSearchChange, onSearchSubmit,
           <time>{formatTime(note.updatedAt)}</time>
         </button>)}
       </div> : <p className="tanooki-mobile-empty">Ghi chú mới của bạn sẽ xuất hiện ở đây.</p>}
-    </section>
+    </section>}
   </div>;
 }
 

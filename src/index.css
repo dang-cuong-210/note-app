@@ -742,6 +742,24 @@
   .tanooki-dashboard-tag:hover { background: var(--accent-light); color: var(--accent); }
   .tanooki-dashboard-tag-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--accent); }
   .tanooki-dashboard-empty { padding: 10px 2px; color: var(--text-tertiary); font-size: 13px; }
+  .tanooki-live-search-results { overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-secondary); }
+  .tanooki-live-search-heading { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); padding: 0 13px; }
+  .tanooki-live-search-heading h2 { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 650; }
+  .tanooki-live-search-heading h2 svg { color: var(--accent); }
+  .tanooki-live-search-heading > span { color: var(--text-tertiary); font-size: 11px; }
+  .tanooki-live-search-list { display: grid; }
+  .tanooki-live-search-result { display: flex; min-width: 0; align-items: center; gap: 11px; border-bottom: 1px solid var(--border); padding: 10px 13px; text-align: left; }
+  .tanooki-live-search-result:last-child { border-bottom: 0; }
+  .tanooki-live-search-result:hover { background: var(--bg); }
+  .tanooki-live-search-icon { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border-radius: 9px; background: var(--accent-light); color: var(--accent); }
+  .tanooki-live-search-copy { display: grid; min-width: 0; gap: 3px; }
+  .tanooki-live-search-copy strong, .tanooki-live-search-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tanooki-live-search-copy strong { color: var(--text); font-size: 13px; font-weight: 600; }
+  .tanooki-live-search-copy > span { color: var(--text-secondary); font-size: 12px; }
+  .tanooki-live-search-copy mark { border-radius: 2px; background: var(--accent-light); color: var(--accent); }
+  .tanooki-live-search-empty { padding: 18px 14px; color: var(--text-secondary); font-size: 13px; }
+  .tanooki-live-search-all { display: flex; min-height: 40px; width: 100%; align-items: center; justify-content: center; gap: 6px; border-top: 1px solid var(--border); color: var(--accent); font-size: 12px; font-weight: 600; }
+  .tanooki-live-search-all:hover { background: var(--bg); }
   .tanooki-dashboard-recent-row { display: flex; min-width: 0; align-items: center; gap: 15px; padding: 10px 2px; }
   .tanooki-dashboard-recent-open { display: flex; min-width: 0; flex: 1; align-items: center; gap: 12px; text-align: left; }
   .tanooki-dashboard-recent-icon { display: grid; width: 42px; height: 42px; flex: none; place-items: center; border-radius: 9px; background: var(--bg-secondary); color: var(--tanooki-brown); }
@@ -774,7 +792,6 @@
   .tanooki-mobile-search { display: flex; height: 48px; align-items: center; gap: 10px; margin-top: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); padding: 0 12px; color: var(--text-tertiary); }
   .tanooki-mobile-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 14px; }
   .tanooki-mobile-search input::placeholder { color: var(--text-tertiary); }
-  .tanooki-mobile-search button { display: grid; width: 34px; height: 34px; flex: none; place-items: center; border-radius: 9px; background: var(--accent); color: white; }
   .tanooki-mobile-section { margin-top: 18px; }
   .tanooki-mobile-section-heading { display: flex; min-height: 30px; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
   .tanooki-mobile-section-heading h2 { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 650; }

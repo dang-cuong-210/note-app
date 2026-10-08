@@ -102,3 +102,17 @@ test('reset defaults restore current-view results and keep pinned promotion opt-
   assert.deepEqual(sortSearchNotes([note('unpinned', { updatedAt: 10 }), note('pin', { pinned: true, updatedAt: 1 })], 'updated').map((n) => n.id), ['unpinned', 'pin']);
   assert.deepEqual(sortSearchNotes([note('unpinned', { updatedAt: 10 }), note('pin', { pinned: true, updatedAt: 1 })], 'updated', true).map((n) => n.id), ['pin', 'unpinned']);
 });
+
+test('partial live queries update results immediately and clearing only the query preserves active filters', () => {
+  const liveNotes = [
+    note('nhap', { title: 'Nháp cuộc họp', folderId: 'work', content: '<p>Ghi nhanh</p>' }),
+    note('nhat', { title: 'Nhật ký', folderId: 'work', content: '<p>Những điều hôm nay</p>' }),
+    note('other', { title: 'Ý tưởng', folderId: 'study', content: '<p>Khác</p>' }),
+  ];
+  const records = buildSearchRecords(getNotesInView(liveNotes, { kind: 'all' }));
+  const filters = { folderId: 'work', pinned: 'all', tag: 'all', archive: 'current' };
+  assert.deepEqual(filterSearchRecords(records, { ...filters, query: 'N' }, { kind: 'all' }).map((r) => r.note.id), ['nhap', 'nhat']);
+  assert.deepEqual(filterSearchRecords(records, { ...filters, query: 'Nh' }, { kind: 'all' }).map((r) => r.note.id), ['nhap', 'nhat']);
+  assert.deepEqual(filterSearchRecords(records, { ...filters, query: 'Nhá' }, { kind: 'all' }).map((r) => r.note.id), ['nhap']);
+  assert.deepEqual(filterSearchRecords(records, { ...filters, query: '' }, { kind: 'all' }).map((r) => r.note.id), ['nhap', 'nhat']);
+});
