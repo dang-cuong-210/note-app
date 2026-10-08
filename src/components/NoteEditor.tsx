@@ -771,7 +771,7 @@ export function NoteEditor({
       const att = attachments.find(item => item.id === node.dataset.notedAttachmentId);
       if (!att) {
         node.classList.add('noted-attachment-missing');
-        node.title = 'File unavailable';
+        node.title = 'Tệp không khả dụng';
         return;
       }
       node.classList.remove('noted-attachment-missing');
@@ -933,7 +933,7 @@ export function NoteEditor({
   const handleImageUpload = async (file: File) => {
     if (!note) return;
     if (!isAcceptedImageType(file)) {
-      toast('Only JPG, PNG, GIF, and WEBP images are supported');
+      toast('Chỉ hỗ trợ ảnh JPG, PNG, GIF và WEBP');
       return;
     }
     setUploadsInProgress((count) => count + 1);
@@ -968,9 +968,9 @@ export function NoteEditor({
         selection?.addRange(after);
         commitEditor();
       }
-      toast('Image added');
+      toast('Đã thêm hình ảnh');
     } catch (err) {
-      toast('Failed to upload image');
+      toast('Không thể tải hình ảnh lên');
       console.error(err);
     } finally {
       setUploadsInProgress((count) => Math.max(0, count - 1));
@@ -986,12 +986,12 @@ export function NoteEditor({
       if (result) {
         // Uploads can finish after the user opens a different note.
         if (activeNoteId.current === uploadNoteId) insertAttachmentAtCaret(result);
-        toast(`${file.name} attached`);
+        toast(`Đã đính kèm ${file.name}`);
       } else {
-        toast('Failed to attach file');
+        toast('Không thể đính kèm tệp');
       }
     } catch (err) {
-      toast('Failed to attach file');
+      toast('Không thể đính kèm tệp');
       console.error(err);
     } finally {
       setUploadsInProgress((count) => Math.max(0, count - 1));
@@ -1023,7 +1023,7 @@ export function NoteEditor({
 
     clearSelection();
     setImageViewer(null);
-    toast('Image removed');
+    toast('Đã xóa hình ảnh');
   };
   const duplicateImage = (img: HTMLImageElement) => {
     const copy = img.cloneNode(true) as HTMLImageElement;
@@ -1043,9 +1043,9 @@ export function NoteEditor({
       setSelectedInlineAttachment(null);
       setInlineFrame(null);
       setSelectedAttachmentId(null);
-      toast(`${attachment.name} removed`);
+      toast(`Đã xóa ${attachment.name}`);
     } catch (err) {
-      toast('Failed to remove attachment');
+      toast('Không thể xóa tệp đính kèm');
       console.error(err);
     }
   };
@@ -1058,7 +1058,7 @@ export function NoteEditor({
     if (url) {
       window.open(url, '_blank');
     } else {
-      toast('Failed to open file');
+      toast('Không thể mở tệp');
     }
   };
 
@@ -1068,7 +1068,7 @@ export function NoteEditor({
         <div className="text-center">
           <FileText size={48} className="mx-auto mb-3 text-tertiary" style={{ color: 'var(--text-tertiary)' }} />
           <p className="text-sm text-secondary" style={{ color: 'var(--text-secondary)' }}>
-            {desktopPresentation ? 'Chọn một ghi chú để bắt đầu.' : 'Select a note or create a new one'}
+            Chọn một ghi chú hoặc tạo ghi chú mới
           </p>
         </div>
       </div>
@@ -1090,7 +1090,7 @@ export function NoteEditor({
             onClick={onBack}
             className="lg:hidden p-2 rounded-lg hover-bg text-secondary"
             style={{ color: 'var(--text-secondary)' }}
-            aria-label="Back"
+            aria-label="Quay lại"
           >
             <ChevronLeft size={20} />
           </button>
@@ -1109,7 +1109,7 @@ export function NoteEditor({
             onClick={() => onTogglePin(note.id)}
             className={`p-2 rounded-lg hover-bg text-secondary transition-colors ${desktopPresentation ? 'tanooki-editor-action' : ''}`}
             style={{ color: note.pinned ? 'var(--accent)' : 'var(--text-secondary)' }}
-            aria-label={note.pinned ? (desktopPresentation ? 'Bỏ ghim' : 'Unpin') : (desktopPresentation ? 'Ghim' : 'Pin')}
+            aria-label={note.pinned ? 'Bỏ ghim' : 'Ghim'}
           >
             {note.pinned ? <Pin size={18} fill="currentColor" /> : <Pin size={18} />}
           </button>
@@ -1120,7 +1120,7 @@ export function NoteEditor({
               onClick={() => { setMenuOpen(!menuOpen); setMoveOpen(false); }}
               className="p-2 rounded-lg hover-bg text-secondary transition-colors"
               style={{ color: 'var(--text-secondary)' }}
-              aria-label={desktopPresentation ? 'Tùy chọn ghi chú' : 'More options'}
+              aria-label="Tùy chọn ghi chú"
             >
               <MoreHorizontal size={18} />
             </button>
@@ -1133,12 +1133,12 @@ export function NoteEditor({
               >
                 <MenuBtn
                   icon={note.pinned ? <PinOff size={15} /> : <Pin size={15} />}
-                  label={note.pinned ? (desktopPresentation ? 'Bỏ ghim' : 'Unpin') : (desktopPresentation ? 'Ghim' : 'Pin')}
+                  label={note.pinned ? 'Bỏ ghim' : 'Ghim'}
                   onClick={() => { onTogglePin(note.id); setMenuOpen(false); }}
                 />
                 <MenuBtn
                   icon={note.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
-                  label={note.archived ? (desktopPresentation ? 'Bỏ lưu trữ' : 'Unarchive') : (desktopPresentation ? 'Lưu trữ' : 'Archive')}
+                  label={note.archived ? 'Bỏ lưu trữ' : 'Lưu trữ'}
                   onClick={() => { onArchive(note.id, !note.archived); setMenuOpen(false); }}
                 />
 
@@ -1150,7 +1150,7 @@ export function NoteEditor({
                     onClick={() => setMoveOpen(!moveOpen)}
                   >
                     <FolderIcon size={15} />
-                    <span className="flex-1">{desktopPresentation ? 'Chuyển đến...' : 'Move to...'}</span>
+                    <span className="flex-1">Chuyển đến...</span>
                     <ChevronRight size={14} style={{ color: 'var(--text-tertiary)' }} />
                   </button>
                   {moveOpen && (
@@ -1160,7 +1160,7 @@ export function NoteEditor({
                       onClick={(e) => e.stopPropagation()}
                     >
                       <MenuBtn
-                        label={desktopPresentation ? 'Không có thư mục' : 'No folder'}
+                        label="Không có thư mục"
                         onClick={() => { onMove(note.id, null); setMenuOpen(false); setMoveOpen(false); }}
                       />
                       {folders.map((f) => (
@@ -1178,7 +1178,7 @@ export function NoteEditor({
                 <div className="h-px my-1" style={{ backgroundColor: 'var(--border)' }} />
                 <MenuBtn
                   icon={<Trash2 size={15} />}
-                  label={desktopPresentation ? 'Chuyển vào thùng rác' : 'Move to trash'}
+                  label="Chuyển vào thùng rác"
                   danger
                   onClick={() => { onTrash(note.id); setMenuOpen(false); }}
                 />
@@ -1232,13 +1232,13 @@ export function NoteEditor({
             if (editorRef.current) editorRef.current.innerHTML = stripLayout(incoming.content);
             const layout = readLayout(incoming.content); layoutRef.current = layout; setAttachmentLayout(layout);
             clearSelection();
-          }}>Use other device's version</button>
+          }}>Dùng phiên bản trên thiết bị khác</button>
           <button type="button" className="rounded border px-3 py-1" onClick={() => {
             const incoming = syncConflict;
             setSyncConflict(null); conflictRef.current = false;
             acceptedRef.current = {id: incoming.id,title:incoming.title,content:incoming.content};
             onUpdate(incoming.id, titleRef.current, contentRef.current);
-          }}>Keep my edits</button>
+          }}>Giữ lại chỉnh sửa của tôi</button>
         </div>
       </div>}
 
@@ -1304,7 +1304,7 @@ export function NoteEditor({
                 else if (selectedImage !== e.target) selectImage(e.target);
               } else { clearSelection(); rememberCaret(); }
             }}
-            data-placeholder={desktopPresentation ? 'Bắt đầu viết ghi chú của bạn...' : 'Start writing...'}
+            data-placeholder="Bắt đầu viết ghi chú của bạn..."
             className={`note-content w-full outline-none text-app leading-relaxed ${desktopPresentation ? '' : 'text-sm'}`}
             style={{ color: 'var(--text)' }}
           />
@@ -1313,7 +1313,7 @@ export function NoteEditor({
           {unplacedAttachments.length > 0 && (
             <div className="mt-6 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
               <h3 className="text-xs font-semibold text-tertiary uppercase tracking-wider mb-3" style={{ color: 'var(--text-tertiary)' }}>
-                Files not placed in text ({unplacedAttachments.length})
+                Tệp chưa được chèn vào nội dung ({unplacedAttachments.length})
               </h3>
               <div className="space-y-2" onPointerMove={(e) => {
                 if (!canEdit) return;
@@ -1342,7 +1342,7 @@ export function NoteEditor({
                   <div key={att.id} data-attachment-id={att.id} className="relative" style={{ width: `${attachmentLayout.widths[att.id] || 100}%`, maxWidth: '100%', touchAction: selectedAttachmentId === att.id ? 'none' : 'auto' }}
                     onPointerDown={(e) => {
                       if (!canEdit) return;
-                      if ((e.target as HTMLElement).closest('.noted-attachment-toolbar, .noted-attachment-resize-handle, button[aria-label="Remove attachment"], button[aria-label="Open file"]')) return;
+                      if ((e.target as HTMLElement).closest('.noted-attachment-toolbar, .noted-attachment-resize-handle, [data-note-attachment-action]')) return;
                       if (selectedAttachmentId === att.id) {
                         attachmentGesture.current = { id: att.id, x: e.clientX, y: e.clientY, width: attachmentLayout.widths[att.id] || 100, mode: 'drag' };
                         e.currentTarget.setPointerCapture(e.pointerId);
@@ -1381,33 +1381,33 @@ export function NoteEditor({
                       attachmentGesture.current = null;
                     }}
                     onContextMenu={(e) => { if (!canEdit) return; e.preventDefault(); setSelectedAttachmentId(att.id); }}>
-                    {canEdit && <div className="mb-1 flex justify-end"><button type="button" className="text-xs px-2 py-1 rounded-lg border" onClick={() => insertAttachmentAtCaret(att)}>Insert at cursor ↑</button></div>}
+                    {canEdit && <div className="mb-1 flex justify-end"><button type="button" className="text-xs px-2 py-1 rounded-lg border" onClick={() => insertAttachmentAtCaret(att)}>Chèn tại vị trí con trỏ ↑</button></div>}
                     <AttachmentItem attachment={att} selected={selectedAttachmentId === att.id} actionsEnabled={canEdit}
                       onSelect={() => { setSelectedImage(null); setSelectedAttachmentId(att.id); }}
                       onOpen={() => { if (selectedAttachmentId !== att.id) void handleOpenAttachment(att); }}
                       onDelete={() => handleDeleteAttachment(att)} />
-                    {selectedAttachmentId === att.id && <button className="noted-attachment-resize-handle" title="Drag to resize file card" aria-label="Drag to resize file card" onPointerDown={e => {
+                    {selectedAttachmentId === att.id && <button className="noted-attachment-resize-handle" title="Kéo để đổi kích thước thẻ tệp" aria-label="Kéo để đổi kích thước thẻ tệp" onPointerDown={e => {
                       e.preventDefault(); e.stopPropagation();
                       e.currentTarget.setPointerCapture(e.pointerId);
                       attachmentGesture.current = { id: att.id, x: e.clientX, y: e.clientY, width: attachmentLayout.widths[att.id] || 100, mode: 'resize' };
                     }} onPointerUp={() => { attachmentGesture.current = null; }}><Maximize2 size={14}/></button>}
                     {selectedAttachmentId === att.id && <div className="noted-attachment-toolbar" onPointerDown={e => e.stopPropagation()}>
-                      <button onClick={() => handleOpenAttachment(att)}>Open</button>
+                      <button onClick={() => handleOpenAttachment(att)}>Mở</button>
                       <button onClick={() => {
-                        const name = window.prompt('Rename attachment', att.name);
-                        if (name?.trim() && name.trim() !== att.name) void onRenameAttachment(att.id, name.trim()).then(ok => toast(ok ? 'Renamed' : 'Rename failed'));
-                      }}><Edit3 size={14} /> Rename</button>
-                      <button aria-label="Move attachment up" disabled={index === 0} onClick={() => moveAttachment(att.id, unplacedAttachments[index-1].id)}><ArrowUp size={15}/></button>
-                      <button aria-label="Move attachment down" disabled={index === unplacedAttachments.length-1} onClick={() => {
+                        const name = window.prompt('Đổi tên tệp đính kèm', att.name);
+                        if (name?.trim() && name.trim() !== att.name) void onRenameAttachment(att.id, name.trim()).then(ok => toast(ok ? 'Đã đổi tên' : 'Không thể đổi tên'));
+                      }}><Edit3 size={14} /> Đổi tên</button>
+                      <button aria-label="Di chuyển tệp đính kèm lên" disabled={index === 0} onClick={() => moveAttachment(att.id, unplacedAttachments[index-1].id)}><ArrowUp size={15}/></button>
+                      <button aria-label="Di chuyển tệp đính kèm xuống" disabled={index === unplacedAttachments.length-1} onClick={() => {
                         const ids = orderedAttachments.map(a => a.id);
                         const nextId = unplacedAttachments[index+1].id;
                         const from = ids.indexOf(att.id), to = ids.indexOf(nextId);
                         ids.splice(from, 1); ids.splice(to, 0, att.id);
                         commitLayout({ ...layoutRef.current, order: ids });
                       }}><ArrowDown size={15}/></button>
-                      <button onClick={() => setAttachmentWidth(att.id, (attachmentLayout.widths[att.id] || 100)-10)}>−</button>
-                      <button onClick={() => setAttachmentWidth(att.id, (attachmentLayout.widths[att.id] || 100)+10)}>+</button>
-                      <button className="noted-danger" onClick={() => handleDeleteAttachment(att)}><Trash2 size={14}/> Delete</button>
+                      <button aria-label="Thu hẹp thẻ tệp" title="Thu hẹp thẻ tệp" onClick={() => setAttachmentWidth(att.id, (attachmentLayout.widths[att.id] || 100)-10)}>−</button>
+                      <button aria-label="Mở rộng thẻ tệp" title="Mở rộng thẻ tệp" onClick={() => setAttachmentWidth(att.id, (attachmentLayout.widths[att.id] || 100)+10)}>+</button>
+                      <button className="noted-danger" onClick={() => handleDeleteAttachment(att)}><Trash2 size={14}/> Xóa</button>
                     </div>}
                   </div>
                 ))}
@@ -1425,9 +1425,9 @@ export function NoteEditor({
         return <>
           <div className="noted-image-outline" style={{ left: inlineFrame.left, top: inlineFrame.top, width: inlineFrame.width, height: inlineFrame.height }} />
           <div className="noted-media-toolbar" style={{ left: Math.max(8, Math.min(window.innerWidth - 310, inlineFrame.left)), top: Math.max(8, inlineFrame.top > 65 ? inlineFrame.top - 52 : inlineFrame.bottom + 9) }}>
-            <button onClick={() => void handleOpenAttachment(att)}>Open</button>
-            <button title="Change file display name" onClick={async () => {
-              const name = window.prompt('Rename attachment', att.name);
+            <button onClick={() => void handleOpenAttachment(att)}>Mở</button>
+            <button title="Đổi tên hiển thị của tệp" onClick={async () => {
+              const name = window.prompt('Đổi tên tệp đính kèm', att.name);
               if (!name?.trim() || name.trim() === att.name) return;
               const ok = await onRenameAttachment(att.id, name.trim());
               if (ok) {
@@ -1435,15 +1435,15 @@ export function NoteEditor({
                 if (nameNode) nameNode.textContent = name.trim();
                 commitEditor();
               }
-              toast(ok ? 'Renamed' : 'Rename failed');
-            }}><Edit3 size={14} /> Rename</button>
-            <button title="Make card narrower" onClick={() => resizeInlineAttachment(selectedInlineAttachment, widthPct - 10)}>−</button>
-            <button title="Make card wider" onClick={() => resizeInlineAttachment(selectedInlineAttachment, widthPct + 10)}>+</button>
-            <button title="Remove from text without deleting file" onClick={() => unlinkInlineAttachment(selectedInlineAttachment)}>Unlink</button>
-            <button className="noted-danger" onClick={() => void handleDeleteAttachment(att)}><Trash2 size={14} /> Delete</button>
-            <button onClick={() => { setSelectedInlineAttachment(null); setInlineFrame(null); }} title="Deselect"><X size={15}/></button>
+              toast(ok ? 'Đã đổi tên' : 'Không thể đổi tên');
+            }}><Edit3 size={14} /> Đổi tên</button>
+            <button title="Thu hẹp thẻ" aria-label="Thu hẹp thẻ" onClick={() => resizeInlineAttachment(selectedInlineAttachment, widthPct - 10)}>−</button>
+            <button title="Mở rộng thẻ" aria-label="Mở rộng thẻ" onClick={() => resizeInlineAttachment(selectedInlineAttachment, widthPct + 10)}>+</button>
+            <button title="Gỡ khỏi nội dung mà không xóa tệp" onClick={() => unlinkInlineAttachment(selectedInlineAttachment)}>Gỡ khỏi ghi chú</button>
+            <button className="noted-danger" onClick={() => void handleDeleteAttachment(att)}><Trash2 size={14} /> Xóa</button>
+            <button onClick={() => { setSelectedInlineAttachment(null); setInlineFrame(null); }} title="Bỏ chọn" aria-label="Bỏ chọn"><X size={15}/></button>
           </div>
-          <button aria-label="Drag to resize attachment" className="noted-image-handle" style={{left:inlineFrame.right,top:inlineFrame.bottom,cursor:'ew-resize'}}
+          <button aria-label="Kéo để đổi kích thước tệp đính kèm" className="noted-image-handle" style={{left:inlineFrame.right,top:inlineFrame.bottom,cursor:'ew-resize'}}
             onPointerDown={e => {
               e.preventDefault(); e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId);
               inlineDrag.current = { element: selectedInlineAttachment, x: e.clientX, y: widthPct, moved: false };
@@ -1462,17 +1462,17 @@ export function NoteEditor({
       {selectedImage && imageFrame && <>
         <div className="noted-image-outline" style={{ left: imageFrame.left, top: imageFrame.top, width: imageFrame.width, height: imageFrame.height }} />
         <div className="noted-media-toolbar" style={{ left: Math.max(8, Math.min(window.innerWidth - 310, imageFrame.left)), top: Math.max(8, imageFrame.top > 65 ? imageFrame.top - 52 : imageFrame.bottom + 9) }}>
-          <button onClick={() => setMoveImageMode(v => !v)} aria-pressed={moveImageMode} title="Drag to move"><Move size={16}/> {moveImageMode ? 'Moving' : 'Move'}</button>
-          <button onClick={() => {setFreeResize(v=>!v);}} aria-pressed={freeResize} title="Toggle free resize"><Maximize2 size={16}/> {freeResize ? 'Free' : 'Ratio'}</button>
-          <button onClick={() => {setImageViewer(selectedImage.src);setViewerScale(1);}}>Preview</button>
-          <button onClick={() => duplicateImage(selectedImage)} title="Duplicate image"><Copy size={16}/></button>
-          <button className="noted-danger" onClick={() => handleRemoveImage(selectedImage.src)} title="Delete image"><Trash2 size={16}/></button>
-          <button onClick={clearSelection} title="Deselect"><X size={16}/></button>
+          <button onClick={() => setMoveImageMode(v => !v)} aria-pressed={moveImageMode} title="Kéo để di chuyển"> <Move size={16}/> {moveImageMode ? 'Đang di chuyển' : 'Di chuyển'}</button>
+          <button onClick={() => {setFreeResize(v=>!v);}} aria-pressed={freeResize} title="Bật hoặc tắt đổi kích thước tự do"><Maximize2 size={16}/> {freeResize ? 'Tự do' : 'Giữ tỷ lệ'}</button>
+          <button onClick={() => {setImageViewer(selectedImage.src);setViewerScale(1);}}>Xem trước</button>
+          <button onClick={() => duplicateImage(selectedImage)} title="Nhân bản hình ảnh" aria-label="Nhân bản hình ảnh"><Copy size={16}/></button>
+          <button className="noted-danger" onClick={() => handleRemoveImage(selectedImage.src)} title="Xóa hình ảnh" aria-label="Xóa hình ảnh"><Trash2 size={16}/></button>
+          <button onClick={clearSelection} title="Bỏ chọn" aria-label="Bỏ chọn"><X size={16}/></button>
         </div>
         {(['nw','n','ne','e','se','s','sw','w'] as const).map(handle => {
           const left = handle.includes('w') ? imageFrame.left : handle.includes('e') ? imageFrame.right : (imageFrame.left + imageFrame.right) / 2;
           const top = handle.includes('n') ? imageFrame.top : handle.includes('s') ? imageFrame.bottom : (imageFrame.top + imageFrame.bottom) / 2;
-          return <button key={handle} className="noted-image-handle" aria-label={`Resize ${handle}`} style={{left,top,cursor:`${handle}-resize`}}
+          return <button key={handle} className="noted-image-handle" aria-label={`Đổi kích thước ${handle}`} style={{left,top,cursor:`${handle}-resize`}}
             onPointerDown={e => {
               e.preventDefault(); e.stopPropagation();
               e.currentTarget.setPointerCapture(e.pointerId);
@@ -1537,7 +1537,7 @@ export function NoteEditor({
         </button>
         {uploading && (
           <span className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>
-          {desktopPresentation ? `Đang tải ${uploadsInProgress} tệp...` : `Uploading ${uploadsInProgress} file${uploadsInProgress === 1 ? '' : 's'}...`}
+          Đang tải {uploadsInProgress} tệp lên...
           </span>
         )}
       </div>
@@ -1556,13 +1556,15 @@ export function NoteEditor({
           <button
             className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20"
             onClick={() => setImageViewer(null)}
+            aria-label="Đóng xem trước hình ảnh"
+            title="Đóng"
           >
             <X size={24} />
           </button>
-          {canEdit && <button type="button" className="absolute top-4 left-4 rounded bg-black/70 px-3 py-2 text-white" onClick={() => { handleRemoveImage(imageViewer); setImageViewer(null); }}>Remove image</button>}
+          {canEdit && <button type="button" className="absolute top-4 left-4 rounded bg-black/70 px-3 py-2 text-white" onClick={() => { handleRemoveImage(imageViewer); setImageViewer(null); }}>Xóa hình ảnh</button>}
           <img
             src={imageViewer}
-            alt="Viewer"
+            alt="Xem trước hình ảnh"
             className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
             style={{ transform: `scale(${viewerScale})`, touchAction: 'none' }}
             onTouchStart={e => {
@@ -1657,14 +1659,15 @@ function AttachmentItem({
           {attachment.name}
         </div>
         <div className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>
-          {fileType} · {formatFileSize(attachment.size)} · Uploaded
+          {fileType} · {formatFileSize(attachment.size)} · Đã tải lên
         </div>
       </button>
       <button
         onClick={onOpen}
         className="flex-shrink-0 p-1.5 rounded-lg hover-bg text-tertiary transition-colors"
         style={{ color: 'var(--text-tertiary)' }}
-        aria-label="Open file"
+        aria-label="Mở tệp"
+        data-note-attachment-action="open"
       >
         <Download size={16} />
       </button>
@@ -1672,7 +1675,8 @@ function AttachmentItem({
         onClick={onDelete}
         className="flex-shrink-0 p-1.5 rounded-lg hover-bg text-tertiary transition-colors"
         style={{ color: 'var(--text-tertiary)' }}
-        aria-label="Remove attachment"
+        aria-label="Xóa tệp đính kèm"
+        data-note-attachment-action="remove"
       >
         <X size={16} />
       </button>}

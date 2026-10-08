@@ -106,7 +106,6 @@ export function NoteList({
   const menuNote = sorted.find((note) => note.id === menuFor) || null;
 
   const folderName = (id: string | null) => folders.find((f) => f.id === id)?.name || null;
-  const localized = desktopMode || mobileSearchMode;
   const noteTime = (timestamp: number) => desktopMode
     ? new Date(timestamp).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
     : formatTime(timestamp);
@@ -130,16 +129,16 @@ export function NoteList({
 
   const handleTrash = (note: Note) => {
     onTrash(note.id);
-    toast('Note moved to trash', {
-      label: 'Undo',
+    toast('Đã chuyển ghi chú vào thùng rác', {
+      label: 'Hoàn tác',
       onClick: () => onRestore(note.id),
     });
   };
 
   const handleArchive = (note: Note) => {
     onArchive(note.id, !note.archived);
-    toast(note.archived ? 'Note unarchived' : 'Note archived', {
-      label: 'Undo',
+    toast(note.archived ? 'Đã bỏ lưu trữ ghi chú' : 'Đã lưu trữ ghi chú', {
+      label: 'Hoàn tác',
       onClick: () => onArchive(note.id, note.archived),
     });
   };
@@ -164,8 +163,8 @@ export function NoteList({
       <div className="flex items-center gap-2">
       <button
               type="button"
-                      aria-label="Open navigation menu"
-                              title="Open navigation menu"
+                      aria-label="Mở thanh điều hướng"
+                              title="Mở thanh điều hướng"
                                       onClick={onOpenSidebar}
                                               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border lg:hidden"
                                                       style={{ borderColor: "var(--border)", backgroundColor: "var(--bg-secondary)", color: "var(--text-secondary)" }}
@@ -182,17 +181,20 @@ export function NoteList({
             <input
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder={localized ? 'Tìm kiếm ghi chú...' : 'Search notes'}
-              aria-label={localized ? 'Tìm kiếm ghi chú' : 'Search notes'}
+              placeholder="Tìm kiếm ghi chú..."
+              aria-label="Tìm kiếm ghi chú"
               data-global-search
               className="w-full bg-secondary text-app text-sm rounded-lg pl-9 pr-8 py-2 outline-none transition-colors placeholder:text-tertiary"
               style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text)' }}
             />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => onSearchChange('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-tertiary hover-text-app p-1"
                 style={{ color: 'var(--text-tertiary)' }}
+                aria-label="Xóa nội dung tìm kiếm"
+                title="Xóa tìm kiếm"
               >
                 <X size={15} />
               </button>
@@ -205,7 +207,7 @@ export function NoteList({
       {/* Notes list */}
       <div className="flex-1 overflow-y-auto px-2">
         {sorted.length === 0 ? (
-          <EmptyState view={view} hasSearch={!!searchQuery.trim()} localized={localized} />
+          <EmptyState view={view} hasSearch={!!searchQuery.trim()} />
         ) : (
           <div className="space-y-0.5">
             {sorted.map((note) => {
@@ -229,7 +231,7 @@ export function NoteList({
                         className={`font-semibold text-sm truncate ${selected ? 'text-accent' : 'text-app'}`}
                         style={{ color: selected ? 'var(--accent)' : 'var(--text)' }}
                       >
-                        {note.title.trim() || (localized ? 'Chưa có tiêu đề' : 'Untitled')}
+                        {note.title.trim() || 'Chưa có tiêu đề'}
                       </h3>
                       <span className="text-xs text-tertiary flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>
                         {view.kind === 'trash' ? noteTime(note.trashedAt || note.updatedAt) : noteTime(note.updatedAt)}
@@ -239,7 +241,7 @@ export function NoteList({
                       className="note-preview text-secondary text-xs"
                       style={{ color: 'var(--text-secondary)' }}
                     >
-                      {getPreview(note.content) || (localized ? 'Chưa có nội dung' : 'No additional text')}
+                      {getPreview(note.content) || 'Chưa có nội dung'}
                     </p>
                     <div className="flex items-center gap-2 mt-1.5">
                       {note.pinned && (
@@ -273,7 +275,7 @@ export function NoteList({
                         backgroundColor: selected || menuFor === note.id ? 'var(--accent-light)' : 'var(--bg)',
                         opacity: menuFor === note.id ? 1 : undefined,
                       }}
-                      aria-label={desktopMode ? 'Thao tác ghi chú' : 'Thao tác ghi chú'}
+                      aria-label="Thao tác ghi chú"
                     >
                       <MoreHorizontal size={16} />
                     </button>
@@ -287,13 +289,13 @@ export function NoteList({
                       onClick={(e) => e.stopPropagation()}
                     >
                       {view.kind !== 'trash' && (
-                        <MenuItem icon={note.pinned ? <PinOff size={15} /> : <Pin size={15} />} label={note.pinned ? (desktopMode ? 'Bỏ ghim' : 'Unpin') : (desktopMode ? 'Ghim' : 'Pin')} onClick={() => { onTogglePin(note.id); setMenuFor(null); }} />
+                        <MenuItem icon={note.pinned ? <PinOff size={15} /> : <Pin size={15} />} label={note.pinned ? 'Bỏ ghim' : 'Ghim'} onClick={() => { onTogglePin(note.id); setMenuFor(null); }} />
                       )}
                       {view.kind !== 'trash' && (
-                        <MenuItem icon={<Copy size={15} />} label={desktopMode ? 'Tạo bản sao' : 'Duplicate'} onClick={() => { onDuplicate(note.id); setMenuFor(null); }} />
+                        <MenuItem icon={<Copy size={15} />} label="Tạo bản sao" onClick={() => { onDuplicate(note.id); setMenuFor(null); }} />
                       )}
                       {view.kind !== 'trash' && (
-                        <MenuItem icon={note.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />} label={note.archived ? (desktopMode ? 'Bỏ lưu trữ' : 'Unarchive') : (desktopMode ? 'Lưu trữ' : 'Archive')} onClick={() => { handleArchive(note); setMenuFor(null); }} />
+                        <MenuItem icon={note.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />} label={note.archived ? 'Bỏ lưu trữ' : 'Lưu trữ'} onClick={() => { handleArchive(note); setMenuFor(null); }} />
                       )}
                       {view.kind !== 'trash' && (
                         <div className="relative">
@@ -303,7 +305,7 @@ export function NoteList({
                             onClick={() => setMoveFor(moveFor === note.id ? null : note.id)}
                           >
                             <FolderIcon size={15} />
-                            <span className="flex-1">{desktopMode ? 'Chuyển đến...' : 'Move to...'}</span>
+                            <span className="flex-1">Chuyển đến...</span>
                             <ChevronRight size={14} style={{ color: 'var(--text-tertiary)' }} />
                           </button>
                           {moveFor === note.id && (
@@ -312,7 +314,7 @@ export function NoteList({
                               style={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)' }}
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <MenuItem label={desktopMode ? 'Không có thư mục' : 'No folder'} onClick={() => { onMove(note.id, null); setMenuFor(null); setMoveFor(null); }} />
+                              <MenuItem label="Không có thư mục" onClick={() => { onMove(note.id, null); setMenuFor(null); setMoveFor(null); }} />
                               {folders.map((f) => (
                                 <MenuItem key={f.id} label={f.name} icon={<FolderIcon size={14} />} onClick={() => { onMove(note.id, f.id); setMenuFor(null); setMoveFor(null); }} />
                               ))}
@@ -323,11 +325,11 @@ export function NoteList({
                       <div className="h-px my-1" style={{ backgroundColor: 'var(--border)' }} />
                       {view.kind === 'trash' ? (
                         <>
-                          <MenuItem icon={<RotateCcw size={15} />} label={desktopMode ? 'Khôi phục' : 'Restore'} onClick={() => { onRestore(note.id); setMenuFor(null); }} />
-                          <MenuItem icon={<Trash2 size={15} />} label={desktopMode ? 'Xóa vĩnh viễn' : 'Delete forever'} danger onClick={() => { handleDelete(note); setMenuFor(null); }} />
+                          <MenuItem icon={<RotateCcw size={15} />} label="Khôi phục" onClick={() => { onRestore(note.id); setMenuFor(null); }} />
+                          <MenuItem icon={<Trash2 size={15} />} label="Xóa vĩnh viễn" danger onClick={() => { handleDelete(note); setMenuFor(null); }} />
                         </>
                       ) : (
-                        <MenuItem icon={<Trash2 size={15} />} label={desktopMode ? 'Chuyển vào thùng rác' : 'Move to trash'} danger onClick={() => { handleTrash(note); setMenuFor(null); }} />
+                        <MenuItem icon={<Trash2 size={15} />} label="Chuyển vào thùng rác" danger onClick={() => { handleTrash(note); setMenuFor(null); }} />
                       )}
                     </div>
                   )}
@@ -344,7 +346,7 @@ export function NoteList({
           onClick={onAddNote}
           className="absolute bottom-6 right-6 w-12 h-12 rounded-full bg-accent text-white flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-transform z-20"
           style={{ backgroundColor: 'var(--accent)', color: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
-          aria-label="New note"
+          aria-label="Ghi chú mới"
         >
           <Plus size={24} />
         </button>
@@ -389,50 +391,39 @@ function MenuItem({
   );
 }
 
-function EmptyState({ view, hasSearch, localized }: { view: ViewType; hasSearch: boolean; localized: boolean }) {
-  let title = 'No notes yet';
-  let message = 'Tap the + button to create your first note.';
+function EmptyState({ view, hasSearch }: { view: ViewType; hasSearch: boolean }) {
+  let title = 'Chưa có ghi chú';
+  let message = 'Tạo ghi chú đầu tiên để bắt đầu.';
   let icon = <Plus size={40} />;
 
   if (hasSearch) {
-    title = 'No results';
-    message = 'Try a different search term.';
+    title = 'Không tìm thấy ghi chú';
+    message = 'Thử một từ khóa khác.';
     icon = <Search size={40} />;
   } else if (view.kind === 'pinned') {
-    title = 'No pinned notes';
-    message = 'Pin important notes to find them quickly here.';
+    title = 'Chưa có ghi chú được ghim';
+    message = 'Ghim ghi chú quan trọng để xem lại tại đây.';
     icon = <Pin size={40} />;
   } else if (view.kind === 'archived') {
-    title = 'No archived notes';
-    message = 'Archived notes will appear here.';
+    title = 'Chưa có ghi chú lưu trữ';
+    message = 'Ghi chú lưu trữ sẽ xuất hiện tại đây.';
     icon = <Archive size={40} />;
   } else if (view.kind === 'trash') {
-    title = 'Trash is empty';
-    message = 'Deleted notes will appear here for 30 days.';
+    title = 'Thùng rác đang trống';
+    message = 'Ghi chú đã xóa sẽ xuất hiện tại đây.';
     icon = <Trash2 size={40} />;
   } else if (view.kind === 'folder') {
-    title = 'No notes in this folder';
-    message = 'Create a note or move existing notes here.';
+    title = 'Thư mục chưa có ghi chú';
+    message = 'Tạo ghi chú hoặc chuyển ghi chú vào thư mục này.';
     icon = <FolderIcon size={40} />;
   } else if (view.kind === 'tag') {
-    title = `No notes tagged #${view.name}`;
-    message = 'Add #tag to a note to see it here.';
+    title = `Chưa có ghi chú với thẻ #${view.name}`;
+    message = 'Thêm thẻ vào nội dung ghi chú để xem tại đây.';
     icon = <FolderIcon size={40} />;
   } else if (view.kind === 'recent') {
     title = 'Chưa có ghi chú gần đây';
     message = 'Các ghi chú đang hoạt động sẽ xuất hiện ở đây.';
     icon = <Clock3 size={40} />;
-  }
-
-  if (localized) {
-    if (hasSearch) { title = 'Không tìm thấy ghi chú'; message = 'Thử một từ khóa khác.'; }
-    else if (view.kind === 'pinned') { title = 'Chưa có ghi chú được ghim'; message = 'Ghim ghi chú quan trọng để xem lại tại đây.'; }
-    else if (view.kind === 'archived') { title = 'Chưa có ghi chú lưu trữ'; message = 'Ghi chú lưu trữ sẽ xuất hiện tại đây.'; }
-    else if (view.kind === 'trash') { title = 'Thùng rác đang trống'; message = 'Ghi chú đã xóa sẽ xuất hiện tại đây.'; }
-    else if (view.kind === 'folder') { title = 'Thư mục chưa có ghi chú'; message = 'Tạo ghi chú hoặc chuyển ghi chú vào thư mục này.'; }
-    else if (view.kind === 'tag') { title = `Chưa có ghi chú với thẻ #${view.name}`; message = 'Thêm thẻ vào nội dung ghi chú để xem tại đây.'; }
-    else if (view.kind === 'recent') { title = 'Chưa có ghi chú gần đây'; message = 'Các ghi chú đang hoạt động sẽ xuất hiện tại đây.'; }
-    else { title = 'Chưa có ghi chú'; message = 'Tạo ghi chú đầu tiên để bắt đầu.'; }
   }
 
   return (

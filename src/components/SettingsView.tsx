@@ -40,7 +40,7 @@ export function SettingsView({
     a.download = `noted-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast('Notes exported');
+    toast('Đã xuất ghi chú');
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,9 +51,9 @@ export function SettingsView({
       try {
         const data = parseImport(reader.result as string);
         onImport(data);
-        toast('Notes imported successfully');
+        toast('Đã nhập ghi chú thành công');
       } catch {
-        toast('Could not import file — invalid format');
+        toast('Không thể nhập tệp — định dạng không hợp lệ');
       }
     };
     reader.readAsText(file);
@@ -68,25 +68,26 @@ export function SettingsView({
           onClick={onBack}
           className="lg:hidden p-2 rounded-lg hover-bg text-secondary -ml-1"
           style={{ color: 'var(--text-secondary)' }}
+          aria-label="Quay lại"
         >
           <ArrowLeft size={20} />
         </button>
-        <h2 className="text-lg font-bold text-app px-2" style={{ color: 'var(--text)' }}>Settings</h2>
+        <h2 className="text-lg font-bold text-app px-2" style={{ color: 'var(--text)' }}>Cài đặt</h2>
       </div>
 
       {/* Settings content */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-lg mx-auto px-6 py-6 sm:px-8 sm:py-8 space-y-8">
           {/* Appearance */}
-          <Section title="Appearance">
-            <Row label="Theme">
+          <Section title="Giao diện">
+            <Row label="Chủ đề">
               <div className="flex gap-1 bg-secondary p-1 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-                <ThemeBtn icon={<Sun size={15} />} label="Light" active={settings.theme === 'light'} onClick={() => onUpdateSettings({ theme: 'light' })} />
-                <ThemeBtn icon={<Moon size={15} />} label="Dark" active={settings.theme === 'dark'} onClick={() => onUpdateSettings({ theme: 'dark' })} />
-                <ThemeBtn icon={<Monitor size={15} />} label="System" active={settings.theme === 'system'} onClick={() => onUpdateSettings({ theme: 'system' })} />
+                <ThemeBtn icon={<Sun size={15} />} label="Sáng" active={settings.theme === 'light'} onClick={() => onUpdateSettings({ theme: 'light' })} />
+                <ThemeBtn icon={<Moon size={15} />} label="Tối" active={settings.theme === 'dark'} onClick={() => onUpdateSettings({ theme: 'dark' })} />
+                <ThemeBtn icon={<Monitor size={15} />} label="Hệ thống" active={settings.theme === 'system'} onClick={() => onUpdateSettings({ theme: 'system' })} />
               </div>
             </Row>
-            <Row label="Font size">
+            <Row label="Cỡ chữ">
               <div className="flex gap-1 bg-secondary p-1 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
                 {(['sm', 'md', 'lg', 'xl'] as const).map((size) => (
                   <button
@@ -109,41 +110,41 @@ export function SettingsView({
           </Section>
 
           {/* Sorting */}
-          <Section title="Sort order">
-            <Row label="Sort by">
+          <Section title="Thứ tự sắp xếp">
+            <Row label="Sắp xếp theo">
               <select
                 value={settings.sortBy}
                 onChange={(e) => onUpdateSettings({ sortBy: e.target.value as Settings['sortBy'] })}
                 className="bg-secondary text-app text-sm rounded-lg px-3 py-2 outline-none border border-app"
                 style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text)', borderColor: 'var(--border)' }}
               >
-                <option value="updated">Last edited</option>
-                <option value="created">Date created</option>
-                <option value="title">Title</option>
+                <option value="updated">Chỉnh sửa gần đây</option>
+                <option value="created">Ngày tạo</option>
+                <option value="title">Tiêu đề</option>
               </select>
             </Row>
-            <Row label="Direction">
+            <Row label="Thứ tự">
               <div className="flex gap-1 bg-secondary p-1 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
                 <button
                   onClick={() => onUpdateSettings({ sortDir: 'desc' })}
                   className={`px-3 py-1.5 rounded-md text-sm transition-all ${settings.sortDir === 'desc' ? 'bg-app text-app shadow-sm' : 'text-secondary'}`}
                   style={settings.sortDir === 'desc' ? { backgroundColor: 'var(--bg)', color: 'var(--text)' } : { color: 'var(--text-secondary)' }}
                 >
-                  Newest first
+                  Mới nhất trước
                 </button>
                 <button
                   onClick={() => onUpdateSettings({ sortDir: 'asc' })}
                   className={`px-3 py-1.5 rounded-md text-sm transition-all ${settings.sortDir === 'asc' ? 'bg-app text-app shadow-sm' : 'text-secondary'}`}
                   style={settings.sortDir === 'asc' ? { backgroundColor: 'var(--bg)', color: 'var(--text)' } : { color: 'var(--text-secondary)' }}
                 >
-                  Oldest first
+                  Cũ nhất trước
                 </button>
               </div>
             </Row>
           </Section>
 
           {/* Data */}
-          <Section title="Backup & Data">
+          <Section title="Sao lưu và dữ liệu">
             <button
               onClick={handleExport}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-secondary hover-bg text-app text-sm transition-colors text-left"
@@ -151,8 +152,8 @@ export function SettingsView({
             >
               <Download size={18} style={{ color: 'var(--accent)' }} />
               <div className="flex-1">
-                <div className="font-medium">Export notes</div>
-                <div className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>Download all notes as JSON</div>
+                <div className="font-medium">Xuất ghi chú</div>
+                <div className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>Tải toàn bộ ghi chú dưới dạng JSON</div>
               </div>
             </button>
 
@@ -163,8 +164,8 @@ export function SettingsView({
             >
               <Upload size={18} style={{ color: 'var(--accent)' }} />
               <div className="flex-1">
-                <div className="font-medium">Import notes</div>
-                <div className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>Restore from a backup file</div>
+                <div className="font-medium">Nhập ghi chú</div>
+                <div className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>Khôi phục từ tệp sao lưu</div>
               </div>
             </button>
             <input
@@ -179,10 +180,10 @@ export function SettingsView({
           {/* About */}
           <div className="text-center pt-4 pb-8">
             <p className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>
-              Tanooki · {notes.length} notes · {folders.length} folders
+              Tanooki · {notes.length} ghi chú · {folders.length} thư mục
             </p>
             <p className="text-xs text-tertiary mt-1" style={{ color: 'var(--text-tertiary)' }}>
-              Synced across your devices via cloud storage
+              Được đồng bộ giữa các thiết bị qua bộ nhớ đám mây
             </p>
           </div>
         </div>

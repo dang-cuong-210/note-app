@@ -13,20 +13,20 @@ export function FolderSyncNotice({ conflicts, error, onResolve }: {
     try { await onResolve(id, choice); } catch { /* The hook exposes the durable sync error. */ }
     finally { setBusy(false); }
   };
-  return <section aria-label="Folder sync status" aria-live="polite"
+  return <section aria-label="Trạng thái đồng bộ thư mục" aria-live="polite"
     className="fixed bottom-4 left-4 right-4 z-50 max-h-60 overflow-auto rounded-lg border p-3 text-sm shadow-lg"
     style={{ backgroundColor: 'var(--bg)', color: 'var(--text)', borderColor: 'var(--border)' }}>
     {error && <p>{error}</p>}
     {conflicts.map((record) => <div key={record.id} className="py-2">
-      <p>Folder conflict: “{record.pending!.value.name}”. Your local {record.pending!.kind === 'delete' ? 'deletion' : 'change'} is retained.</p>
-      <p className="text-xs">Server: {record.remote && !record.remote.deleted ? record.remote.name : 'folder deleted or unavailable'}.
-        Saving a copy creates an empty folder; notes keep their current locations.</p>
+      <p>Xung đột thư mục: “{record.pending!.value.name}”. {record.pending!.kind === 'delete' ? 'Thao tác xóa' : 'Thay đổi'} trên thiết bị này vẫn được giữ lại.</p>
+      <p className="text-xs">Bản máy chủ: {record.remote && !record.remote.deleted ? record.remote.name : 'thư mục đã bị xóa hoặc không khả dụng'}.
+        Lưu bản sao sẽ tạo thư mục trống; ghi chú vẫn ở vị trí hiện tại.</p>
       <div className="flex flex-wrap gap-3 mt-2">
-        <button type="button" disabled={busy} onClick={() => void resolve(record.id, 'server')}>Use server version</button>
+        <button type="button" disabled={busy} onClick={() => void resolve(record.id, 'server')}>Dùng bản máy chủ</button>
         {record.pending!.kind === 'save'
-          ? <button type="button" disabled={busy} onClick={() => void resolve(record.id, 'copy')}>Save local as new folder</button>
+          ? <button type="button" disabled={busy} onClick={() => void resolve(record.id, 'copy')}>Lưu thành thư mục mới</button>
           : record.remote && !record.remote.deleted && <button type="button" disabled={busy}
-            onClick={() => void resolve(record.id, 'delete')}>Delete server version shown</button>}
+            onClick={() => void resolve(record.id, 'delete')}>Xóa bản máy chủ đang hiển thị</button>}
       </div>
     </div>)}
   </section>;

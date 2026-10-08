@@ -88,7 +88,7 @@ export function Sidebar({
   };
 
   const handleDeleteFolder = (id: string, name: string) => {
-    if (window.confirm(`Delete "${name}"? Notes inside will be moved to All Notes.`)) {
+    if (window.confirm(`Xóa thư mục "${name}"? Các ghi chú bên trong sẽ được chuyển về Tất cả ghi chú.`)) {
       onDeleteFolder(id);
     }
     setFolderMenuFor(null);
@@ -138,6 +138,7 @@ export function Sidebar({
             onClick={onClose}
             className="lg:hidden text-secondary hover-text-app p-1 -mr-1"
             style={{ color: 'var(--text-secondary)' }}
+            aria-label="Đóng thanh bên"
           >
             <X size={20} />
           </button>
@@ -145,12 +146,12 @@ export function Sidebar({
       </div>
 
       {/* Nav */}
-      <div className="px-3 pb-3"><label htmlFor={onClose ? "mobile-sidebar-search" : "desktop-sidebar-search"} className="sr-only">Search notes</label><div className="relative"><Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-secondary)" }} /><input id={onClose ? "mobile-sidebar-search" : "desktop-sidebar-search"} type="search" value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} placeholder="Search" className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm outline-none focus:ring-2" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border)", color: "var(--text)" }} /></div></div>
+      <div className="px-3 pb-3"><label htmlFor={onClose ? "mobile-sidebar-search" : "desktop-sidebar-search"} className="sr-only">Tìm kiếm ghi chú</label><div className="relative"><Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-secondary)" }} /><input id={onClose ? "mobile-sidebar-search" : "desktop-sidebar-search"} type="search" value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm kiếm" aria-label="Tìm kiếm ghi chú" className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm outline-none focus:ring-2" style={{ backgroundColor: "var(--bg-secondary)", borderColor: "var(--border)", color: "var(--text)" }} /></div></div>
     <nav className="flex-1 overflow-y-auto px-2 pb-4">
         <div className="space-y-0.5">
-          {navItem(<FileText size={18} />, 'All Notes', { kind: 'all' }, activeNotes.filter((n) => !n.archived).length, isActive({ kind: 'all' }))}
-          {navItem(<Pin size={18} />, 'Pinned', { kind: 'pinned' }, pinnedCount, isActive({ kind: 'pinned' }))}
-          {navItem(<Archive size={18} />, 'Archived', { kind: 'archived' }, archivedCount, isActive({ kind: 'archived' }))}
+          {navItem(<FileText size={18} />, 'Tất cả ghi chú', { kind: 'all' }, activeNotes.filter((n) => !n.archived).length, isActive({ kind: 'all' }))}
+          {navItem(<Pin size={18} />, 'Đã ghim', { kind: 'pinned' }, pinnedCount, isActive({ kind: 'pinned' }))}
+          {navItem(<Archive size={18} />, 'Đã lưu trữ', { kind: 'archived' }, archivedCount, isActive({ kind: 'archived' }))}
         </div>
 
         {/* Folders */}
@@ -160,6 +161,7 @@ export function Sidebar({
               onClick={() => setFoldersExpanded((v) => !v)}
               className="flex items-center gap-1 text-xs font-semibold text-tertiary uppercase tracking-wider"
               style={{ color: 'var(--text-tertiary)' }}
+              aria-expanded={foldersExpanded}
             >
               <ChevronRight
                 size={14}
@@ -172,6 +174,7 @@ export function Sidebar({
               onClick={() => setShowFolderInput(true)}
               className="text-tertiary hover-text-app p-0.5"
               style={{ color: 'var(--text-tertiary)' }}
+              aria-label="Tạo thư mục"
             >
               <Plus size={15} />
             </button>
@@ -196,7 +199,7 @@ export function Sidebar({
                       if (folderName.trim()) handleAddFolder();
                       else setShowFolderInput(false);
                     }}
-                    placeholder="Folder name"
+                    placeholder="Tên thư mục"
                     className="w-full text-sm bg-transparent border-b border-app pb-1 outline-none text-app"
                     style={{ color: 'var(--text)', borderColor: 'var(--border)' }}
                   />
@@ -204,7 +207,7 @@ export function Sidebar({
               )}
               {folders.length === 0 && !showFolderInput && (
                 <p className="px-3 py-1.5 text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>
-                  No folders yet
+                  Chưa có thư mục
                 </p>
               )}
               {folders.map((folder) => {
@@ -253,7 +256,7 @@ export function Sidebar({
                         </button>
                         <button
                           ref={folderMenuFor === folder.id ? folderMenuTriggerRef : undefined}
-                          aria-label={`Folder actions for ${folder.name}`}
+                          aria-label={`Thao tác thư mục ${folder.name}`}
                           aria-expanded={folderMenuFor === folder.id}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -276,14 +279,14 @@ export function Sidebar({
                               className="w-full px-3 py-2 text-sm text-left hover-bg rounded-lg mx-1"
                               style={{ color: 'var(--text-secondary)' }}
                             >
-                              Rename
+                              Đổi tên
                             </button>
                             <button
                               onClick={() => handleDeleteFolder(folder.id, folder.name)}
                               className="w-full px-3 py-2 text-sm text-left hover-bg rounded-lg mx-1"
                               style={{ color: 'var(--danger)' }}
                             >
-                              Delete folder
+                              Xóa thư mục
                             </button>
                           </div>
                         )}
@@ -309,7 +312,7 @@ export function Sidebar({
                 className="transition-transform"
                 style={{ transform: tagsExpanded ? 'rotate(90deg)' : 'none' }}
               />
-              Tags
+              Thẻ
             </button>
             {tagsExpanded && (
               <div className="space-y-0.5">
@@ -340,8 +343,8 @@ export function Sidebar({
 
         {/* Trash + Settings */}
         <div className="mt-5 space-y-0.5">
-          {navItem(<Trash2 size={18} />, 'Recently Deleted', { kind: 'trash' }, trashCount, isActive({ kind: 'trash' }))}
-          {navItem(<SettingsIcon size={18} />, 'Settings', { kind: 'settings' }, undefined, isActive({ kind: 'settings' }))}
+          {navItem(<Trash2 size={18} />, 'Đã xóa gần đây', { kind: 'trash' }, trashCount, isActive({ kind: 'trash' }))}
+          {navItem(<SettingsIcon size={18} />, 'Cài đặt', { kind: 'settings' }, undefined, isActive({ kind: 'settings' }))}
         </div>
       </nav>
 
@@ -356,7 +359,8 @@ export function Sidebar({
               onClick={onSignOut}
               className="p-1.5 rounded-lg hover-bg flex-shrink-0"
               style={{ color: 'var(--text-secondary)' }}
-              title="Sign out"
+              title="Đăng xuất"
+              aria-label="Đăng xuất"
             >
               <LogOut size={16} />
             </button>
