@@ -1,4 +1,5 @@
 import type { Note, Folder, Settings, TagInfo } from '@/types';
+import { normalizeSearchText, stripHtmlToText } from '@/lib/advancedSearch.js';
 
 export function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
@@ -39,12 +40,7 @@ export function sortNotes(notes: Note[], settings: { sortBy: 'updated' | 'create
 
 /** Extract plain text from HTML for preview and search. */
 export function htmlToText(html: string): string {
-  if (!html) return '';
-  const div = document.createElement('div');
-  div.innerHTML = html;
-  // Replace <br> with space, <li> with bullet
-  div.querySelectorAll('br').forEach((br) => br.replaceWith(' '));
-  return (div.textContent || '').replace(/\s+/g, ' ').trim();
+  return stripHtmlToText(html);
 }
 
 /** Get a short preview of note content. */
@@ -131,11 +127,11 @@ export function parseImport(json: string): {
 
 /** Search notes by query in title and content. */
 export function searchNotes(notes: Note[], query: string): Note[] {
-  const q = query.toLowerCase().trim();
+  const q = normalizeSearchText(query);
   if (!q) return notes;
   return notes.filter((n) => {
-    const title = n.title.toLowerCase();
-    const content = htmlToText(n.content).toLowerCase();
+    const title = normalizeSearchText(n.title);
+    const content = normalizeSearchText(htmlToText(n.content));
     return title.includes(q) || content.includes(q);
   });
 }

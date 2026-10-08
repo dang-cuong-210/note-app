@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Pin,
   PinOff,
@@ -15,12 +15,15 @@ import {
   X,
   Plus,
   ChevronRight,
+  SlidersHorizontal,
+  ArrowDownUp,
 } from 'lucide-react';
 import type { Note, Folder } from '@/types';
 import type { ViewType } from '@/lib/navigation';
-import { sortNotes, formatTime, getPreview, htmlToText, noteHasTag } from '@/lib/utils';
+import { sortNotes, formatTime } from '@/lib/utils';
+import { buildSearchRecords, filterSearchRecords, getNotesInView, getSearchSnippet, highlightSegments, normalizeSearchText, sortSearchNotes } from '@/lib/advancedSearch.js';
 import { useToast } from '@/contexts/ToastContext';
-import { MobileNoteActionsSheet, MobileTrashActionsSheet } from '@/components/MobileEditorSheets';
+import { MobileBottomSheet, MobileNoteActionsSheet, MobileTrashActionsSheet } from '@/components/MobileEditorSheets';
 
 interface NoteListProps {
   notes: Note[];
@@ -73,37 +76,77 @@ export function NoteList({
   }: NoteListProps) {
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [moveFor, setMoveFor] = useState<string | null>(null);
+  const [folderFilter, setFolderFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState('all');
+  const [pinnedFilter, setPinnedFilter] = useState<'all' | 'pinned' | 'unpinned'>('all');
+  const [archiveFilter, setArchiveFilter] = useState<'current' | 'active' | 'archived' | 'all'>('current');
+  const [sortMode, setSortMode] = useState<'' | 'updated' | 'created' | 'title-asc' | 'title-desc'>('');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const filterPanelRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // Filter notes for current view
-  const filteredNotes = notes.filter((n) => {
-    switch (view.kind) {
-      case 'all': return !n.trashed && !n.archived;
-      case 'recent': return !n.trashed && !n.archived;
-      case 'pinned': return !n.trashed && !n.archived && n.pinned;
-      case 'archived': return !n.trashed && n.archived;
-      case 'trash': return n.trashed;
-      case 'folder': return !n.trashed && !n.archived && n.folderId === view.id;
-      case 'tag': return !n.trashed && !n.archived && noteHasTag(n, view.name);
-      default: return false;
-    }
-  });
+  useEffect(() => {
+    if (!filterOpen || mobileMode) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (filterPanelRef.current && !filterPanelRef.current.contains(event.target as Node)) setFilterOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [filterOpen, mobileMode]);
 
-  // Apply search
-  const searched = searchQuery.trim()
-    ? filteredNotes.filter((n) => {
-        const q = searchQuery.toLowerCase();
-        return n.title.toLowerCase().includes(q) || htmlToText(n.content).toLowerCase().includes(q);
-      })
-    : filteredNotes;
-
-  const sorted = view.kind === 'trash'
-    ? [...searched].sort((a, b) => (b.trashedAt || 0) - (a.trashedAt || 0))
-    : view.kind === 'recent'
-      ? [...searched].sort((a, b) => b.updatedAt - a.updatedAt)
-      : sortNotes(searched, settings);
+  const viewNotes = useMemo(() => getNotesInView(notes, view), [notes, view]);
+  const filterSource = useMemo(() => view.kind === 'all' && archiveFilter !== 'current'
+    ? notes.filter((note) => !note.trashed)
+    : viewNotes, [view.kind, archiveFilter, notes, viewNotes]);
+  const searchRecords = useMemo(() => buildSearchRecords(filterSource), [filterSource]);
+  const visibleRecords = useMemo(() => filterSearchRecords(searchRecords, {
+    query: searchQuery,
+    folderId: folderFilter,
+    tag: tagFilter,
+    pinned: pinnedFilter,
+    archive: archiveFilter,
+  }, view), [searchRecords, searchQuery, folderFilter, tagFilter, pinnedFilter, archiveFilter, view]);
+  const tagsInScope = useMemo(() => [...new Set(searchRecords.flatMap((record) => record.tags))].sort((a, b) => a.localeCompare(b)), [searchRecords]);
+  const hasAdvancedFilters = folderFilter !== 'all' || tagFilter !== 'all' || pinnedFilter !== 'all' || (view.kind === 'all' && archiveFilter !== 'current');
+  const activeFilterCount = Number(folderFilter !== 'all') + Number(tagFilter !== 'all') + Number(pinnedFilter !== 'all') + Number(view.kind === 'all' && archiveFilter !== 'current');
+  const hasSearchOrFilters = Boolean(normalizeSearchText(searchQuery)) || hasAdvancedFilters;
+  const filteredNotes = visibleRecords.map((record) => record.note);
+  const sorted = sortMode
+    ? sortSearchNotes(filteredNotes, sortMode, view.kind !== 'recent' && view.kind !== 'trash')
+    : view.kind === 'trash'
+      ? [...filteredNotes].sort((a, b) => (b.trashedAt || 0) - (a.trashedAt || 0))
+      : view.kind === 'recent'
+        ? [...filteredNotes].sort((a, b) => b.updatedAt - a.updatedAt)
+        : sortNotes(filteredNotes, settings);
+  const recordById = useMemo(() => new Map(visibleRecords.map((record) => [record.note.id, record])), [visibleRecords]);
   const menuNote = sorted.find((note) => note.id === menuFor) || null;
+
+  const clearSearchAndFilters = () => {
+    onSearchChange('');
+    setFolderFilter('all');
+    setTagFilter('all');
+    setPinnedFilter('all');
+    setArchiveFilter('current');
+    setSortMode('');
+    setFilterOpen(false);
+    setMobileControlsOpen(false);
+  };
+
+  const filterControls = <FilterControls
+    folders={folders}
+    tags={tagsInScope}
+    folderFilter={folderFilter}
+    tagFilter={tagFilter}
+    pinnedFilter={pinnedFilter}
+    archiveFilter={archiveFilter}
+    showArchive={view.kind === 'all'}
+    onFolderChange={setFolderFilter}
+    onTagChange={setTagFilter}
+    onPinnedChange={setPinnedFilter}
+    onArchiveChange={setArchiveFilter}
+  />;
 
   const folderName = (id: string | null) => folders.find((f) => f.id === id)?.name || null;
   const noteTime = (timestamp: number) => desktopMode
@@ -157,7 +200,6 @@ export function NoteList({
     <div className={`h-full w-full max-lg:min-w-0 max-lg:max-w-full max-lg:pb-[calc(72px+env(safe-area-inset-bottom))] flex flex-col bg-app ${desktopMode ? 'tanooki-desktop-note-list' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
       {desktopMode && <div className="tanooki-desktop-list-heading px-4 pt-4"><h2>{contextTitle}</h2><span>{sorted.length} ghi chú</span></div>}
       {/* Search bar */}
-      {view.kind !== 'trash' && (
       <div className="px-4 pt-2 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
       {mobileSearchMode && <h1 className="mb-3 px-1 text-xl font-bold" style={{ color: 'var(--text)' }}>Tìm kiếm</h1>}
       <div className="flex items-center gap-2">
@@ -201,8 +243,37 @@ export function NoteList({
             )}
           </div>
         </div>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="relative" ref={filterPanelRef}>
+            <button
+              type="button"
+              onClick={() => mobileMode ? setMobileControlsOpen(true) : setFilterOpen((open) => !open)}
+              aria-expanded={mobileMode ? mobileControlsOpen : filterOpen}
+              aria-label={activeFilterCount ? `Bộ lọc, ${activeFilterCount} bộ lọc đang bật` : 'Bộ lọc'}
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-sm transition-colors hover-bg"
+              style={{ borderColor: 'var(--border)', color: activeFilterCount ? 'var(--accent)' : 'var(--text-secondary)', backgroundColor: 'var(--bg)' }}
+            >
+              <SlidersHorizontal size={16} aria-hidden="true" />
+              <span>Bộ lọc</span>
+              {activeFilterCount > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full px-1 text-xs text-white" style={{ backgroundColor: 'var(--accent)' }}>{activeFilterCount}</span>}
+            </button>
+            {filterOpen && !mobileMode && <div className="absolute left-0 top-full z-30 mt-2 w-[min(340px,calc(100vw-32px))] rounded-xl border p-3 shadow-xl" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg)', boxShadow: '0 12px 32px rgba(0,0,0,.14)' }}>
+              {filterControls}
+              {hasAdvancedFilters && <button type="button" onClick={clearSearchAndFilters} className="mt-3 text-sm font-medium" style={{ color: 'var(--accent)' }}>Xóa bộ lọc</button>}
+            </div>}
+          </div>
+          {mobileMode ? (
+            <button type="button" onClick={() => setMobileControlsOpen(true)} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-sm" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', backgroundColor: 'var(--bg)' }} aria-label="Sắp xếp ghi chú">
+              <ArrowDownUp size={16} aria-hidden="true" /> Sắp xếp
+            </button>
+          ) : (
+            <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+              <span>Sắp xếp</span>
+              <SortSelect value={sortMode} onChange={setSortMode} />
+            </label>
+          )}
         </div>
-      )}
+        </div>
 
       {/* Notes list */}
       <div className="flex-1 overflow-y-auto px-2">
@@ -212,12 +283,19 @@ export function NoteList({
           </p>
         )}
         {sorted.length === 0 ? (
-          <EmptyState view={view} hasSearch={!!searchQuery.trim()} />
+          hasSearchOrFilters && filterSource.length > 0
+            ? <FilteredEmptyState onClear={clearSearchAndFilters} />
+            : <EmptyState view={view} />
         ) : (
           <div className="space-y-0.5">
             {sorted.map((note) => {
               const selected = note.id === selectedNoteId;
               const fn = folderName(note.folderId);
+              const record = recordById.get(note.id);
+              const bodyMatched = Boolean(normalizeSearchText(searchQuery) && record?.bodyNormalized.includes(normalizeSearchText(searchQuery)));
+              const preview = record?.bodyText
+                ? bodyMatched ? getSearchSnippet(record.bodyText, searchQuery) : record.bodyText.length > 120 ? `${record.bodyText.slice(0, 120)}…` : record.bodyText
+                : 'Chưa có nội dung';
               return (
                 <div
                   key={note.id}
@@ -236,7 +314,9 @@ export function NoteList({
                         className={`font-semibold text-sm truncate ${selected ? 'text-accent' : 'text-app'}`}
                         style={{ color: selected ? 'var(--accent)' : 'var(--text)' }}
                       >
-                        {note.title.trim() || 'Chưa có tiêu đề'}
+                        {note.title.trim()
+                          ? <HighlightedText text={note.title} query={searchQuery} />
+                          : 'Chưa có tiêu đề'}
                       </h3>
                       <span className="text-xs text-tertiary flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>
                         {view.kind === 'trash' ? noteTime(note.trashedAt || note.updatedAt) : noteTime(note.updatedAt)}
@@ -246,7 +326,7 @@ export function NoteList({
                       className="note-preview text-secondary text-xs"
                       style={{ color: 'var(--text-secondary)' }}
                     >
-                      {getPreview(note.content) || 'Chưa có nội dung'}
+                      {record?.bodyText ? <HighlightedText text={preview} query={searchQuery} /> : 'Chưa có nội dung'}
                     </p>
                     <div className="flex items-center gap-2 mt-1.5">
                       {note.pinned && (
@@ -369,6 +449,13 @@ export function NoteList({
         onDuplicate={onDuplicate}
         onTrash={(id) => { const target = sorted.find((item) => item.id === id); if (target) handleTrash(target); }}
       />}
+      {mobileMode && <MobileBottomSheet open={mobileControlsOpen} title="Bộ lọc và sắp xếp" onClose={() => setMobileControlsOpen(false)} labelledBy="mobile-note-filters">
+        <div className="tanooki-mobile-sheet-group">
+          {filterControls}
+          <label className="tanooki-mobile-sheet-select mt-3"><span>Sắp xếp</span><SortSelect value={sortMode} onChange={setSortMode} /></label>
+          {hasSearchOrFilters && <button type="button" onClick={clearSearchAndFilters} className="mt-3 min-h-11 w-full rounded-lg font-medium" style={{ color: 'var(--accent)', backgroundColor: 'var(--accent-light)' }}>Xóa bộ lọc và tìm kiếm</button>}
+        </div>
+      </MobileBottomSheet>}
     </div>
   );
 }
@@ -396,16 +483,96 @@ function MenuItem({
   );
 }
 
-function EmptyState({ view, hasSearch }: { view: ViewType; hasSearch: boolean }) {
+function FilterControls({
+  folders,
+  tags,
+  folderFilter,
+  tagFilter,
+  pinnedFilter,
+  archiveFilter,
+  showArchive,
+  onFolderChange,
+  onTagChange,
+  onPinnedChange,
+  onArchiveChange,
+}: {
+  folders: Folder[];
+  tags: string[];
+  folderFilter: string;
+  tagFilter: string;
+  pinnedFilter: 'all' | 'pinned' | 'unpinned';
+  archiveFilter: 'current' | 'active' | 'archived' | 'all';
+  showArchive: boolean;
+  onFolderChange: (value: string) => void;
+  onTagChange: (value: string) => void;
+  onPinnedChange: (value: 'all' | 'pinned' | 'unpinned') => void;
+  onArchiveChange: (value: 'current' | 'active' | 'archived' | 'all') => void;
+}) {
+  const selectClass = 'mt-1 min-h-10 w-full rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-2';
+  const selectStyle = { borderColor: 'var(--border)', backgroundColor: 'var(--bg)', color: 'var(--text)' };
+  return <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+    <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Thư mục
+      <select className={selectClass} style={selectStyle} value={folderFilter} onChange={(event) => onFolderChange(event.target.value)} aria-label="Lọc theo thư mục">
+        <option value="all">Tất cả thư mục</option>
+        <option value="none">Không có thư mục</option>
+        {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+      </select>
+    </label>
+    <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Thẻ
+      <select className={selectClass} style={selectStyle} value={tagFilter} onChange={(event) => onTagChange(event.target.value)} aria-label="Lọc theo thẻ">
+        <option value="all">Tất cả thẻ</option>
+        {tags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+      </select>
+    </label>
+    <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Ghim
+      <select className={selectClass} style={selectStyle} value={pinnedFilter} onChange={(event) => onPinnedChange(event.target.value as 'all' | 'pinned' | 'unpinned')} aria-label="Lọc ghi chú đã ghim">
+        <option value="all">Tất cả</option>
+        <option value="pinned">Đã ghim</option>
+        <option value="unpinned">Chưa ghim</option>
+      </select>
+    </label>
+    {showArchive && <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Trạng thái lưu trữ
+      <select className={selectClass} style={selectStyle} value={archiveFilter} onChange={(event) => onArchiveChange(event.target.value as 'current' | 'active' | 'archived' | 'all')} aria-label="Lọc theo trạng thái lưu trữ">
+        <option value="current">Theo mục hiện tại</option>
+        <option value="active">Đang hoạt động</option>
+        <option value="archived">Đã lưu trữ</option>
+        <option value="all">Tất cả (trừ thùng rác)</option>
+      </select>
+    </label>}
+  </div>;
+}
+
+function SortSelect({ value, onChange }: { value: '' | 'updated' | 'created' | 'title-asc' | 'title-desc'; onChange: (value: '' | 'updated' | 'created' | 'title-asc' | 'title-desc') => void }) {
+  return <select value={value} onChange={(event) => onChange(event.target.value as typeof value)} aria-label="Sắp xếp ghi chú" className="min-h-9 max-w-40 rounded-lg border px-2 text-xs outline-none focus-visible:ring-2" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg)', color: 'var(--text)' }}>
+    <option value="">Mặc định</option>
+    <option value="updated">Cập nhật gần nhất</option>
+    <option value="created">Mới tạo</option>
+    <option value="title-asc">Tên A–Z</option>
+    <option value="title-desc">Tên Z–A</option>
+  </select>;
+}
+
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  return <>{highlightSegments(text, query).map((segment, index) => segment.match
+    ? <mark key={index} className="rounded-sm px-px" style={{ color: 'var(--accent)', backgroundColor: 'var(--accent-light)' }}>{segment.text}</mark>
+    : <span key={index}>{segment.text}</span>)}</>;
+}
+
+function FilteredEmptyState({ onClear }: { onClear: () => void }) {
+  return <div className="flex h-full flex-col items-center justify-center px-8 py-16 text-center">
+    <Search size={36} className="mb-3" style={{ color: 'var(--text-tertiary)' }} aria-hidden="true" />
+    <h2 className="mb-1 text-base font-semibold" style={{ color: 'var(--text)' }}>Không tìm thấy ghi chú phù hợp.</h2>
+    <p className="mb-4 text-sm" style={{ color: 'var(--text-secondary)' }}>Thử đổi từ khóa hoặc xóa các bộ lọc đang áp dụng.</p>
+    <button type="button" onClick={onClear} className="min-h-10 rounded-lg px-4 text-sm font-semibold" style={{ color: 'var(--accent)', backgroundColor: 'var(--accent-light)' }}>Xóa bộ lọc</button>
+  </div>;
+}
+
+function EmptyState({ view }: { view: ViewType }) {
   let title = 'Chưa có ghi chú';
   let message = 'Tạo ghi chú đầu tiên để bắt đầu.';
   let icon = <Plus size={40} />;
 
-  if (hasSearch) {
-    title = 'Không tìm thấy ghi chú';
-    message = 'Thử một từ khóa khác.';
-    icon = <Search size={40} />;
-  } else if (view.kind === 'pinned') {
+  if (view.kind === 'pinned') {
     title = 'Chưa có ghi chú được ghim';
     message = 'Ghim ghi chú quan trọng để xem lại tại đây.';
     icon = <Pin size={40} />;
