@@ -629,9 +629,7 @@
   .tanooki-auth { min-height: 100vh; min-height: 100dvh; color: var(--text); background: var(--bg); font-size: 16px; line-height: 1.6; }
   .tanooki-auth-brand { display: none; }
   .tanooki-brand { display: flex; align-items: center; flex-direction: column; gap: 8px; }
-  .tanooki-logo-surface { display: inline-flex; flex: none; align-items: center; justify-content: center; padding: 2px; border-radius: 6px; background: #fff; }
-  .dark .tanooki-logo-surface { background: #fff; }
-  .tanooki-mark { display: block; width: 120px; flex-shrink: 0; filter: none; mix-blend-mode: normal; }
+  .tanooki-mark { display: block; width: 120px; flex-shrink: 0; }
   .tanooki-mark img { display: block; width: 100%; height: auto; }
   .tanooki-sidebar-brand { display: flex; align-items: center; gap: 8px; font-family: var(--font-brand); font-weight: 800; }
   .tanooki-sidebar-brand .tanooki-mark { width: 32px; }
