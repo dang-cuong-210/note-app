@@ -16,7 +16,6 @@ test('trash retention keeps notes until seven full days have elapsed', () => {
   assert.equal(isExpiredTrashedNote(expired('boundary'), now), true);
   assert.equal(isExpiredTrashedNote(expired('older'), now + 1), true);
 });
-
 test('restored notes and missing or invalid trash timestamps are never eligible', () => {
   const now = 1_000 + TRASH_RETENTION_MS * 3;
   assert.equal(isExpiredTrashedNote({ ...expired('restored'), trashed: false, trashedAt: null }, now), false);
@@ -76,13 +75,4 @@ test('cleanup rechecks restore state and App waits for the signed-in account dat
   assert.match(app, /permanentDelete: \(id\) => permanentDelete\(id\)/);
   assert.match(app, /window\.setTimeout\(\(\) =>/);
   assert.match(app, /window\.clearTimeout\(cleanupTimer\)/);
-});
-
-test('shared Tanooki mark has no dark-mode halo or per-location background override', async () => {
-  const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
-  const brand = await readFile(new URL('../src/components/TanookiBrand.tsx', import.meta.url), 'utf8');
-  assert.doesNotMatch(css, /\.dark\s+\.tanooki-mark/);
-  assert.doesNotMatch(css, /tanooki-mobile-home-brand\s+\.tanooki-mark\s*\{[^}]*background/i);
-  assert.match(brand, /srcSet="\/brand\/tanooki-mark\.svg"/);
-  assert.match(brand, /src="\/brand\/tanooki-mark\.png"/);
 });

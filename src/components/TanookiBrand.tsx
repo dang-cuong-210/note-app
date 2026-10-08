@@ -1,8 +1,10 @@
 export function TanookiMark() {
-  return <picture className="tanooki-mark">
-    <source srcSet="/brand/tanooki-mark.svg" type="image/svg+xml" />
-    <img src="/brand/tanooki-mark.png" width="1254" height="1254" alt="" />
-  </picture>;
+  return <span className="tanooki-logo-surface">
+    <picture className="tanooki-mark">
+      <source srcSet="/brand/tanooki-mark.svg" type="image/svg+xml" />
+      <img src="/brand/tanooki-mark.png" width="1254" height="1254" alt="" />
+    </picture>
+  </span>;
 }
 
 export function TanookiBrand() {
