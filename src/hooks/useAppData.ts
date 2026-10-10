@@ -160,7 +160,9 @@ export function useAppData(userId: string | null) {
   const [loadedAccountId, setLoadedAccountId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
+  // Debounce timers and failed-request retries have different lifecycles.
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const retryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const folderSync = useRef<ReturnType<typeof createFolderSync> | null>(null);
   const [folderConflicts, setFolderConflicts] = useState<FolderRecord[]>([]);
   const [folderSyncError, setFolderSyncError] = useState<string | null>(null);
@@ -172,6 +174,8 @@ export function useAppData(userId: string | null) {
   const deletingNotes = useRef(new Set<string>());
   const activeAccountId = useRef<string | null>(userId);
   const cloudReadyRef = useRef(false);
+  const flushPendingNotesToCloudRef = useRef<(accountId: string) => Promise<void>>(async () => {});
+  const loadFromCloudRef = useRef<() => Promise<void>>(async () => {});
   const [syncConflicts, setSyncConflicts] = useState(0);
   const [realtimeDiagnostics, setRealtimeDiagnostics] = useState<RealtimeDiagnostics>(
     () => initialRealtimeDiagnostics(userId)
@@ -248,7 +252,19 @@ export function useAppData(userId: string | null) {
 
   // Online/offline tracking
   useEffect(() => {
-    const onOnline = () => setOnline(true);
+    const onOnline = () => {
+      setOnline(true);
+      const accountId = activeAccountId.current;
+      if (!accountId) return;
+      // Refresh revisions before resuming CAS writes. loadFromCloud also flushes
+      // after its merge succeeds, including if `loaded` was already true.
+      void loadFromCloudRef.current().then(async () => {
+        if (activeAccountId.current !== accountId) return;
+        await flushPendingNotesToCloudRef.current(accountId);
+        const folderSession = folderSync.current;
+        if (navigator.onLine && folderSession?.accountId === accountId) await folderSession.flush();
+      }).catch((error) => console.warn('Online sync recovery failed:', error));
+    };
     const onOffline = () => setOnline(false);
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
@@ -397,6 +413,11 @@ export function useAppData(userId: string | null) {
       await Promise.all([
         localDb.putNotes(accountId, mergedNotes),
       ]);
+      // Flush only after merged drafts and CAS revision bookkeeping are ready.
+      // This also handles a successful refresh where `loaded` does not change.
+      if (navigator.onLine && activeAccountId.current === accountId) {
+        void flushPendingNotesToCloudRef.current(accountId);
+      }
     } catch (err) {
       cloudReadyRef.current = false;
       console.warn('Cloud load failed, falling back to local cache:', err);
@@ -415,11 +436,14 @@ export function useAppData(userId: string | null) {
       }
     }
   }, [userId, refreshAttachments]);
+  loadFromCloudRef.current = loadFromCloud;
 
   // Initial load
   useEffect(() => {
     saveTimers.current.forEach(clearTimeout);
     saveTimers.current.clear();
+    retryTimers.current.forEach(clearTimeout);
+    retryTimers.current.clear();
     pendingNotes.current.clear();
     confirmedRevisions.current.clear();
     deletingNotes.current.clear();
@@ -763,9 +787,20 @@ export function useAppData(userId: string | null) {
     const existingTask = inFlightTasks.current.get(taskKey);
     if (existingTask) return existingTask;
     // A stale debounce callback must NEVER recreate a draft already confirmed.
-    if (!accountId || !pendingNotes.current.has(id) || deletingNotes.current.has(id) ||
-        !navigator.onLine || !cloudReadyRef.current) return Promise.resolve();
+    if (!accountId || activeAccountId.current !== accountId || !pendingNotes.current.has(id) ||
+        deletingNotes.current.has(id) || !navigator.onLine || !cloudReadyRef.current) {
+      if (pendingNotes.current.has(id)) {
+        realtimeDebug('note sync deferred', {
+          id,
+          online: navigator.onLine,
+          cloudReady: cloudReadyRef.current,
+          accountActive: activeAccountId.current === accountId,
+        });
+      }
+      return Promise.resolve();
+    }
     const task = (async () => {
+      let retryRequired = false;
       try {
       // Serialise writes per note; a newer edit can arrive while awaiting RPC.
       while (pendingNotes.current.has(id) && !deletingNotes.current.has(id) &&
@@ -779,11 +814,13 @@ export function useAppData(userId: string | null) {
         if (error) {
           // Network / missing-migration errors leave the local draft intact.
           console.warn('Note sync postponed:', error.message);
+          retryRequired = true;
           break;
         }
         const result = data as { status: string; revision?: number; updated_at?: number } | null;
         if (!result || !['saved', 'conflict'].includes(result.status)) {
           console.warn('Unexpected note sync result; draft remains on this device');
+          retryRequired = true;
           break;
         }
         if (result.status === 'saved') {
@@ -792,6 +829,9 @@ export function useAppData(userId: string | null) {
           const newest = pendingNotes.current.get(id);
           if (newest === draft) {
             pendingNotes.current.delete(id);
+            const retry = retryTimers.current.get(id);
+            if (retry) clearTimeout(retry);
+            retryTimers.current.delete(id);
             const saved = { ...draft, syncPending: false, revision, updatedAt: result.updated_at ?? draft.updatedAt };
             setNotes((prev) => prev.map((n) => n.id === id &&
               n.title === draft.title && n.content === draft.content && n.updatedAt === draft.updatedAt
@@ -837,19 +877,20 @@ export function useAppData(userId: string | null) {
       } catch (err) {
       // Unexpected network exceptions must not discard the local draft.
       console.warn('Note sync interrupted:', err);
+      retryRequired = true;
       } finally {
-      // A new edit that arrived during the last RPC must not be stranded.
-      if (pendingNotes.current.has(id) && !deletingNotes.current.has(id) &&
+      // Retry only requests that actually started and failed. Offline and
+      // cloud-not-ready deferrals wait for their lifecycle event instead.
+      if (retryRequired && pendingNotes.current.has(id) && !deletingNotes.current.has(id) &&
           activeAccountId.current === accountId && navigator.onLine) {
-        const latest = pendingNotes.current.get(id)!;
-        // Do not immediately retry a failing request in a tight loop.
-        const existing = saveTimers.current.get(id);
+        const existing = retryTimers.current.get(id);
         if (!existing) {
           const timer = setTimeout(() => {
-            saveTimers.current.delete(id);
-            void syncNoteToCloudRef.current(latest);
+            retryTimers.current.delete(id);
+            const latest = pendingNotes.current.get(id);
+            if (latest) void syncNoteToCloudRef.current(latest);
           }, 5000);
-          saveTimers.current.set(id, timer);
+          retryTimers.current.set(id, timer);
         }
       }
       }
@@ -863,6 +904,47 @@ export function useAppData(userId: string | null) {
   const syncNoteToCloudRef = useRef(syncNoteToCloud);
   syncNoteToCloudRef.current = syncNoteToCloud;
 
+  // Retry the latest durable draft for each note, one at a time. This path is
+  // shared by cloud-ready, network recovery, page visibility, and manual flushes.
+  const flushPendingNotesToCloud = useCallback(async (accountId: string) => {
+    if (!userId || accountId !== userId || activeAccountId.current !== accountId ||
+        !navigator.onLine || !cloudReadyRef.current) {
+      realtimeDebug('pending note flush deferred', {
+        pending: pendingNotes.current.size,
+        online: navigator.onLine,
+        cloudReady: cloudReadyRef.current,
+        accountActive: !!accountId && activeAccountId.current === accountId,
+      });
+      return;
+    }
+
+    let attempted = 0;
+    let deferredForRetry = 0;
+    for (const id of Array.from(pendingNotes.current.keys())) {
+      if (activeAccountId.current !== accountId || !navigator.onLine || !cloudReadyRef.current) break;
+      if (deletingNotes.current.has(id)) continue;
+      // A failed request keeps its existing five-second backoff even if another
+      // lifecycle event happens during that interval.
+      if (retryTimers.current.has(id)) { deferredForRetry += 1; continue; }
+      const debounce = saveTimers.current.get(id);
+      if (debounce) clearTimeout(debounce);
+      saveTimers.current.delete(id);
+      const latest = pendingNotes.current.get(id);
+      if (!latest) continue;
+      attempted += 1;
+      await syncNoteToCloudRef.current(latest);
+    }
+    updateRealtimeDiagnostics({});
+    realtimeDebug('pending note flush finished', {
+      attempted,
+      pending: pendingNotes.current.size,
+      deferredForRetry,
+      online: navigator.onLine,
+      cloudReady: cloudReadyRef.current,
+    });
+  }, [userId, updateRealtimeDiagnostics]);
+  flushPendingNotesToCloudRef.current = flushPendingNotesToCloud;
+
   // Debounced save: local + cloud
   const saveNote = useCallback(
     (note: Note) => {
@@ -871,6 +953,9 @@ export function useAppData(userId: string | null) {
       const draft = { ...note, syncPending: true };
       pendingNotes.current.set(note.id, draft);
       void localDb.putNote(userId, draft);
+      const retry = retryTimers.current.get(note.id);
+      if (retry) clearTimeout(retry);
+      retryTimers.current.delete(note.id);
       // Debounce cloud sync
       const existing = saveTimers.current.get(note.id);
       if (existing) clearTimeout(existing);
@@ -996,6 +1081,9 @@ export function useAppData(userId: string | null) {
       const timer = saveTimers.current.get(id);
       if (timer) clearTimeout(timer);
       saveTimers.current.delete(id);
+      const retryTimer = retryTimers.current.get(id);
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimers.current.delete(id);
       deletingNotes.current.add(id);
       let pendingBeforeDelete: Note | undefined;
 
@@ -1191,16 +1279,10 @@ export function useAppData(userId: string | null) {
   );
 
   const flushAll = useCallback(async () => {
-    // Sync any pending note changes before clearing timers
-    saveTimers.current.forEach((timer) => clearTimeout(timer));
-    saveTimers.current.clear();
     const folderTask = folderSync.current?.flush();
-    // Never re-upload every cached note: stale tabs could overwrite current data.
-    for (const note of Array.from(pendingNotes.current.values())) {
-      await syncNoteToCloud(note);
-    }
+    await flushPendingNotesToCloud(userId ?? '');
     await folderTask;
-  }, [syncNoteToCloud]);
+  }, [flushPendingNotesToCloud, userId]);
 
   // Flush pending changes when the page is hidden or unloaded
   useEffect(() => {
@@ -1209,21 +1291,13 @@ export function useAppData(userId: string | null) {
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') handler();
     };
-    const onOnline = () => {
-      // Refetch revisions before trying to upload offline edits.
-      void loadFromCloud().then(() => {
-        if (cloudReadyRef.current) void flushAll();
-      });
-    };
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pagehide', handler);
-    window.addEventListener('online', onOnline);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pagehide', handler);
-      window.removeEventListener('online', onOnline);
     };
-  }, [loaded, flushAll, loadFromCloud]);
+  }, [loaded, flushAll]);
 
   // After recovering drafts from IndexedDB, try to upload them now.
   useEffect(() => {
