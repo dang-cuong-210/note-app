@@ -1237,6 +1237,23 @@ export function NoteEditor({
         <button type="button" className="tanooki-mobile-editor-icon" onClick={() => setMobileSheet('actions')} aria-label="Thao tác ghi chú" title="Thêm thao tác"><MoreHorizontal size={20} /></button>
       </header>}
 
+      {!desktopPresentation && (noteTags.length > 0 || mobileWriting) && <div className="tanooki-mobile-visible-tags" aria-label="Thẻ của ghi chú">
+        <div className="tanooki-tag-chips">
+          {noteTags.map((tag) => <span className="tanooki-tag-chip" key={tag}>
+            <button
+              type="button"
+              className="tanooki-tag-open"
+              disabled={mobileWriting}
+              onClick={() => { if (!mobileWriting) onOpenTag(tag); }}
+              aria-label={mobileWriting ? `Thẻ ${tag}` : `Lọc theo thẻ ${tag}`}
+            >#{tag}</button>
+          </span>)}
+        </div>
+        {mobileWriting && <button type="button" className="tanooki-mobile-tag-add" onClick={() => setMobileSheet('tools')}>
+          <span aria-hidden="true">+</span> Thêm thẻ
+        </button>}
+      </div>}
+
       {desktopPresentation && <section className="tanooki-editor-document-header">
         <div className="tanooki-editor-document-title-row">
           <input value={title} onChange={(e) => setTitle(e.target.value)} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" className="tanooki-editor-title" style={{ color: 'var(--text)' }} />

@@ -952,6 +952,13 @@ input[data-global-search]:focus-visible {
 @media (max-width: 1023px) {
   .tanooki-mobile-editor { display: flex; width: 100%; max-width: 100%; min-width: 0; flex: 1 1 0%; height: 100dvh; min-height: 0; flex-direction: column; overflow: hidden; }
   .tanooki-mobile-editor-header { display: flex; min-height: 54px; flex: 0 0 auto; align-items: center; gap: 5px; border-bottom: 1px solid var(--border); background: var(--bg); padding: max(5px, env(safe-area-inset-top)) 8px 6px; }
+  .tanooki-mobile-visible-tags { display: flex; min-width: 0; min-height: 0; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: 5px; overflow: hidden; border-bottom: 1px solid var(--border); background: var(--bg); padding: 5px 12px; }
+  .tanooki-mobile-visible-tags .tanooki-tag-chips { min-width: 0; flex: 1 1 auto; gap: 5px; }
+  .tanooki-mobile-visible-tags .tanooki-tag-chip { max-width: 100%; min-height: 25px; font-size: 11px; }
+  .tanooki-mobile-visible-tags .tanooki-tag-open { max-width: min(48vw, 190px); min-height: 25px; overflow: hidden; padding: 3px 9px; text-overflow: ellipsis; white-space: nowrap; }
+  .tanooki-mobile-editor.is-writing .tanooki-mobile-visible-tags .tanooki-tag-open:disabled { cursor: default; }
+  .tanooki-mobile-tag-add { display: inline-flex; min-height: 30px; flex: none; align-items: center; justify-content: center; gap: 4px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--bg-secondary); padding: 3px 9px; color: var(--accent); font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .tanooki-mobile-tag-add > span { font-size: 16px; line-height: 1; }
   .tanooki-mobile-editor-icon { display: grid; width: 38px; height: 40px; flex: none; place-items: center; border-radius: 10px; color: var(--text-secondary); }
   .tanooki-mobile-editor-title { min-width: 0; flex: 1; overflow: hidden; }
   .tanooki-mobile-editor-title strong { display: block; overflow: hidden; color: var(--text); font-size: 14px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }

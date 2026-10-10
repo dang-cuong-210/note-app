@@ -74,3 +74,27 @@ test('desktop editor and mobile Tools sheet share the same add/remove/click tag 
   assert.match(manager, /onClick=\{\(\) => onOpenTag\(tag\)\}/);
   assert.match(manager, /onClick=\{\(\) => remove\(tag\)\}/);
 });
+
+test('mobile editor shows compact current tags, hides the row for an untagged reading note, and reuses Tools for adding', () => {
+  const editor = readFileSync(new URL('../src/components/NoteEditor.tsx', import.meta.url), 'utf8');
+  const rowStart = editor.indexOf('tanooki-mobile-visible-tags');
+  const rowEnd = editor.indexOf('{desktopPresentation && <section className="tanooki-editor-document-header">', rowStart);
+  const row = editor.slice(rowStart, rowEnd);
+  assert.match(editor, /!desktopPresentation && \(noteTags\.length > 0 \|\| mobileWriting\)/);
+  assert.match(row, /noteTags\.map\(\(tag\)/);
+  assert.match(row, /if \(!mobileWriting\) onOpenTag\(tag\)/);
+  assert.match(row, /disabled=\{mobileWriting\}/);
+  assert.match(row, /onClick=\{\(\) => setMobileSheet\('tools'\)\}/);
+  assert.doesNotMatch(row, /addNoteTag|addTagToContent/);
+});
+
+test('mobile visible chips retain the Tools-sheet manager and use theme-aware compact wrapping styles', () => {
+  const editor = readFileSync(new URL('../src/components/NoteEditor.tsx', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+  const tools = readFileSync(new URL('../src/components/MobileEditorSheets.tsx', import.meta.url), 'utf8');
+  assert.match(editor, /<MobileEditorToolsSheet[^>]+onAddTag=\{addNoteTag\}[^>]+onRemoveTag=\{removeNoteTag\}/);
+  assert.match(tools, /<NoteTagManager mobile/);
+  assert.match(css, /\.tanooki-mobile-visible-tags \{[^}]*flex-wrap: wrap[^}]*background: var\(--bg\)/);
+  assert.match(css, /\.tanooki-mobile-visible-tags \.tanooki-tag-open \{[^}]*overflow: hidden[^}]*text-overflow: ellipsis/);
+  assert.match(css, /\.tanooki-tag-chip \{[^}]*background: var\(--accent-light\)/);
+});
