@@ -515,6 +515,8 @@ function AppContent() {
                 onRenameAttachment={data.renameAttachment}
                 onDuplicate={handleDuplicate}
                 onBack={() => { setMobileNewNoteId(null); setSelectedNoteId(null); }}
+                onCreateNote={createMobileNote}
+                onNavigateRecent={() => handleViewChange({ kind: 'recent' })}
                 desktopPresentation={isDesktop}
                 startInWritingMode={!isDesktop && mobileNewNoteId === selectedNote?.id}
                 breadcrumb={getDesktopViewLabel(view, data.folders)}

@@ -75,15 +75,16 @@ test('desktop editor and mobile Tools sheet share the same add/remove/click tag 
   assert.match(manager, /onClick=\{\(\) => remove\(tag\)\}/);
 });
 
-test('mobile editor shows compact current tags, hides the row for an untagged reading note, and reuses Tools for adding', () => {
+test('mobile editor keeps compact current tags clickable with a draft flush and reuses Tools for adding', () => {
   const editor = readFileSync(new URL('../src/components/NoteEditor.tsx', import.meta.url), 'utf8');
   const rowStart = editor.indexOf('tanooki-mobile-visible-tags');
   const rowEnd = editor.indexOf('{desktopPresentation && <section className="tanooki-editor-document-header">', rowStart);
   const row = editor.slice(rowStart, rowEnd);
   assert.match(editor, /!desktopPresentation && \(noteTags\.length > 0 \|\| mobileWriting\)/);
   assert.match(row, /noteTags\.map\(\(tag\)/);
-  assert.match(row, /if \(!mobileWriting\) onOpenTag\(tag\)/);
-  assert.match(row, /disabled=\{mobileWriting\}/);
+  assert.match(row, /flushCurrentDraft\(\); clearSelection\(\); onOpenTag\(tag\)/);
+  assert.match(row, /aria-label=\{`Lọc theo thẻ \$\{tag\}`\}/);
+  assert.doesNotMatch(row, /disabled=\{mobileWriting\}/);
   assert.match(row, /onClick=\{\(\) => setMobileSheet\('tools'\)\}/);
   assert.doesNotMatch(row, /addNoteTag|addTagToContent/);
 });

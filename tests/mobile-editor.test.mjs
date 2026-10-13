@@ -11,16 +11,17 @@ const [app, editor, sheets, noteList, mobileHome, css] = await Promise.all([
   readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
 ]);
 
-test('mobile editor has local Reading/Writing state and the new-note action starts Writing', () => {
-  assert.match(editor, /useState\(startInWritingMode\)/);
-  assert.match(editor, /setMobileWriting\(startInWritingMode\)/);
+test('mobile editor opens directly editable without a Reading/Writing toggle', () => {
+  assert.match(editor, /const mobileWriting = !desktopPresentation;/);
   assert.match(editor, /contentEditable=\{canEdit\}/);
-  assert.match(editor, /aria-label=\{mobileWriting \? 'Xong chỉnh sửa' : 'Chỉnh sửa ghi chú'\}/);
+  assert.match(editor, /const canEdit = true;/);
+  assert.match(editor, /tanooki-mobile-editor-document-title/);
+  assert.doesNotMatch(editor, /Xong chỉnh sửa|Chỉnh sửa ghi chú|setMobileWriting/);
   assert.match(app, /setMobileNewNoteId\(note\.id\)/);
   assert.match(app, /startInWritingMode=\{!isDesktop && mobileNewNoteId === selectedNote\?\.id\}/);
 });
 
-test('mobile Back and Done flush the latest title/body before navigation or mode exit', () => {
+test('mobile Back flushes the latest title/body before navigation', () => {
   const flush = editor.match(/const flushCurrentDraft = \(\) => \{([\s\S]*?)\n  \};/)?.[1];
   assert.ok(flush);
   assert.match(flush, /clearTimeout\(saveTimer\.current\)/);
@@ -31,13 +32,10 @@ test('mobile Back and Done flush the latest title/body before navigation or mode
   assert.match(editor, /flushCurrentDraftRef\.current = flushCurrentDraft/);
   assert.match(editor, /useEffect\(\(\) => \(\) => flushCurrentDraftRef\.current\(\), \[\]\)/);
 
-  const back = editor.match(/className="tanooki-mobile-editor-icon" onClick=\{\(\) => \{([\s\S]*?)\}\} aria-label="Quay lại"/)?.[1];
-  assert.ok(back);
-  assert.ok(back.indexOf('flushCurrentDraft();') < back.indexOf('clearSelection();'));
-  assert.ok(back.indexOf('clearSelection();') < back.indexOf('onBack();'));
-
-  const doneButton = editor.slice(editor.indexOf('className="tanooki-mobile-editor-mode"'));
-  assert.ok(doneButton.indexOf('flushCurrentDraft();') < doneButton.indexOf('setMobileWriting(false)'));
+  const backHandler = editor.match(/<button type="button" onClick=\{\(\) => \{([\s\S]*?)\}\} className="tanooki-mobile-editor-back"/)?.[1];
+  assert.ok(backHandler);
+  assert.ok(backHandler.indexOf('flushCurrentDraft();') < backHandler.indexOf('clearSelection();'));
+  assert.ok(backHandler.indexOf('clearSelection();') < backHandler.indexOf('onBack();'));
 });
 
 test('same-note reopen after a null note prop rehydrates editor DOM without rewriting active typing', () => {
@@ -61,9 +59,41 @@ test('mobile tools use existing image and attachment picker inputs and display c
   for (const label of ['Ngày tạo', 'Cập nhật', 'Tệp đính kèm', 'Số từ', 'Ký tự', 'Thẻ']) assert.ok(sheets.includes(label));
 });
 
-test('mobile note action sheet invokes the existing pin/archive/move/duplicate/trash callbacks', () => {
-  assert.match(editor, /<MobileNoteActionsSheet[\s\S]*?onTogglePin=\{onTogglePin\}[\s\S]*?onArchive=\{onArchive\}[\s\S]*?onMove=\{onMove\}[\s\S]*?onDuplicate=\{onDuplicate\}[\s\S]*?onTrash=\{onTrash\}/);
+test('mobile note-list action sheet retains its existing pin, move, archive, duplicate and trash callbacks', () => {
+  assert.match(noteList, /<MobileNoteActionsSheet[\s\S]*?onTogglePin=\{onTogglePin\}[\s\S]*?onArchive=\{\(\) => handleArchive\(menuNote\)\}[\s\S]*?onMove=\{onMove\}[\s\S]*?onDuplicate=\{onDuplicate\}[\s\S]*?onTrash=/);
+  assert.match(sheets, /export function MobileNoteActionsSheet/);
   for (const label of ['Ghim', 'Lưu trữ', 'Chuyển thư mục', 'Tạo bản sao', 'Chuyển vào thùng rác']) assert.ok(sheets.includes(label));
+});
+
+test('mobile editor More sheet reuses pin, move, archive, duplicate and delete actions', () => {
+  assert.match(editor, /<MobileEditorMoreSheet[\s\S]*?onTogglePin=\{onTogglePin\}[\s\S]*?onArchive=\{onArchive\}[\s\S]*?onMove=\{onMove\}[\s\S]*?onDuplicate=\{onDuplicate\}[\s\S]*?onTrash=\{onTrash\}/);
+  assert.match(sheets, /export function MobileEditorMoreSheet/);
+  assert.match(sheets, /onTogglePin\(note\.id\)/);
+  assert.match(sheets, /onMove\(note\.id, event\.target\.value \|\| null\)/);
+  assert.match(sheets, /onTrash\(note\.id\)/);
+  for (const label of ['Ghim', 'Lưu trữ', 'Di chuyển ghi chú', 'Tạo bản sao', 'Xóa']) assert.ok(sheets.includes(label));
+});
+
+test('mobile editor toolbar has exactly four primary actions and preserves the existing note creation and attachment flows', () => {
+  const toolbar = editor.match(/<nav className="tanooki-mobile-editor-bottom-bar"[\s\S]*?<\/nav>/)?.[0];
+  assert.ok(toolbar);
+  assert.equal((toolbar.match(/<button type="button"/g) || []).length, 4);
+  assert.match(toolbar, /onClick=\{\(\) => setMobileSheet\('tools'\)\}/);
+  assert.match(toolbar, /onClick=\{onCreateNote\}/);
+  assert.match(app, /onCreateNote=\{createMobileNote\}/);
+  assert.match(editor, /onChooseImage=\{\(\) => imageInputRef\.current\?\.click\(\)\}/);
+  assert.match(editor, /onChooseFile=\{\(\) => fileInputRef\.current\?\.click\(\)\}/);
+});
+
+test('mobile More menu opens/closes as an accessible sheet and unsupported tools report a safe placeholder', () => {
+  assert.match(editor, /onClick=\{\(\) => setMobileSheet\('actions'\)\} aria-label="Tùy chọn ghi chú"/);
+  assert.match(editor, /<MobileEditorMoreSheet[\s\S]*?open=\{mobileSheet === 'actions'\} onClose=\{\(\) => setMobileSheet\(null\)\}/);
+  assert.match(editor, /onPlaceholder=\{\(\) => toast\('Sẽ hỗ trợ sau'\)\}/);
+  for (const label of ['Bản quét', 'Khóa', 'Tìm trong ghi chú', 'Kết quả toán học', 'Ghi chú gần đây', 'Đường kẻ &amp; lưới', 'Chế độ xem tệp đính kèm', 'Sử dụng nền sáng màu']) assert.ok(sheets.includes(label));
+  assert.match(editor, /navigator\.share/);
+  assert.match(editor, /execCommand\('undo'\)/);
+  assert.match(editor, /execCommand\('redo'\)/);
+  assert.match(editor, /is-light-paper/);
 });
 
 test('mobile Trash row actions use a bottom sheet for restore and permanent deletion', () => {

@@ -27,6 +27,13 @@ import {
   ArrowDown,
   Edit3,
   SlidersHorizontal,
+  Share2,
+  Undo2,
+  Redo2,
+  ListChecks,
+  PenTool,
+  SquarePen,
+  Search,
 } from 'lucide-react';
 import type { Note, Folder, Attachment } from '@/types';
 import { useToast } from '@/contexts/ToastContext';
@@ -34,7 +41,7 @@ import { isAcceptedImageType, uploadNoteImage, deleteNoteImage } from '@/lib/ima
 import { formatFileSize, getFileIcon, refreshAttachmentUrl } from '@/lib/attachments';
 import { extractTags } from '@/lib/utils';
 import { addTagToContent, readManagedTags, removeTagFromContent, writeManagedTags } from '@/lib/tagUtils.js';
-import { MobileEditorToolsSheet, MobileNoteActionsSheet } from '@/components/MobileEditorSheets';
+import { MobileEditorMoreSheet, MobileEditorToolsSheet } from '@/components/MobileEditorSheets';
 import { NoteTagManager } from '@/components/NoteTagManager';
 
 // Attachment display settings travel inside note HTML, so no database migration is needed.
@@ -117,6 +124,8 @@ interface NoteEditorProps {
   onRenameAttachment: (id: string, name: string) => Promise<boolean>;
   onDuplicate: (id: string) => void;
   onBack: () => void;
+  onCreateNote: () => void;
+  onNavigateRecent: () => void;
   desktopPresentation?: boolean;
   startInWritingMode?: boolean;
   breadcrumb?: string;
@@ -140,6 +149,8 @@ export function NoteEditor({
   onRenameAttachment,
   onDuplicate,
   onBack,
+  onCreateNote,
+  onNavigateRecent,
   desktopPresentation = false,
   startInWritingMode = false,
   breadcrumb = 'Tất cả ghi chú',
@@ -155,8 +166,12 @@ export function NoteEditor({
   const displayedNoteId = useRef<string | null>(null);
   const [content, setContent] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [mobileWriting, setMobileWriting] = useState(startInWritingMode);
   const [mobileSheet, setMobileSheet] = useState<'tools' | 'actions' | null>(null);
+  const [mobileFindOpen, setMobileFindOpen] = useState(false);
+  const [mobileFindQuery, setMobileFindQuery] = useState('');
+  const [mobileFindIndex, setMobileFindIndex] = useState(-1);
+  const [mobileFindCount, setMobileFindCount] = useState(0);
+  const [mobilePaperMode, setMobilePaperMode] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [imageViewer, setImageViewer] = useState<string | null>(null);
   const [uploadsInProgress, setUploadsInProgress] = useState(0);
@@ -190,19 +205,47 @@ export function NoteEditor({
   const activeNoteId = useRef<string | undefined>(note?.id);
   activeNoteId.current = note?.id;
   const { toast } = useToast();
-  const canEdit = desktopPresentation || mobileWriting;
+  const mobileWriting = !desktopPresentation;
+  const canEdit = true;
   const currentNoteId = note?.id;
 
   useEffect(() => {
-    setMobileWriting(startInWritingMode);
     setMobileSheet(null);
-  }, [note?.id, startInWritingMode]);
+    setMobileFindOpen(false);
+    setMobileFindQuery('');
+    setMobileFindIndex(-1);
+    setMobileFindCount(0);
+    setMobilePaperMode(false);
+  }, [note?.id]);
 
   useEffect(() => {
-    if (desktopPresentation || !mobileWriting) return;
+    if (desktopPresentation || !startInWritingMode) return;
     const frame = window.requestAnimationFrame(() => editorRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
-  }, [desktopPresentation, mobileWriting, note?.id]);
+  }, [desktopPresentation, startInWritingMode, note?.id]);
+
+  useEffect(() => {
+    if (!mobileFindOpen || !mobileFindQuery.trim() || !editorRef.current) {
+      setMobileFindCount(0);
+      return;
+    }
+    const query = mobileFindQuery.trim().toLocaleLowerCase();
+    const walker = document.createTreeWalker(editorRef.current, NodeFilter.SHOW_TEXT);
+    let count = 0;
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      const text = (node.textContent || '').toLocaleLowerCase();
+      let offset = 0;
+      let match = text.indexOf(query, offset);
+      while (match >= 0) {
+        count += 1;
+        offset = match + query.length;
+        match = text.indexOf(query, offset);
+      }
+    }
+    setMobileFindCount(count);
+    setMobileFindIndex(-1);
+  }, [mobileFindOpen, mobileFindQuery, note?.id]);
 
   useEffect(() => {
     if (currentNoteId) return;
@@ -1086,6 +1129,68 @@ export function NoteEditor({
     }
   };
 
+  const openMobileFind = () => {
+    setMobileSheet(null);
+    setMobileFindQuery('');
+    setMobileFindIndex(-1);
+    setMobileFindCount(0);
+    setMobileFindOpen(true);
+    window.requestAnimationFrame(() => document.getElementById('tanooki-mobile-find-input')?.focus());
+  };
+
+  const findInNote = (direction: -1 | 1) => {
+    const root = editorRef.current;
+    const query = mobileFindQuery.trim().toLocaleLowerCase();
+    if (!root || !query) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const ranges: Range[] = [];
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      const text = node.textContent || '';
+      const normalized = text.toLocaleLowerCase();
+      let offset = 0;
+      let match = normalized.indexOf(query, offset);
+      while (match >= 0) {
+        const range = document.createRange();
+        range.setStart(node, match);
+        range.setEnd(node, match + query.length);
+        ranges.push(range);
+        offset = match + query.length;
+        match = normalized.indexOf(query, offset);
+      }
+    }
+    setMobileFindCount(ranges.length);
+    if (!ranges.length) { setMobileFindIndex(-1); return; }
+    const nextIndex = mobileFindIndex < 0
+      ? direction > 0 ? 0 : ranges.length - 1
+      : (mobileFindIndex + direction + ranges.length) % ranges.length;
+    const range = ranges[nextIndex];
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    range.startContainer.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setMobileFindIndex(nextIndex);
+  };
+
+  const handleShareNote = async () => {
+    const shareData = { title: title.trim() || 'Ghi chú', text: editorRef.current?.innerText || '' };
+    try {
+      if (navigator.share) await navigator.share(shareData);
+      else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(`${shareData.title}\n\n${shareData.text}`);
+        toast('Đã sao chép nội dung ghi chú');
+      } else toast('Chia sẻ sẽ được hỗ trợ sau');
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'AbortError') toast('Không thể chia sẻ ghi chú');
+    }
+  };
+
+  const handleShowAttachments = () => {
+    const attachmentNode = editorScrollRef.current?.querySelector<HTMLElement>('.noted-inline-attachment, [data-attachment-id]');
+    if (!attachments.length || !attachmentNode) { toast('Chế độ xem tệp đính kèm sẽ hỗ trợ sau'); return; }
+    window.requestAnimationFrame(() => attachmentNode.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+  };
+
   if (!note) {
     return (
       <div className={`h-full flex items-center justify-center bg-app ${desktopPresentation ? 'tanooki-desktop-empty-editor' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
@@ -1101,9 +1206,12 @@ export function NoteEditor({
 
   const folderName = folders.find((f) => f.id === note.folderId)?.name || null;
   const desktopTags = desktopPresentation ? noteTags : [];
+  const mobileBackLabel = breadcrumb === 'Tất cả ghi chú'
+    ? breadcrumb
+    : folders.some((folder) => folder.name === breadcrumb) ? breadcrumb : 'Ghi chú';
 
   return (
-    <div className={`${desktopPresentation ? 'h-full' : 'h-[100dvh] tanooki-mobile-editor'} min-h-0 min-w-0 flex flex-col bg-app ${desktopPresentation ? 'tanooki-desktop-editor' : mobileWriting ? 'is-writing' : 'is-reading'}`} style={{ backgroundColor: 'var(--bg)' }}>
+    <div className={`${desktopPresentation ? 'h-full' : 'h-[100dvh] tanooki-mobile-editor'} min-h-0 min-w-0 flex flex-col bg-app ${desktopPresentation ? 'tanooki-desktop-editor' : 'is-writing'} ${!desktopPresentation && mobilePaperMode ? 'is-light-paper' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
       {/* Toolbar */}
       <div
         className={`${desktopPresentation ? 'flex items-center justify-between gap-3 px-3 py-2 border-b flex-shrink-0 tanooki-editor-topbar' : 'hidden'}`}
@@ -1213,29 +1321,27 @@ export function NoteEditor({
       </div>
 
       {!desktopPresentation && <header className="tanooki-mobile-editor-header">
-        <button type="button" className="tanooki-mobile-editor-icon" onClick={() => {
+        <button type="button" onClick={() => {
           flushCurrentDraft();
           clearSelection();
           onBack();
-        }} aria-label="Quay lại" title="Quay lại"><ChevronLeft size={21} /></button>
-        <div className="tanooki-mobile-editor-title">
-          {mobileWriting
-            ? <input value={title} onChange={(event) => setTitle(event.target.value)} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" />
-            : <strong>{title.trim() || 'Chưa có tiêu đề'}</strong>}
+        }} className="tanooki-mobile-editor-back" aria-label={`Quay lại ${mobileBackLabel}`} title={`Quay lại ${mobileBackLabel}`}><ChevronLeft size={21} /><span>{mobileBackLabel}</span></button>
+        <div className="tanooki-mobile-editor-header-actions">
+          <button type="button" className="tanooki-mobile-editor-icon" onClick={() => { editorRef.current?.focus(); document.execCommand('undo'); commitEditor(); }} aria-label="Hoàn tác" title="Hoàn tác"><Undo2 size={19} /></button>
+          <button type="button" className="tanooki-mobile-editor-icon" onClick={() => { editorRef.current?.focus(); document.execCommand('redo'); commitEditor(); }} aria-label="Làm lại" title="Làm lại"><Redo2 size={19} /></button>
+          <button type="button" className="tanooki-mobile-editor-icon" onClick={() => { void handleShareNote(); }} aria-label="Chia sẻ ghi chú" title="Chia sẻ"><Share2 size={19} /></button>
+          <button type="button" className="tanooki-mobile-editor-icon" onClick={() => setMobileSheet('actions')} aria-label="Tùy chọn ghi chú" title="Tùy chọn"><MoreHorizontal size={21} /></button>
         </div>
-        <button type="button" className="tanooki-mobile-editor-mode" onClick={() => {
-          if (mobileWriting) {
-            flushCurrentDraft();
-            clearSelection();
-            (document.activeElement as HTMLElement | null)?.blur?.();
-            setMobileWriting(false);
-          } else setMobileWriting(true);
-        }} aria-label={mobileWriting ? 'Xong chỉnh sửa' : 'Chỉnh sửa ghi chú'} title={mobileWriting ? 'Xong' : 'Chỉnh sửa'}>
-          {mobileWriting ? 'Xong' : <><Edit3 size={16} /><span>Chỉnh sửa</span></>}
-        </button>
-        <button type="button" className="tanooki-mobile-editor-icon" onClick={() => setMobileSheet('tools')} aria-label="Công cụ chỉnh sửa" title="Công cụ"><SlidersHorizontal size={19} /></button>
-        <button type="button" className="tanooki-mobile-editor-icon" onClick={() => setMobileSheet('actions')} aria-label="Thao tác ghi chú" title="Thêm thao tác"><MoreHorizontal size={20} /></button>
       </header>}
+
+      {!desktopPresentation && mobileFindOpen && <div className="tanooki-mobile-note-find">
+        <Search size={18} aria-hidden="true" />
+        <input id="tanooki-mobile-find-input" value={mobileFindQuery} onChange={(event) => { setMobileFindQuery(event.target.value); setMobileFindIndex(-1); }} placeholder="Tìm trong ghi chú" aria-label="Tìm trong ghi chú" />
+        <span aria-live="polite">{mobileFindCount ? `${mobileFindIndex + 1}/${mobileFindCount}` : '0/0'}</span>
+        <button type="button" aria-label="Kết quả trước" onClick={() => findInNote(-1)}><ChevronLeft size={18} /></button>
+        <button type="button" aria-label="Kết quả tiếp theo" onClick={() => findInNote(1)}><ChevronRight size={18} /></button>
+        <button type="button" aria-label="Đóng tìm trong ghi chú" onClick={() => { setMobileFindOpen(false); setMobileFindQuery(''); setMobileFindIndex(-1); setMobileFindCount(0); }}><X size={18} /></button>
+      </div>}
 
       {!desktopPresentation && (noteTags.length > 0 || mobileWriting) && <div className="tanooki-mobile-visible-tags" aria-label="Thẻ của ghi chú">
         <div className="tanooki-tag-chips">
@@ -1243,9 +1349,8 @@ export function NoteEditor({
             <button
               type="button"
               className="tanooki-tag-open"
-              disabled={mobileWriting}
-              onClick={() => { if (!mobileWriting) onOpenTag(tag); }}
-              aria-label={mobileWriting ? `Thẻ ${tag}` : `Lọc theo thẻ ${tag}`}
+              onClick={() => { flushCurrentDraft(); clearSelection(); onOpenTag(tag); }}
+              aria-label={`Lọc theo thẻ ${tag}`}
             >#{tag}</button>
           </span>)}
         </div>
@@ -1297,6 +1402,7 @@ export function NoteEditor({
           selection?.removeAllRanges();
           selection?.addRange(range);
         }}>
+          {!desktopPresentation && <input value={title} onChange={(event) => setTitle(event.target.value)} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" className="tanooki-mobile-editor-document-title" />}
           <div
             ref={editorRef}
             contentEditable={canEdit}
@@ -1538,7 +1644,7 @@ export function NoteEditor({
 
       {/* Bottom attachment bar */}
       <div
-        className={`${desktopPresentation ? 'flex items-center gap-2 px-3 py-2 border-t flex-shrink-0 tanooki-editor-attachment-bar' : mobileWriting ? 'flex items-center gap-2 px-3 py-2 border-t flex-shrink-0 tanooki-mobile-writing-toolbar' : 'hidden'}`}
+        className={`${desktopPresentation ? 'flex items-center gap-2 px-3 py-2 border-t flex-shrink-0 tanooki-editor-attachment-bar' : 'hidden'}`}
         style={{ borderColor: 'var(--border)' }}
       >
         <input
@@ -1583,9 +1689,16 @@ export function NoteEditor({
         )}
       </div>
 
+      {!desktopPresentation && <nav className="tanooki-mobile-editor-bottom-bar" aria-label="Công cụ ghi chú">
+        <button type="button" onClick={() => toast('Checklist và định dạng sẽ hỗ trợ sau')} aria-label="Checklist và định dạng" title="Checklist và định dạng"><ListChecks size={25} /></button>
+        <button type="button" onClick={() => setMobileSheet('tools')} aria-label="Đính kèm" title="Đính kèm"><Paperclip size={25} /></button>
+        <button type="button" onClick={() => toast('Vẽ và đánh dấu sẽ hỗ trợ sau')} aria-label="Vẽ và đánh dấu" title="Vẽ và đánh dấu"><PenTool size={25} /></button>
+        <button type="button" onClick={onCreateNote} aria-label="Tạo ghi chú mới" title="Tạo ghi chú mới"><SquarePen size={25} /></button>
+      </nav>}
+
       {!desktopPresentation && <>
         <MobileEditorToolsSheet note={note} folders={folders} attachments={attachments} tags={noteTags} existingTags={existingTags} onAddTag={addNoteTag} onRemoveTag={removeNoteTag} onOpenTag={onOpenTag} open={mobileSheet === 'tools'} onClose={() => setMobileSheet(null)} onChooseImage={() => imageInputRef.current?.click()} onChooseFile={() => fileInputRef.current?.click()} />
-        <MobileNoteActionsSheet note={note} folders={folders} open={mobileSheet === 'actions'} onClose={() => setMobileSheet(null)} onTogglePin={onTogglePin} onArchive={onArchive} onMove={onMove} onDuplicate={onDuplicate} onTrash={onTrash} />
+        <MobileEditorMoreSheet note={note} folders={folders} open={mobileSheet === 'actions'} onClose={() => setMobileSheet(null)} onTogglePin={onTogglePin} onArchive={onArchive} onMove={onMove} onDuplicate={onDuplicate} onTrash={onTrash} onFind={openMobileFind} onPlaceholder={() => toast('Sẽ hỗ trợ sau')} onNavigateRecent={() => { flushCurrentDraft(); onNavigateRecent(); }} onTogglePaper={() => { setMobileSheet(null); setMobilePaperMode((value) => !value); }} onShowAttachments={handleShowAttachments} paperMode={mobilePaperMode} />
       </>}
 
       {/* Image viewer modal */}
