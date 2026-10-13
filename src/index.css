@@ -259,44 +259,47 @@
 }
 
 /* Checklist */
-.editor-content ul[data-checklist] {
+.note-content ul[data-checklist] {
   list-style: none;
   padding-left: 0.2em;
 }
-.editor-content ul[data-checklist] > li {
-  position: relative;
-  padding-left: 1.6em;
+.note-content ul[data-checklist] > li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 0.55em;
+  list-style: none;
 }
-.editor-content ul[data-checklist] > li::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0.25em;
-  width: 16px;
-  height: 16px;
+.note-content .note-checklist-toggle {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  margin-top: 0.24em;
   border: 1.5px solid var(--text-tertiary);
   border-radius: 4px;
   cursor: pointer;
+  background: transparent;
+  padding: 0;
 }
-.editor-content ul[data-checklist] > li[data-checked="true"] {
+.note-content .note-checklist-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.note-content ul[data-checklist] > li[data-checked="true"] .note-checklist-text {
   color: var(--text-tertiary);
   text-decoration: line-through;
 }
-.editor-content ul[data-checklist] > li[data-checked="true"]::before {
+.note-content ul[data-checklist] > li[data-checked="true"] .note-checklist-toggle {
   background: var(--accent);
   border-color: var(--accent);
 }
-.editor-content ul[data-checklist] > li[data-checked="true"]::after {
+.note-content ul[data-checklist] > li[data-checked="true"] .note-checklist-toggle::after {
   content: '';
-  position: absolute;
-  left: 4px;
-  top: 0.3em;
   width: 5px;
   height: 9px;
   border: solid white;
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
+.note-content .note-checklist-text { min-width: 0; overflow-wrap: anywhere; }
 
 /* Toggles / collapsible */
 .editor-content details {
@@ -1135,6 +1138,16 @@ input[data-global-search]:focus-visible {
   .tanooki-mobile-sheet-heading button { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 10px; color: var(--text-secondary); }
   .tanooki-mobile-sheet-content { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-top: 14px; }
   .tanooki-mobile-sheet-group { padding: 2px 0 14px; }
+  .tanooki-mobile-format-groups { display: grid; gap: 14px; padding-bottom: 8px; }
+  .tanooki-mobile-format-group > h3 { margin: 0 0 7px 2px; color: var(--text-tertiary); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .tanooki-mobile-format-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+  .tanooki-mobile-format-actions.is-inline { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .tanooki-mobile-format-actions > button { display: grid; min-width: 0; min-height: 46px; place-items: center; border: 1px solid var(--border); border-radius: 11px; background: var(--bg-secondary); padding: 7px 5px; color: var(--text); font-size: 14px; font-weight: 550; text-align: center; }
+  .tanooki-mobile-format-actions > button.is-active { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); color: var(--accent); }
+  .tanooki-mobile-format-actions > button.format-bold { font-weight: 800; }
+  .tanooki-mobile-format-actions > button.format-italic { font-style: italic; }
+  .tanooki-mobile-format-actions > button.format-underline { text-decoration: underline; text-underline-offset: 3px; }
+  .tanooki-mobile-format-actions > button.format-strikeThrough { text-decoration: line-through; }
   .tanooki-mobile-sheet-group > h3 { margin-bottom: 8px; color: var(--text-tertiary); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
   .tanooki-mobile-sheet-actions { display: grid; gap: 6px; }
   .tanooki-mobile-sheet-actions > button, .tanooki-mobile-sheet-select > span { display: flex; min-height: 48px; width: 100%; align-items: center; gap: 12px; border-radius: 11px; padding: 10px 12px; color: var(--text); font-size: 14px; text-align: left; }

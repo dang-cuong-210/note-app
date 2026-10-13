@@ -165,9 +165,9 @@ test('mobile editor styles are scoped below 1024px and desktop tools remain unch
   assert.match(app, /<DesktopEditorToolsPanel/);
 });
 
-test('the editor keeps existing upload, media gesture and viewer functions without adding formatting commands', () => {
+test('the editor keeps existing upload, media gesture and viewer functions with formatting in a separate sheet', () => {
   for (const existingHandler of ['handleImageUpload', 'handleFileUpload', 'onInlinePointerDown', 'onImagePointerDown', 'resizeImage', 'setImageViewer', 'handleDeleteAttachment']) assert.ok(editor.includes(existingHandler));
-  assert.doesNotMatch(editor, /execCommand\(['"](bold|italic|underline|formatBlock|insertUnorderedList)/);
+  assert.match(editor, /<MobileFormattingSheet open=\{mobileSheet === 'formatting'\}/);
   assert.match(editor, /imageInputRef=|ref=\{imageInputRef\}/);
   assert.match(editor, /ref=\{fileInputRef\}/);
 });
