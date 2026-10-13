@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import {
   Pin,
   PinOff,
@@ -91,7 +91,12 @@ export function NoteList({
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const filterPanelRef = useRef<HTMLDivElement>(null);
+  const notesScrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  useLayoutEffect(() => {
+    if (mobileAllNotesMode && notesScrollRef.current) notesScrollRef.current.scrollTop = 0;
+  }, [mobileAllNotesMode]);
 
   useEffect(() => {
     if (!filterOpen || mobileMode) return;
@@ -299,7 +304,7 @@ export function NoteList({
         </div>}
 
       {/* Notes list */}
-      <div className={`flex-1 min-h-0 overflow-y-auto ${mobileAllNotesMode ? 'tanooki-mobile-all-notes-scroll' : 'px-2'}`}>
+      <div ref={notesScrollRef} className={`flex-1 min-h-0 overflow-y-auto ${mobileAllNotesMode ? 'tanooki-mobile-all-notes-scroll' : 'px-2'}`}>
         {view.kind === 'trash' && (
           <p className="px-3 py-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
             Ghi chú trong thùng rác sẽ bị xóa vĩnh viễn sau 7 ngày.

@@ -59,9 +59,13 @@ test('mobile All Notes keeps its search input and opens the existing filter and 
 
 test('mobile All Notes layout uses safe-area padding, a scrollable grouped list and truncating rows', async () => {
   const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+  const list = await readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8');
   assert.match(css, /\.tanooki-mobile-all-notes \{[^}]*height: 100dvh/);
   assert.match(css, /\.tanooki-mobile-all-notes \{[^}]*safe-area-inset-top/);
   assert.match(css, /\.tanooki-mobile-all-notes-footer \{[^}]*safe-area-inset-bottom/);
   assert.match(css, /\.tanooki-mobile-all-notes-scroll \{[^}]*overflow-y: auto/);
   assert.match(css, /\.tanooki-mobile-all-notes-folder > span \{[^}]*text-overflow: ellipsis/);
+  assert.match(list, /mobileAllNoteGroups\.map\(\(group\) => <section[^>]*>[\s\S]*?<h2>\{group\.label\}<\/h2>/);
+  assert.match(list, /useLayoutEffect\(\(\) => \{\s*if \(mobileAllNotesMode && notesScrollRef\.current\) notesScrollRef\.current\.scrollTop = 0;/);
+  assert.match(list, /<div ref=\{notesScrollRef\} className=\{`flex-1 min-h-0 overflow-y-auto/);
 });
