@@ -442,6 +442,26 @@ export function NoteEditor({
     if (!range.startContainer.parentElement?.closest(attachmentSelector)) lastCaretRange.current = range.cloneRange();
   };
 
+  const focusBodyAtEnd = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    rememberCaret();
+  };
+
+  const handleMobileTitleKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (event) => {
+    const nativeEvent = event.nativeEvent;
+    if ((event.key !== 'Enter' && event.code !== 'NumpadEnter') || nativeEvent.isComposing || nativeEvent.keyCode === 229) return;
+    event.preventDefault();
+    focusBodyAtEnd();
+  };
+
   const insertAttachmentAtCaret = (att: Attachment) => {
     const editor = editorRef.current;
     if (!editor) return;
@@ -1402,7 +1422,7 @@ export function NoteEditor({
           selection?.removeAllRanges();
           selection?.addRange(range);
         }}>
-          {!desktopPresentation && <input value={title} onChange={(event) => setTitle(event.target.value)} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" className="tanooki-mobile-editor-document-title" />}
+          {!desktopPresentation && <input value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={handleMobileTitleKeyDown} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" className="tanooki-mobile-editor-document-title" />}
           <div
             ref={editorRef}
             contentEditable={canEdit}

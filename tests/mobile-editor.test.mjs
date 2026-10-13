@@ -21,6 +21,35 @@ test('mobile editor opens directly editable without a Reading/Writing toggle', (
   assert.match(app, /startInWritingMode=\{!isDesktop && mobileNewNoteId === selectedNote\?\.id\}/);
 });
 
+test('mobile title Enter and NumpadEnter move focus to the body and place the caret at its end', () => {
+  const keyHandler = editor.match(/const handleMobileTitleKeyDown:[\s\S]*?\n  \};/)?.[0];
+  assert.ok(keyHandler);
+  assert.match(keyHandler, /event\.key !== 'Enter' && event\.code !== 'NumpadEnter'/);
+  assert.ok(keyHandler.indexOf('event.preventDefault()') < keyHandler.indexOf('focusBodyAtEnd()'));
+
+  const focusBody = editor.match(/const focusBodyAtEnd = \(\) => \{([\s\S]*?)\n  \};/)?.[1];
+  assert.ok(focusBody);
+  assert.match(focusBody, /editorRef\.current/);
+  assert.match(focusBody, /editor\.focus\(\)/);
+  assert.match(focusBody, /range\.selectNodeContents\(editor\)/);
+  assert.match(focusBody, /range\.collapse\(false\)/);
+  assert.match(focusBody, /selection\?\.addRange\(range\)/);
+  assert.doesNotMatch(focusBody, /innerHTML\s*=|textContent\s*=|append(?:Child)?\(/);
+  assert.match(editor, /!desktopPresentation && <input[^\n]*onKeyDown=\{handleMobileTitleKeyDown\}/);
+  const desktopTitleInput = editor.match(/<input value=\{title\} onChange=\{\(e\) => setTitle\(e\.target\.value\)\}[^\n]*/);
+  assert.ok(desktopTitleInput);
+  assert.doesNotMatch(desktopTitleInput[0], /onKeyDown/);
+});
+
+test('mobile title Enter does not steal IME composition or suppress other keys', () => {
+  const keyHandler = editor.match(/const handleMobileTitleKeyDown:[\s\S]*?\n  \};/)?.[0];
+  assert.ok(keyHandler);
+  assert.match(keyHandler, /nativeEvent\.isComposing/);
+  assert.match(keyHandler, /nativeEvent\.keyCode === 229/);
+  assert.match(keyHandler, /return;[\s\S]*?event\.preventDefault\(\)/);
+  assert.ok(keyHandler.indexOf("event.key !== 'Enter'") < keyHandler.indexOf('event.preventDefault()'));
+});
+
 test('mobile Back flushes the latest title/body before navigation', () => {
   const flush = editor.match(/const flushCurrentDraft = \(\) => \{([\s\S]*?)\n  \};/)?.[1];
   assert.ok(flush);
