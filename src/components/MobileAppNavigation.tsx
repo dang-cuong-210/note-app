@@ -1,7 +1,7 @@
 import { Archive, Ellipsis, Folder, House, Plus, Search, Settings, Trash2, LogOut, Pin, FileText } from 'lucide-react';
 import type { ViewType } from '@/lib/navigation';
 
-export type MobileDestination = 'home' | 'search' | 'folders' | 'more';
+export type MobileDestination = 'home' | 'search' | 'all' | 'folders' | 'more';
 
 interface MobileBottomNavProps {
   active: MobileDestination;

@@ -1,6 +1,6 @@
 import type { ViewType } from './navigation';
 
-export type MobileDestination = 'home' | 'search' | 'folders' | 'more';
+export type MobileDestination = 'home' | 'search' | 'all' | 'folders' | 'more';
 export function getMobileDestinationAfterView(view: ViewType): MobileDestination;
 export function getMobileSearchState(query: string): { destination: 'search'; view: { kind: 'all' }; query: string; selectedNoteId: null };
 export function getMobileFolderState(folderId: string): { destination: 'search'; view: { kind: 'folder'; id: string }; selectedNoteId: null };

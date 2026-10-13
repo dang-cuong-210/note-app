@@ -1,6 +1,7 @@
 export function getMobileDestinationAfterView(view) {
   if (view.kind === 'home') return 'home';
   if (view.kind === 'settings') return 'more';
+  if (view.kind === 'all') return 'all';
   return 'search';
 }
 

@@ -9,6 +9,7 @@ import {
   ArchiveRestore,
   MoreHorizontal,
     Menu,
+  ChevronLeft,
   RotateCcw,
   Search,
   Clock3,
@@ -24,6 +25,7 @@ import { sortNotes, formatTime } from '@/lib/utils';
 import { buildSearchRecords, filterSearchRecords, getNotesInView, getSearchSnippet, highlightSegments, normalizeSearchText, sortSearchNotes } from '@/lib/advancedSearch.js';
 import { useToast } from '@/contexts/ToastContext';
 import { MobileBottomSheet, MobileNoteActionsSheet, MobileTrashActionsSheet } from '@/components/MobileEditorSheets';
+import { formatMobileAllNoteDate, groupMobileAllNotes } from '@/lib/mobileAllNotes.js';
 
 interface NoteListProps {
   notes: Note[];
@@ -44,6 +46,8 @@ interface NoteListProps {
     onOpenSidebar?: () => void;
     onSearchChange: (q: string) => void;
   mobileSearchMode?: boolean;
+  mobileAllNotesMode?: boolean;
+  onBackToHome?: () => void;
   hideAddButton?: boolean;
   desktopMode?: boolean;
   mobileMode?: boolean;
@@ -69,6 +73,8 @@ export function NoteList({
   onSearchChange,
     onOpenSidebar,
   mobileSearchMode = false,
+  mobileAllNotesMode = false,
+  onBackToHome,
   hideAddButton = false,
   desktopMode = false,
   mobileMode = false,
@@ -109,18 +115,22 @@ export function NoteList({
     archive: archiveFilter,
   }, view), [searchRecords, searchQuery, folderFilter, tagFilter, pinnedFilter, archiveFilter, view]);
   const tagsInScope = useMemo(() => [...new Set(searchRecords.flatMap((record) => record.tags))].sort((a, b) => a.localeCompare(b)), [searchRecords]);
+  const { sortBy, sortDir } = settings;
   const hasAdvancedFilters = folderFilter !== 'all' || tagFilter !== 'all' || pinnedFilter !== 'all' || (view.kind === 'all' && archiveFilter !== 'current');
   const activeFilterCount = Number(folderFilter !== 'all') + Number(tagFilter !== 'all') + Number(pinnedFilter !== 'all') + Number(view.kind === 'all' && archiveFilter !== 'current');
   const hasSearchOrFilters = Boolean(normalizeSearchText(searchQuery)) || hasAdvancedFilters;
-  const filteredNotes = visibleRecords.map((record) => record.note);
-  const sorted = sortMode
-    ? sortSearchNotes(filteredNotes, sortMode, view.kind !== 'recent' && view.kind !== 'trash')
-    : view.kind === 'trash'
-      ? [...filteredNotes].sort((a, b) => (b.trashedAt || 0) - (a.trashedAt || 0))
-      : view.kind === 'recent'
-        ? [...filteredNotes].sort((a, b) => b.updatedAt - a.updatedAt)
-        : sortNotes(filteredNotes, settings);
+  const sorted = useMemo(() => {
+    const filteredNotes = visibleRecords.map((record) => record.note);
+    return sortMode
+      ? sortSearchNotes(filteredNotes, sortMode, view.kind !== 'recent' && view.kind !== 'trash')
+      : view.kind === 'trash'
+        ? [...filteredNotes].sort((a, b) => (b.trashedAt || 0) - (a.trashedAt || 0))
+        : view.kind === 'recent'
+          ? [...filteredNotes].sort((a, b) => b.updatedAt - a.updatedAt)
+          : sortNotes(filteredNotes, { sortBy, sortDir });
+  }, [visibleRecords, sortMode, view.kind, sortBy, sortDir]);
   const recordById = useMemo(() => new Map(visibleRecords.map((record) => [record.note.id, record])), [visibleRecords]);
+  const mobileAllNoteGroups = useMemo(() => groupMobileAllNotes(sorted), [sorted]);
   const menuNote = sorted.find((note) => note.id === menuFor) || null;
 
   const clearSearchAndFilters = () => {
@@ -194,13 +204,26 @@ export function NoteList({
     }
   };
 
-  const showAddButton = !hideAddButton && view.kind !== 'trash' && view.kind !== 'settings' && view.kind !== 'archived';
+  const canCreateNote = view.kind !== 'trash' && view.kind !== 'settings' && view.kind !== 'archived';
+  const showAddButton = !hideAddButton && !mobileAllNotesMode && canCreateNote;
 
   return (
-    <div className={`h-full w-full max-lg:min-w-0 max-lg:max-w-full max-lg:pb-[calc(72px+env(safe-area-inset-bottom))] flex flex-col bg-app ${desktopMode ? 'tanooki-desktop-note-list' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
+    <div className={`${mobileAllNotesMode ? '' : 'h-full'} w-full max-lg:min-w-0 max-lg:max-w-full ${mobileAllNotesMode ? 'tanooki-mobile-all-notes' : 'max-lg:pb-[calc(72px+env(safe-area-inset-bottom))]'} flex flex-col bg-app ${desktopMode ? 'tanooki-desktop-note-list' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
       {desktopMode && <div className="tanooki-desktop-list-heading px-4 pt-4"><h2>{contextTitle}</h2><span>{sorted.length} ghi chú</span></div>}
+      {mobileAllNotesMode && <header className="tanooki-mobile-all-notes-header">
+        <div className="tanooki-mobile-all-notes-navigation">
+          <button type="button" onClick={onBackToHome} aria-label="Quay lại Thư mục"><ChevronLeft size={22} aria-hidden="true" /><span>Thư mục</span></button>
+          <button type="button" onClick={() => setMobileControlsOpen(true)} aria-label="Tùy chọn ghi chú" title="Bộ lọc và sắp xếp"><MoreHorizontal size={22} aria-hidden="true" /></button>
+        </div>
+        <h1>Tất cả ghi chú</h1>
+        <div className="tanooki-mobile-all-notes-search">
+          <Search size={21} aria-hidden="true" />
+          <input data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} placeholder="Tìm kiếm ghi chú..." aria-label="Tìm kiếm ghi chú" />
+          {searchQuery && <button type="button" onClick={() => onSearchChange('')} aria-label="Xóa nội dung tìm kiếm"><X size={17} aria-hidden="true" /></button>}
+        </div>
+      </header>}
       {/* Search bar */}
-      <div className="px-4 pt-2 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
+      {!mobileAllNotesMode && <div className="px-4 pt-2 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
       {mobileSearchMode && <h1 className="mb-3 px-1 text-xl font-bold" style={{ color: 'var(--text)' }}>Tìm kiếm</h1>}
       <div className="flex items-center gap-2">
       <button
@@ -273,10 +296,10 @@ export function NoteList({
             </label>
           )}
         </div>
-        </div>
+        </div>}
 
       {/* Notes list */}
-      <div className="flex-1 overflow-y-auto px-2">
+      <div className={`flex-1 min-h-0 overflow-y-auto ${mobileAllNotesMode ? 'tanooki-mobile-all-notes-scroll' : 'px-2'}`}>
         {view.kind === 'trash' && (
           <p className="px-3 py-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
             Ghi chú trong thùng rác sẽ bị xóa vĩnh viễn sau 7 ngày.
@@ -287,7 +310,32 @@ export function NoteList({
             ? <FilteredEmptyState onClear={clearSearchAndFilters} />
             : <EmptyState view={view} />
         ) : (
-          <div className="space-y-0.5">
+          mobileAllNotesMode ? <div className="tanooki-mobile-all-notes-groups">
+            {mobileAllNoteGroups.map((group) => <section key={group.label} className="tanooki-mobile-all-notes-group">
+              <h2>{group.label}</h2>
+              <div className="tanooki-mobile-all-notes-card">
+                {group.notes.map((note) => {
+                  const record = recordById.get(note.id);
+                  const fn = folderName(note.folderId);
+                  const bodyMatched = Boolean(normalizeSearchText(searchQuery) && record?.bodyNormalized.includes(normalizeSearchText(searchQuery)));
+                  const preview = record?.bodyText
+                    ? bodyMatched ? getSearchSnippet(record.bodyText, searchQuery) : record.bodyText.length > 120 ? `${record.bodyText.slice(0, 120)}…` : record.bodyText
+                    : 'Chưa có nội dung';
+                  return <MobileAllNoteRow
+                    key={note.id}
+                    note={note}
+                    selected={note.id === selectedNoteId}
+                    date={formatMobileAllNoteDate(note.updatedAt)}
+                    preview={preview}
+                    query={searchQuery}
+                    folderName={fn}
+                    onOpen={() => onSelectNote(note.id)}
+                    onMore={() => { setMenuFor(note.id); setMoveFor(null); }}
+                  />;
+                })}
+              </div>
+            </section>)}
+          </div> : <div className="space-y-0.5">
             {sorted.map((note) => {
               const selected = note.id === selectedNoteId;
               const fn = folderName(note.folderId);
@@ -425,6 +473,11 @@ export function NoteList({
         )}
       </div>
 
+      {mobileAllNotesMode && <footer className="tanooki-mobile-all-notes-footer">
+        <span>{sorted.length} ghi chú</span>
+        {canCreateNote && <button type="button" onClick={onAddNote} aria-label="Tạo ghi chú mới" title="Tạo ghi chú mới"><Plus size={26} aria-hidden="true" /></button>}
+      </footer>}
+
       {/* FAB */}
       {showAddButton && (
         <button
@@ -481,6 +534,39 @@ function MenuItem({
       {label}
     </button>
   );
+}
+
+function MobileAllNoteRow({
+  note,
+  selected,
+  date,
+  preview,
+  query,
+  folderName,
+  onOpen,
+  onMore,
+}: {
+  note: Note;
+  selected: boolean;
+  date: string;
+  preview: string;
+  query: string;
+  folderName: string | null;
+  onOpen: () => void;
+  onMore: () => void;
+}) {
+  return <article className={`tanooki-mobile-all-notes-row${selected ? ' is-selected' : ''}`}>
+    <button type="button" className="tanooki-mobile-all-notes-row-main" onClick={onOpen}>
+      <strong>{note.title.trim() ? <HighlightedText text={note.title} query={query} /> : 'Chưa có tiêu đề'}</strong>
+      <span className="tanooki-mobile-all-notes-summary"><time>{date}</time><span aria-hidden="true">·</span><span className="tanooki-mobile-all-notes-preview">{recordPreview(preview, query)}</span></span>
+      {folderName && <span className="tanooki-mobile-all-notes-folder"><FolderIcon size={15} fill="currentColor" aria-hidden="true" /><span>{folderName}</span></span>}
+    </button>
+    <button type="button" className="tanooki-mobile-all-notes-more" onClick={onMore} aria-label={`Thao tác: ${note.title.trim() || 'Chưa có tiêu đề'}`}><MoreHorizontal size={21} aria-hidden="true" /></button>
+  </article>;
+}
+
+function recordPreview(preview: string, query: string) {
+  return query ? <HighlightedText text={preview} query={query} /> : preview;
 }
 
 function FilterControls({

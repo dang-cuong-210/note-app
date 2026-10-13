@@ -314,7 +314,7 @@ function AppContent() {
   const showMobileMore = !isDesktop && mobileDestination === 'more' && view.kind !== 'settings';
   const showEditor = view.kind !== 'settings' && view.kind !== 'trash' && !showHome && !showMobileHome && !showMobileFolders && !showMobileMore;
   const showSettings = view.kind === 'settings';
-  const showMobileBottomNav = shouldShowMobileBottomNav(isDesktop, selectedNoteId, view);
+  const showMobileBottomNav = shouldShowMobileBottomNav(isDesktop, selectedNoteId, view) && mobileDestination !== 'all';
 
   const openMobileSearch = () => {
     setMobileDestination('search');
@@ -417,7 +417,16 @@ function AppContent() {
             onSearchChange={setSearchQuery}
             onSearchSubmit={handleSearchSubmit}
             onOpenNote={(id) => { const destination = getDashboardNoteDestination(id); setView(destination.view); setMobileDestination('search'); setSelectedNoteId(destination.selectedNoteId); }}
-            onOpenView={handleViewChange}
+            onOpenView={(destination) => {
+              if (destination.kind === 'all') {
+                setView(destination);
+                setMobileDestination('all');
+                setSearchQuery('');
+                setSelectedNoteId(null);
+                return;
+              }
+              handleViewChange(destination);
+            }}
             onOpenFolder={(id) => { const destination = getMobileFolderState(id); setView(destination.view); setMobileDestination(destination.destination); setSearchQuery(''); setSelectedNoteId(destination.selectedNoteId); }}
             onAddFolder={data.addFolder}
             onCreateNote={createMobileNote}
@@ -481,6 +490,8 @@ function AppContent() {
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 mobileSearchMode={!isDesktop && mobileDestination === 'search' && view.kind === 'all'}
+                mobileAllNotesMode={!isDesktop && mobileDestination === 'all' && view.kind === 'all'}
+                onBackToHome={openMobileHome}
                 hideAddButton={showMobileBottomNav || isDesktop}
                 desktopMode={isDesktop}
                 mobileMode={!isDesktop}
