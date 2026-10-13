@@ -20,7 +20,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ViewType } from '@/lib/navigation';
 import { getInitialView, getDashboardNoteDestination, shouldAutoSelectNote } from '@/lib/dashboardData.js';
-import { getMobileDestinationAfterView, getMobileFolderState, getMobileNewNoteState, getMobileRecentState, getMobileSearchState, shouldShowMobileBottomNav } from '@/lib/mobileNavigation.js';
+import { getMobileDestinationAfterView, getMobileFolderState, getMobileNewNoteState, getMobileSearchState, shouldShowMobileBottomNav } from '@/lib/mobileNavigation.js';
 import { getDesktopViewLabel } from '@/lib/desktopWorkspace.js';
 import { getAllTags, noteHasTag, searchNotes } from '@/lib/utils';
 import { cleanupExpiredTrashedNotes, isExpiredTrashedNote } from '@/lib/trashRetention.js';
@@ -325,6 +325,7 @@ function AppContent() {
   const openMobileHome = () => {
     setMobileDestination('home');
     setView({ kind: 'home' });
+    setSearchQuery('');
     setSelectedNoteId(null);
   };
   const createMobileNote = () => {
@@ -411,11 +412,15 @@ function AppContent() {
         ) : showMobileHome ? (
           <MobileHome
             notes={data.notes}
+            folders={data.folders}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             onSearchSubmit={handleSearchSubmit}
             onOpenNote={(id) => { const destination = getDashboardNoteDestination(id); setView(destination.view); setMobileDestination('search'); setSelectedNoteId(destination.selectedNoteId); }}
-            onViewRecent={() => { const destination = getMobileRecentState(); setView(destination.view); setMobileDestination(destination.destination); setSelectedNoteId(destination.selectedNoteId); }}
+            onOpenView={handleViewChange}
+            onOpenFolder={(id) => { const destination = getMobileFolderState(id); setView(destination.view); setMobileDestination(destination.destination); setSearchQuery(''); setSelectedNoteId(destination.selectedNoteId); }}
+            onAddFolder={data.addFolder}
+            onCreateNote={createMobileNote}
           />
         ) : showMobileFolders ? (
           <MobileFoldersView

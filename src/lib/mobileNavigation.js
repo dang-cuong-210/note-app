@@ -21,5 +21,5 @@ export function getMobileNewNoteState(noteId) {
 }
 
 export function shouldShowMobileBottomNav(isDesktop, selectedNoteId, view) {
-  return !isDesktop && (!selectedNoteId || view.kind === 'trash');
+  return !isDesktop && view.kind !== 'home' && (!selectedNoteId || view.kind === 'trash');
 }

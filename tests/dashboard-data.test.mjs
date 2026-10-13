@@ -176,6 +176,10 @@ test('bottom navigation is visible on mobile when no editor note is open', () =>
   assert.equal(shouldShowMobileBottomNav(false, null, { kind: 'all' }), true);
 });
 
+test('new mobile Home uses its own actions instead of the bottom navigation', () => {
+  assert.equal(shouldShowMobileBottomNav(false, null, { kind: 'home' }), false);
+});
+
 test('bottom navigation is hidden while a mobile editor note is open', () => {
   assert.equal(shouldShowMobileBottomNav(false, 'note-1', { kind: 'all' }), false);
 });
