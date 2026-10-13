@@ -314,7 +314,7 @@ function AppContent() {
   const showMobileMore = !isDesktop && mobileDestination === 'more' && view.kind !== 'settings';
   const showEditor = view.kind !== 'settings' && view.kind !== 'trash' && !showHome && !showMobileHome && !showMobileFolders && !showMobileMore;
   const showSettings = view.kind === 'settings';
-  const showMobileBottomNav = shouldShowMobileBottomNav(isDesktop, selectedNoteId, view) && mobileDestination !== 'all';
+  const showMobileBottomNav = shouldShowMobileBottomNav(isDesktop, selectedNoteId, view) && mobileDestination !== 'all' && view.kind !== 'trash';
 
   const openMobileSearch = () => {
     setMobileDestination('search');
@@ -530,13 +530,6 @@ function AppContent() {
         ) : (
           /* Trash view - just the list */
           <div className="w-full flex flex-col relative">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden absolute top-3 left-3 z-10 p-2 rounded-lg hover-bg"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              <Menu size={20} />
-            </button>
             <NoteList
               notes={data.notes}
               folders={data.folders}
@@ -554,6 +547,8 @@ function AppContent() {
               onMove={data.moveNote}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
+              mobileTrashMode={!isDesktop && view.kind === 'trash'}
+              onBackToHome={openMobileHome}
               hideAddButton={showMobileBottomNav}
               desktopMode={isDesktop}
                 mobileMode={!isDesktop}

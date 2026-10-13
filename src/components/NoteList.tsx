@@ -47,6 +47,7 @@ interface NoteListProps {
     onSearchChange: (q: string) => void;
   mobileSearchMode?: boolean;
   mobileAllNotesMode?: boolean;
+  mobileTrashMode?: boolean;
   onBackToHome?: () => void;
   hideAddButton?: boolean;
   desktopMode?: boolean;
@@ -74,6 +75,7 @@ export function NoteList({
     onOpenSidebar,
   mobileSearchMode = false,
   mobileAllNotesMode = false,
+  mobileTrashMode = false,
   onBackToHome,
   hideAddButton = false,
   desktopMode = false,
@@ -89,6 +91,8 @@ export function NoteList({
   const [sortMode, setSortMode] = useState<'' | 'updated' | 'created' | 'title-asc' | 'title-desc'>('');
   const [filterOpen, setFilterOpen] = useState(false);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
+  const [trashSelectionMode, setTrashSelectionMode] = useState(false);
+  const [selectedTrashIds, setSelectedTrashIds] = useState<string[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
   const filterPanelRef = useRef<HTMLDivElement>(null);
   const notesScrollRef = useRef<HTMLDivElement>(null);
@@ -137,6 +141,13 @@ export function NoteList({
   const recordById = useMemo(() => new Map(visibleRecords.map((record) => [record.note.id, record])), [visibleRecords]);
   const mobileAllNoteGroups = useMemo(() => groupMobileAllNotes(sorted), [sorted]);
   const menuNote = sorted.find((note) => note.id === menuFor) || null;
+
+  useEffect(() => {
+    if (!mobileTrashMode) {
+      setTrashSelectionMode(false);
+      setSelectedTrashIds([]);
+    }
+  }, [mobileTrashMode]);
 
   const clearSearchAndFilters = () => {
     onSearchChange('');
@@ -202,6 +213,7 @@ export function NoteList({
   };
 
   const handleDelete = async (note: Note) => {
+    if (mobileTrashMode && !window.confirm(`Xóa vĩnh viễn ghi chú “${note.title.trim() || 'Chưa có tiêu đề'}”?`)) return;
     try {
       await onPermanentDelete(note.id);
     } catch {
@@ -211,10 +223,34 @@ export function NoteList({
 
   const canCreateNote = view.kind !== 'trash' && view.kind !== 'settings' && view.kind !== 'archived';
   const showAddButton = !hideAddButton && !mobileAllNotesMode && canCreateNote;
+  const toggleTrashSelection = (id: string) => setSelectedTrashIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  const deleteSelectedTrash = async () => {
+    const selected = sorted.filter((note) => selectedTrashIds.includes(note.id));
+    if (!selected.length || !window.confirm(`Xóa vĩnh viễn ${selected.length} ghi chú đã chọn?`)) return;
+    for (const note of selected) {
+      try { await onPermanentDelete(note.id); } catch { /* parent reports failure; continue remaining selected notes */ }
+    }
+    setSelectedTrashIds([]);
+    setTrashSelectionMode(false);
+  };
 
   return (
-    <div className={`${mobileAllNotesMode ? '' : 'h-full'} w-full max-lg:min-w-0 max-lg:max-w-full ${mobileAllNotesMode ? 'tanooki-mobile-all-notes' : 'max-lg:pb-[calc(72px+env(safe-area-inset-bottom))]'} flex flex-col bg-app ${desktopMode ? 'tanooki-desktop-note-list' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
+    <div className={`${mobileAllNotesMode || mobileTrashMode ? '' : 'h-full'} w-full max-lg:min-w-0 max-lg:max-w-full ${mobileAllNotesMode ? 'tanooki-mobile-all-notes' : mobileTrashMode ? 'tanooki-mobile-trash' : 'max-lg:pb-[calc(72px+env(safe-area-inset-bottom))]'} flex flex-col bg-app ${desktopMode ? 'tanooki-desktop-note-list' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
       {desktopMode && <div className="tanooki-desktop-list-heading px-4 pt-4"><h2>{contextTitle}</h2><span>{sorted.length} ghi chú</span></div>}
+      {mobileTrashMode && <header className="tanooki-mobile-trash-header">
+        <div className="tanooki-mobile-trash-navigation">
+          <button type="button" onClick={onBackToHome} aria-label="Quay lại Thư mục"><ChevronLeft size={22} aria-hidden="true" /><span>Thư mục</span></button>
+          <button type="button" onClick={() => { setTrashSelectionMode((current) => !current); setSelectedTrashIds([]); }} aria-pressed={trashSelectionMode}>{trashSelectionMode ? 'Xong' : 'Sửa'}</button>
+        </div>
+        <h1>Đã xóa gần đây</h1>
+        <label className="tanooki-mobile-trash-search"><Search size={21} aria-hidden="true" /><input data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} placeholder="Tìm kiếm ghi chú..." aria-label="Tìm kiếm ghi chú đã xóa" /></label>
+        <p className="tanooki-mobile-trash-retention">Các ghi chú đã xóa sẽ được lưu trong 7 ngày. Sau thời gian đó, các ghi chú sẽ bị xóa vĩnh viễn và không thể khôi phục.</p>
+        {trashSelectionMode && <div className="tanooki-mobile-trash-bulk" aria-label="Thao tác ghi chú đã chọn">
+          <span>{selectedTrashIds.length} đã chọn</span>
+          <button type="button" disabled={!selectedTrashIds.length} onClick={() => { selectedTrashIds.forEach(onRestore); setSelectedTrashIds([]); setTrashSelectionMode(false); }}>Khôi phục</button>
+          <button type="button" disabled={!selectedTrashIds.length} onClick={() => { void deleteSelectedTrash(); }}>Xóa vĩnh viễn</button>
+        </div>}
+      </header>}
       {mobileAllNotesMode && <header className="tanooki-mobile-all-notes-header">
         <div className="tanooki-mobile-all-notes-navigation">
           <button type="button" onClick={onBackToHome} aria-label="Quay lại Thư mục"><ChevronLeft size={22} aria-hidden="true" /><span>Thư mục</span></button>
@@ -228,7 +264,7 @@ export function NoteList({
         </div>
       </header>}
       {/* Search bar */}
-      {!mobileAllNotesMode && <div className="px-4 pt-2 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
+      {!mobileAllNotesMode && !mobileTrashMode && <div className="px-4 pt-2 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
       {mobileSearchMode && <h1 className="mb-3 px-1 text-xl font-bold" style={{ color: 'var(--text)' }}>Tìm kiếm</h1>}
       <div className="flex items-center gap-2">
       <button
@@ -304,8 +340,8 @@ export function NoteList({
         </div>}
 
       {/* Notes list */}
-      <div ref={notesScrollRef} className={`flex-1 min-h-0 overflow-y-auto ${mobileAllNotesMode ? 'tanooki-mobile-all-notes-scroll' : 'px-2'}`}>
-        {view.kind === 'trash' && (
+      <div ref={notesScrollRef} className={`flex-1 min-h-0 overflow-y-auto ${mobileAllNotesMode ? 'tanooki-mobile-all-notes-scroll' : mobileTrashMode ? 'tanooki-mobile-trash-scroll' : 'px-2'}`}>
+        {view.kind === 'trash' && !mobileTrashMode && (
           <p className="px-3 py-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
             Ghi chú trong thùng rác sẽ bị xóa vĩnh viễn sau 7 ngày.
           </p>
@@ -313,9 +349,25 @@ export function NoteList({
         {sorted.length === 0 ? (
           hasSearchOrFilters && filterSource.length > 0
             ? <FilteredEmptyState onClear={clearSearchAndFilters} />
-            : <EmptyState view={view} />
+            : mobileTrashMode ? <div className="tanooki-mobile-trash-empty">Không có ghi chú đã xóa</div> : <EmptyState view={view} />
         ) : (
-          mobileAllNotesMode ? <div className="tanooki-mobile-all-notes-groups">
+          mobileTrashMode ? <div className="tanooki-mobile-trash-card">
+            {sorted.map((note) => {
+              const record = recordById.get(note.id);
+              const fn = folderName(note.folderId);
+              const preview = record?.bodyText ? record.bodyText.slice(0, 120) : 'Chưa có nội dung';
+              const selected = selectedTrashIds.includes(note.id);
+              return <div className={`tanooki-mobile-trash-row${selected ? ' is-selected' : ''}`} key={note.id}>
+                {trashSelectionMode && <button type="button" className="tanooki-mobile-trash-check" aria-label={`${selected ? 'Bỏ chọn' : 'Chọn'} ${note.title.trim() || 'Chưa có tiêu đề'}`} aria-pressed={selected} onClick={() => toggleTrashSelection(note.id)}><span /></button>}
+                <button type="button" className="tanooki-mobile-trash-row-main" onClick={() => trashSelectionMode ? toggleTrashSelection(note.id) : onSelectNote(note.id)}>
+                  <strong>{note.title.trim() || 'Chưa có tiêu đề'}</strong>
+                  <span>{noteTime(note.trashedAt || note.updatedAt)}<span aria-hidden="true"> · </span><span className="tanooki-mobile-trash-preview">{preview}</span></span>
+                  {fn && <span className="tanooki-mobile-trash-folder"><FolderIcon size={13} aria-hidden="true" /><span>{fn}</span></span>}
+                </button>
+                <button type="button" className="tanooki-mobile-trash-more" aria-label={`Thao tác: ${note.title.trim() || 'Chưa có tiêu đề'}`} onClick={() => { setMenuFor(note.id); setMoveFor(null); }}><MoreHorizontal size={20} aria-hidden="true" /></button>
+              </div>;
+            })}
+          </div> : mobileAllNotesMode ? <div className="tanooki-mobile-all-notes-groups">
             {mobileAllNoteGroups.map((group) => <section key={group.label} className="tanooki-mobile-all-notes-group">
               <h2>{group.label}</h2>
               <div className="tanooki-mobile-all-notes-card">
@@ -478,6 +530,7 @@ export function NoteList({
         )}
       </div>
 
+      {mobileTrashMode && <footer className="tanooki-mobile-trash-footer"><span>{sorted.length} ghi chú</span></footer>}
       {mobileAllNotesMode && <footer className="tanooki-mobile-all-notes-footer">
         <span>{sorted.length} ghi chú</span>
         {canCreateNote && <button type="button" onClick={onAddNote} aria-label="Tạo ghi chú mới" title="Tạo ghi chú mới"><Plus size={26} aria-hidden="true" /></button>}
