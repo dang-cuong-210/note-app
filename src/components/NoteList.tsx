@@ -18,6 +18,7 @@ import {
   ChevronRight,
   SlidersHorizontal,
   ArrowDownUp,
+  Share2,
 } from 'lucide-react';
 import type { Note, Folder } from '@/types';
 import type { ViewType } from '@/lib/navigation';
@@ -26,6 +27,7 @@ import { buildSearchRecords, filterSearchRecords, getNotesInView, getSearchSnipp
 import { useToast } from '@/contexts/ToastContext';
 import { MobileBottomSheet, MobileNoteActionsSheet, MobileTrashActionsSheet } from '@/components/MobileEditorSheets';
 import { formatMobileAllNoteDate, groupMobileAllNotes } from '@/lib/mobileAllNotes.js';
+import { getMobileChildFolders, getMobileFolderSummary } from '@/lib/mobileFolderArchive.js';
 
 interface NoteListProps {
   notes: Note[];
@@ -48,7 +50,12 @@ interface NoteListProps {
   mobileSearchMode?: boolean;
   mobileAllNotesMode?: boolean;
   mobileTrashMode?: boolean;
+  mobileWorkspaceMode?: boolean;
   onBackToHome?: () => void;
+  onOpenFolder?: (id: string) => void;
+  onAddFolder?: (name: string, parentId?: string | null) => void;
+  onRenameFolder?: (id: string, name: string) => void;
+  onDeleteFolder?: (id: string) => void;
   hideAddButton?: boolean;
   desktopMode?: boolean;
   mobileMode?: boolean;
@@ -76,7 +83,12 @@ export function NoteList({
   mobileSearchMode = false,
   mobileAllNotesMode = false,
   mobileTrashMode = false,
+  mobileWorkspaceMode = false,
   onBackToHome,
+  onOpenFolder,
+  onAddFolder,
+  onRenameFolder,
+  onDeleteFolder,
   hideAddButton = false,
   desktopMode = false,
   mobileMode = false,
@@ -93,6 +105,10 @@ export function NoteList({
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [trashSelectionMode, setTrashSelectionMode] = useState(false);
   const [selectedTrashIds, setSelectedTrashIds] = useState<string[]>([]);
+  const [workspaceOptionsOpen, setWorkspaceOptionsOpen] = useState(false);
+  const [folderSectionExpanded, setFolderSectionExpanded] = useState(true);
+  const [folderAction, setFolderAction] = useState<'menu' | 'rename' | 'add-child'>('menu');
+  const [folderActionName, setFolderActionName] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const filterPanelRef = useRef<HTMLDivElement>(null);
   const notesScrollRef = useRef<HTMLDivElement>(null);
@@ -141,6 +157,19 @@ export function NoteList({
   const recordById = useMemo(() => new Map(visibleRecords.map((record) => [record.note.id, record])), [visibleRecords]);
   const mobileAllNoteGroups = useMemo(() => groupMobileAllNotes(sorted), [sorted]);
   const menuNote = sorted.find((note) => note.id === menuFor) || null;
+  const currentFolder = view.kind === 'folder' ? folders.find((folder) => folder.id === view.id) ?? null : null;
+  const currentFolderId = view.kind === 'folder' ? view.id : null;
+  const allChildFolders = useMemo(() => currentFolder ? getMobileChildFolders(folders, currentFolder.id) : [], [folders, currentFolder]);
+  const childFolders = useMemo(() => currentFolder ? getMobileChildFolders(folders, currentFolder.id, searchQuery) : [], [folders, currentFolder, searchQuery]);
+  const mobileWorkspaceSummary = view.kind === 'folder'
+    ? getMobileFolderSummary(sorted.length, allChildFolders.length)
+    : `${sorted.length} ghi chú`;
+
+  useEffect(() => {
+    setFolderSectionExpanded(true);
+    setWorkspaceOptionsOpen(false);
+    setFolderAction('menu');
+  }, [view.kind, currentFolderId]);
 
   useEffect(() => {
     if (!mobileTrashMode) {
@@ -235,7 +264,7 @@ export function NoteList({
   };
 
   return (
-    <div className={`${mobileAllNotesMode || mobileTrashMode ? '' : 'h-full'} w-full max-lg:min-w-0 max-lg:max-w-full ${mobileAllNotesMode ? 'tanooki-mobile-all-notes' : mobileTrashMode ? 'tanooki-mobile-trash' : 'max-lg:pb-[calc(72px+env(safe-area-inset-bottom))]'} flex flex-col bg-app ${desktopMode ? 'tanooki-desktop-note-list' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
+    <div className={`${mobileAllNotesMode || mobileTrashMode || mobileWorkspaceMode ? '' : 'h-full'} w-full max-lg:min-w-0 max-lg:max-w-full ${mobileAllNotesMode ? 'tanooki-mobile-all-notes' : mobileTrashMode ? 'tanooki-mobile-trash' : mobileWorkspaceMode ? 'tanooki-mobile-workspace' : 'max-lg:pb-[calc(72px+env(safe-area-inset-bottom))]'} flex flex-col bg-app ${desktopMode ? 'tanooki-desktop-note-list' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
       {desktopMode && <div className="tanooki-desktop-list-heading px-4 pt-4"><h2>{contextTitle}</h2><span>{sorted.length} ghi chú</span></div>}
       {mobileTrashMode && <header className="tanooki-mobile-trash-header">
         <div className="tanooki-mobile-trash-navigation">
@@ -263,8 +292,19 @@ export function NoteList({
           {searchQuery && <button type="button" onClick={() => onSearchChange('')} aria-label="Xóa nội dung tìm kiếm"><X size={17} aria-hidden="true" /></button>}
         </div>
       </header>}
+      {mobileWorkspaceMode && <header className="tanooki-mobile-workspace-header">
+        <div className="tanooki-mobile-workspace-navigation">
+          <button type="button" onClick={onBackToHome} aria-label="Quay lại Thư mục"><ChevronLeft size={22} aria-hidden="true" /><span>Thư mục</span></button>
+          <div>
+            <button type="button" disabled aria-label="Chia sẻ chưa khả dụng" title="Chia sẻ thư mục chưa khả dụng"><Share2 size={21} aria-hidden="true" /></button>
+            {view.kind === 'folder' ? <button type="button" onClick={() => { setFolderAction('menu'); setWorkspaceOptionsOpen(true); }} aria-label="Tùy chọn thư mục"><MoreHorizontal size={22} aria-hidden="true" /></button> : <button type="button" onClick={() => setMobileControlsOpen(true)} aria-label="Tùy chọn ghi chú"><MoreHorizontal size={22} aria-hidden="true" /></button>}
+          </div>
+        </div>
+        <h1>{view.kind === 'folder' ? currentFolder?.name || 'Thư mục' : 'Lưu trữ'}</h1>
+        <label className="tanooki-mobile-workspace-search"><Search size={21} aria-hidden="true" /><input data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} placeholder="Tìm kiếm ghi chú, thư mục..." aria-label="Tìm kiếm ghi chú, thư mục" />{searchQuery && <button type="button" onClick={() => onSearchChange('')} aria-label="Xóa nội dung tìm kiếm"><X size={17} aria-hidden="true" /></button>}</label>
+      </header>}
       {/* Search bar */}
-      {!mobileAllNotesMode && !mobileTrashMode && <div className="px-4 pt-2 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
+      {!mobileAllNotesMode && !mobileTrashMode && !mobileWorkspaceMode && <div className="px-4 pt-2 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
       {mobileSearchMode && <h1 className="mb-3 px-1 text-xl font-bold" style={{ color: 'var(--text)' }}>Tìm kiếm</h1>}
       <div className="flex items-center gap-2">
       <button
@@ -340,16 +380,16 @@ export function NoteList({
         </div>}
 
       {/* Notes list */}
-      <div ref={notesScrollRef} className={`flex-1 min-h-0 overflow-y-auto ${mobileAllNotesMode ? 'tanooki-mobile-all-notes-scroll' : mobileTrashMode ? 'tanooki-mobile-trash-scroll' : 'px-2'}`}>
+      <div ref={notesScrollRef} className={`flex-1 min-h-0 overflow-y-auto ${mobileAllNotesMode ? 'tanooki-mobile-all-notes-scroll' : mobileTrashMode ? 'tanooki-mobile-trash-scroll' : mobileWorkspaceMode ? 'tanooki-mobile-workspace-scroll' : 'px-2'}`}>
         {view.kind === 'trash' && !mobileTrashMode && (
           <p className="px-3 py-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
             Ghi chú trong thùng rác sẽ bị xóa vĩnh viễn sau 7 ngày.
           </p>
         )}
-        {sorted.length === 0 ? (
+        {sorted.length === 0 && !(mobileWorkspaceMode && view.kind === 'folder' && childFolders.length > 0) ? (
           hasSearchOrFilters && filterSource.length > 0
             ? <FilteredEmptyState onClear={clearSearchAndFilters} />
-            : mobileTrashMode ? <div className="tanooki-mobile-trash-empty">Không có ghi chú đã xóa</div> : <EmptyState view={view} />
+            : mobileTrashMode ? <div className="tanooki-mobile-trash-empty">Không có ghi chú đã xóa</div> : mobileWorkspaceMode && view.kind === 'archived' ? <div className="tanooki-mobile-workspace-empty">Không có ghi chú đã lưu trữ</div> : mobileWorkspaceMode && view.kind === 'folder' ? <div className="tanooki-mobile-workspace-empty">{searchQuery ? 'Không tìm thấy nội dung phù hợp' : 'Thư mục này chưa có ghi chú'}</div> : <EmptyState view={view} />
         ) : (
           mobileTrashMode ? <div className="tanooki-mobile-trash-card">
             {sorted.map((note) => {
@@ -367,6 +407,27 @@ export function NoteList({
                 <button type="button" className="tanooki-mobile-trash-more" aria-label={`Thao tác: ${note.title.trim() || 'Chưa có tiêu đề'}`} onClick={() => { setMenuFor(note.id); setMoveFor(null); }}><MoreHorizontal size={20} aria-hidden="true" /></button>
               </div>;
             })}
+          </div> : mobileWorkspaceMode ? <div className="tanooki-mobile-workspace-content">
+            {view.kind === 'folder' && allChildFolders.length > 0 && <section className="tanooki-mobile-workspace-folder-section">
+              <button type="button" className="tanooki-mobile-workspace-section-heading" aria-expanded={folderSectionExpanded} onClick={() => setFolderSectionExpanded((expanded) => !expanded)}><span>Thư mục</span><ChevronRight size={20} aria-hidden="true" /></button>
+              {folderSectionExpanded && (childFolders.length > 0 ? <div className="tanooki-mobile-workspace-folder-card">
+                {childFolders.map((folder) => {
+                  const count = notes.filter((note) => note.folderId === folder.id && !note.trashed && !note.archived).length;
+                  return <button type="button" key={folder.id} className="tanooki-mobile-workspace-folder-row" onClick={() => onOpenFolder?.(folder.id)}><FolderIcon size={27} aria-hidden="true" /><strong>{folder.name}</strong><span>{count}</span><ChevronRight size={21} aria-hidden="true" /></button>;
+                })}
+              </div> : searchQuery ? <p className="tanooki-mobile-workspace-empty">Không tìm thấy thư mục phù hợp</p> : null)}
+            </section>}
+            {sorted.length > 0 && <div className="tanooki-mobile-all-notes-groups">
+              {mobileAllNoteGroups.map((group) => <section key={group.label} className="tanooki-mobile-all-notes-group"><h2>{group.label}</h2><div className="tanooki-mobile-all-notes-card">
+                {group.notes.map((note) => {
+                  const record = recordById.get(note.id);
+                  const fn = folderName(note.folderId);
+                  const bodyMatched = Boolean(normalizeSearchText(searchQuery) && record?.bodyNormalized.includes(normalizeSearchText(searchQuery)));
+                  const preview = record?.bodyText ? bodyMatched ? getSearchSnippet(record.bodyText, searchQuery) : record.bodyText.length > 120 ? `${record.bodyText.slice(0, 120)}…` : record.bodyText : 'Chưa có nội dung';
+                  return <MobileAllNoteRow key={note.id} note={note} selected={note.id === selectedNoteId} date={formatMobileAllNoteDate(note.updatedAt)} preview={preview} query={searchQuery} folderName={fn} onOpen={() => onSelectNote(note.id)} onMore={() => { setMenuFor(note.id); setMoveFor(null); }} />;
+                })}
+              </div></section>)}
+            </div>}
           </div> : mobileAllNotesMode ? <div className="tanooki-mobile-all-notes-groups">
             {mobileAllNoteGroups.map((group) => <section key={group.label} className="tanooki-mobile-all-notes-group">
               <h2>{group.label}</h2>
@@ -535,6 +596,19 @@ export function NoteList({
         <span>{sorted.length} ghi chú</span>
         {canCreateNote && <button type="button" onClick={onAddNote} aria-label="Tạo ghi chú mới" title="Tạo ghi chú mới"><Plus size={26} aria-hidden="true" /></button>}
       </footer>}
+      {mobileWorkspaceMode && <footer className="tanooki-mobile-all-notes-footer"><span>{mobileWorkspaceSummary}</span><button type="button" onClick={onAddNote} aria-label="Tạo ghi chú mới" title="Tạo ghi chú mới"><Plus size={26} aria-hidden="true" /></button></footer>}
+
+      {mobileWorkspaceMode && currentFolder && <MobileBottomSheet open={workspaceOptionsOpen} title={folderAction === 'rename' ? 'Đổi tên thư mục' : folderAction === 'add-child' ? 'Thêm thư mục con' : currentFolder.name} onClose={() => setWorkspaceOptionsOpen(false)} labelledBy="mobile-folder-actions">
+        {folderAction === 'menu' ? <div className="tanooki-mobile-sheet-actions">
+          <button type="button" onClick={() => { setWorkspaceOptionsOpen(false); setMobileControlsOpen(true); }}><ArrowDownUp size={19} />Lọc và sắp xếp ghi chú</button>
+          <button type="button" onClick={() => { setFolderActionName(currentFolder.name); setFolderAction('rename'); }}><FolderIcon size={19} />Đổi tên thư mục</button>
+          <button type="button" onClick={() => { setFolderActionName(''); setFolderAction('add-child'); }}><Plus size={19} />Thêm thư mục con</button>
+          {allChildFolders.length === 0 && <button type="button" className="is-danger" onClick={() => { if (window.confirm(`Xóa thư mục “${currentFolder.name}”? Các ghi chú bên trong sẽ được chuyển về Tất cả ghi chú.`)) { onDeleteFolder?.(currentFolder.id); setWorkspaceOptionsOpen(false); } }}><Trash2 size={19} />Xóa thư mục</button>}
+        </div> : <form className="tanooki-mobile-folder-form" onSubmit={(event) => { event.preventDefault(); if (!folderActionName.trim()) return; if (folderAction === 'rename') onRenameFolder?.(currentFolder.id, folderActionName.trim()); else onAddFolder?.(folderActionName.trim(), currentFolder.id); setWorkspaceOptionsOpen(false); }}>
+          <label htmlFor="mobile-folder-action-name">Tên thư mục</label><input id="mobile-folder-action-name" autoFocus value={folderActionName} onChange={(event) => setFolderActionName(event.target.value)} maxLength={80} />
+          <div><button type="button" className="is-cancel" onClick={() => { setFolderAction('menu'); setFolderActionName(''); }}>Hủy</button><button type="submit" className="is-save" disabled={!folderActionName.trim()}>{folderAction === 'rename' ? 'Lưu' : 'Tạo'}</button></div>
+        </form>}
+      </MobileBottomSheet>}
 
       {/* FAB */}
       {showAddButton && (

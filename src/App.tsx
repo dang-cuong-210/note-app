@@ -312,9 +312,10 @@ function AppContent() {
   const showMobileHome = !isDesktop && mobileDestination === 'home' && view.kind === 'home';
   const showMobileFolders = !isDesktop && mobileDestination === 'folders';
   const showMobileMore = !isDesktop && mobileDestination === 'more' && view.kind !== 'settings';
-  const showEditor = view.kind !== 'settings' && view.kind !== 'trash' && !showHome && !showMobileHome && !showMobileFolders && !showMobileMore;
+  const showMobileWorkspace = !isDesktop && !selectedNoteId && mobileDestination === 'search' && (view.kind === 'folder' || view.kind === 'archived');
+  const showEditor = view.kind !== 'settings' && view.kind !== 'trash' && !showHome && !showMobileHome && !showMobileFolders && !showMobileMore && !showMobileWorkspace;
   const showSettings = view.kind === 'settings';
-  const showMobileBottomNav = shouldShowMobileBottomNav(isDesktop, selectedNoteId, view) && mobileDestination !== 'all' && view.kind !== 'trash';
+  const showMobileBottomNav = shouldShowMobileBottomNav(isDesktop, selectedNoteId, view) && mobileDestination !== 'all' && view.kind !== 'trash' && !showMobileWorkspace;
 
   const openMobileSearch = () => {
     setMobileDestination('search');
@@ -335,6 +336,19 @@ function AppContent() {
     setView(destination.view);
     setMobileDestination(destination.destination);
     setSelectedNoteId(destination.selectedNoteId);
+  };
+  const createMobileWorkspaceNote = () => {
+    if (view.kind !== 'folder') {
+      createMobileNote();
+      return;
+    }
+    const note = data.addNote(view.id);
+    setMobileNewNoteId(note.id);
+    setSelectedNoteId(note.id);
+  };
+  const deleteMobileWorkspaceFolder = (id: string) => {
+    data.removeFolder(id);
+    if (view.kind === 'folder' && view.id === id) openMobileHome();
   };
 
   return (
@@ -442,6 +456,34 @@ function AppContent() {
           <MobileMoreView
             onNavigate={(destination) => { setView(destination); setMobileDestination(getMobileDestinationAfterView(destination)); setSelectedNoteId(null); }}
             onSignOut={signOut}
+          />
+        ) : showMobileWorkspace ? (
+          <NoteList
+            notes={data.notes}
+            folders={data.folders}
+            view={view}
+            settings={data.settings}
+            selectedNoteId={selectedNoteId}
+            onSelectNote={handleSelectNote}
+            onAddNote={createMobileWorkspaceNote}
+            onTogglePin={data.togglePin}
+            onTrash={handleTrash}
+            onRestore={handleRestore}
+            onPermanentDelete={handlePermanentDelete}
+            onDuplicate={handleDuplicate}
+            onArchive={data.archiveNote}
+            onMove={data.moveNote}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            mobileWorkspaceMode
+            onBackToHome={openMobileHome}
+            onOpenFolder={(id) => { const destination = getMobileFolderState(id); setView(destination.view); setMobileDestination(destination.destination); setSearchQuery(''); setSelectedNoteId(null); }}
+            onAddFolder={data.addFolder}
+            onRenameFolder={data.renameFolder}
+            onDeleteFolder={deleteMobileWorkspaceFolder}
+            hideAddButton
+            mobileMode
+            contextTitle={getDesktopViewLabel(view, data.folders)}
           />
         ) : showSettings ? (
           <div className="tanooki-mobile-settings-wrap">
