@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Archive, ChevronRight, FileText, Folder, Leaf, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Archive, ChevronRight, FileText, Folder, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Folder as FolderRecord, Note } from '@/types';
 import type { ViewType } from '@/lib/navigation';
@@ -32,7 +32,6 @@ export function MobileHome({ notes, folders, searchQuery, onSearchChange, onSear
     <div className="tanooki-mobile-home-scroll">
       <header className="tanooki-mobile-home-header">
         <div className="tanooki-mobile-home-brand"><TanookiMark /><span>Tanooki</span></div>
-        <Leaf className="tanooki-mobile-home-leaf" aria-hidden="true" />
         <label className="tanooki-mobile-home-search">
           <Search size={22} aria-hidden="true" />
           <input data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} placeholder="Tìm kiếm ghi chú, thư mục..." aria-label="Tìm kiếm ghi chú, thư mục" />
