@@ -42,7 +42,7 @@ import { isAcceptedImageType, uploadNoteImage, deleteNoteImage } from '@/lib/ima
 import { formatFileSize, getFileIcon, refreshAttachmentUrl } from '@/lib/attachments';
 import { extractTags } from '@/lib/utils';
 import { addTagToContent, readManagedTags, removeTagFromContent, writeManagedTags } from '@/lib/tagUtils.js';
-import { MobileAttachmentBrowserSheet, MobileAttachmentMenuSheet, MobileEditorMoreSheet, MobileEditorToolsSheet, type MobileInlineImage } from '@/components/MobileEditorSheets';
+import { MobileAttachmentBrowserSheet, MobileEditorMoreSheet, MobileEditorToolsSheet, type MobileInlineImage } from '@/components/MobileEditorSheets';
 import { MobileFormattingSheet } from '@/components/MobileFormattingSheet';
 import { NoteTagManager } from '@/components/NoteTagManager';
 import { MOBILE_FORMATTING_GROUPS, setChecklistItemChecked } from '@/lib/mobileFormatting.js';
@@ -169,7 +169,7 @@ export function NoteEditor({
   const displayedNoteId = useRef<string | null>(null);
   const [content, setContent] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [mobileSheet, setMobileSheet] = useState<'tools' | 'actions' | 'formatting' | 'attachment-menu' | 'attachment-browser' | null>(null);
+  const [mobileSheet, setMobileSheet] = useState<'tools' | 'actions' | 'formatting' | 'attachment-browser' | null>(null);
   const [mobileInlineImages, setMobileInlineImages] = useState<MobileInlineImage[]>([]);
   const [activeFormatting, setActiveFormatting] = useState<string[]>([]);
   const [mobileFindOpen, setMobileFindOpen] = useState(false);
@@ -204,8 +204,7 @@ export function NoteEditor({
   const uploading = uploadsInProgress > 0;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const mediaInputRef = useRef<HTMLInputElement>(null);
-  const captureInputRef = useRef<HTMLInputElement>(null);
+  const mobileAttachmentInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
   const editorScrollRef = useRef<HTMLDivElement>(null);
@@ -1984,8 +1983,14 @@ export function NoteEditor({
           onChange={handleFileSelect}
           className="hidden"
         />
-        <input ref={mediaInputRef} type="file" accept="image/*,video/*" multiple onChange={handleFileSelect} className="hidden" />
-        <input ref={captureInputRef} type="file" accept="image/*,video/*" capture="environment" onChange={handleFileSelect} className="hidden" />
+        <input
+          ref={mobileAttachmentInputRef}
+          type="file"
+          accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.rtf,.csv,.json,.zip,.7z,.pages,.numbers,.key"
+          multiple
+          onChange={handleFileSelect}
+          className="hidden"
+        />
         <button
           onPointerDown={rememberCaret}
           onClick={() => fileInputRef.current?.click()}
@@ -2016,7 +2021,7 @@ export function NoteEditor({
       {!desktopPresentation && uploading && <div className="tanooki-mobile-upload-status" role="status" aria-live="polite"><Loader2 size={15} className="animate-spin" />Đang tải {uploadsInProgress} tệp lên…</div>}
       {!desktopPresentation && <nav className="tanooki-mobile-editor-bottom-bar" aria-label="Công cụ ghi chú">
         <button type="button" onPointerDown={rememberCaret} onClick={() => { rememberCaret(); refreshActiveFormatting(); setMobileSheet('formatting'); }} aria-label="Định dạng và checklist" title="Định dạng và checklist"><ListChecks size={25} /></button>
-        <button type="button" onPointerDown={rememberCaret} onClick={() => setMobileSheet('attachment-menu')} aria-label="Đính kèm" title="Đính kèm"><Paperclip size={25} /></button>
+        <button type="button" onPointerDown={rememberCaret} onClick={() => mobileAttachmentInputRef.current?.click()} aria-label="Đính kèm" title="Đính kèm"><Paperclip size={25} /></button>
         <button type="button" onClick={() => toast('Vẽ và đánh dấu sẽ hỗ trợ sau')} aria-label="Vẽ và đánh dấu" title="Vẽ và đánh dấu"><PenTool size={25} /></button>
         <button type="button" onClick={onCreateNote} aria-label="Tạo ghi chú mới" title="Tạo ghi chú mới"><SquarePen size={25} /></button>
       </nav>}
@@ -2027,7 +2032,6 @@ export function NoteEditor({
           window.requestAnimationFrame(() => restoreEditorSelection());
         }} onFormat={handleMobileFormat} />
         <MobileEditorToolsSheet note={note} folders={folders} attachments={attachments} tags={noteTags} existingTags={existingTags} onAddTag={addNoteTag} onRemoveTag={removeNoteTag} onOpenTag={onOpenTag} open={mobileSheet === 'tools'} onClose={() => setMobileSheet(null)} />
-        <MobileAttachmentMenuSheet open={mobileSheet === 'attachment-menu'} onClose={() => setMobileSheet(null)} onAttachFile={() => fileInputRef.current?.click()} onChooseMedia={() => mediaInputRef.current?.click()} onCaptureMedia={() => captureInputRef.current?.click()} />
         <MobileAttachmentBrowserSheet open={mobileSheet === 'attachment-browser'} onClose={() => setMobileSheet(null)} attachments={attachments} images={mobileInlineImages} onOpen={(attachment) => void handleOpenAttachment(attachment)} onRename={renameAttachment} onShare={(attachment) => void handleShareAttachment(attachment)} onDelete={(attachment) => void handleDeleteAttachment(attachment)} onOpenImage={(image) => { setImageViewer(image.src); setViewerScale(1); }} onShareImage={(image) => void handleShareInlineImage(image)} onDeleteImage={(image) => handleRemoveImage(image.src)} />
         <MobileEditorMoreSheet note={note} folders={folders} open={mobileSheet === 'actions'} onClose={() => setMobileSheet(null)} onTogglePin={onTogglePin} onArchive={onArchive} onMove={onMove} onDuplicate={onDuplicate} onTrash={onTrash} onFind={openMobileFind} onPlaceholder={() => toast('Sẽ hỗ trợ sau')} onNavigateRecent={() => { flushCurrentDraft(); onNavigateRecent(); }} onTogglePaper={() => { setMobileSheet(null); setMobilePaperMode((value) => !value); }} onShowAttachments={handleShowAttachments} paperMode={mobilePaperMode} />
       </>}

@@ -8,32 +8,19 @@ const [editor, sheets, css] = await Promise.all([
   readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
 ]);
 
-test('mobile paperclip opens the attachment sheet directly with exactly three picker actions', () => {
-  assert.match(editor, /onClick=\{\(\) => setMobileSheet\('attachment-menu'\)\} aria-label="Đính kèm"/);
-  const menu = sheets.match(/export function MobileAttachmentMenuSheet[\s\S]*?export interface MobileInlineImage/)?.[0] ?? '';
-  assert.match(menu, /<MobileBottomSheet open=\{open\} title="Thêm tệp đính kèm"/);
-  assert.match(menu, /Đính kèm tệp/);
-  assert.match(menu, /Chọn ảnh hoặc video/);
-  assert.match(menu, /Chụp ảnh hoặc video/);
-  assert.doesNotMatch(menu, /Thư viện ảnh|Chụp ảnh hoặc quay video|Chọn tệp/);
-  assert.equal((menu.match(/<MobileBottomSheet\b/g) ?? []).length, 1);
-  assert.equal((menu.match(/<button type="button" onClick=\{\(\) => choose\(/g) ?? []).length, 3);
-  assert.match(editor, /<MobileAttachmentMenuSheet open=\{mobileSheet === 'attachment-menu'\}/);
-  assert.doesNotMatch(editor, /setMobileSheet\('attachment-browser'\)[\s\S]{0,100}onAttachFile/);
+test('mobile paperclip directly opens the native file input without a source sheet', () => {
+  assert.match(editor, /onClick=\{\(\) => mobileAttachmentInputRef\.current\?\.click\(\)\} aria-label="Đính kèm"/);
+  assert.match(editor, /ref=\{mobileAttachmentInputRef\}[\s\S]*?type="file"[\s\S]*?accept="image\/\*,video\/\*,\.pdf[\s\S]*?multiple[\s\S]*?onChange=\{handleFileSelect\}/);
+  assert.doesNotMatch(editor, /MobileAttachmentMenuSheet|attachment-menu/);
+  assert.doesNotMatch(sheets, /MobileAttachmentMenuSheet|Thêm tệp đính kèm/);
 });
 
-test('file, media and camera pickers reuse the existing file selection/upload handlers', () => {
+test('native picker selections reuse the existing image insertion and file upload pipeline', () => {
   assert.match(editor, /ref=\{fileInputRef\}[\s\S]*?onChange=\{handleFileSelect\}/);
-  assert.match(editor, /ref=\{mediaInputRef\} type="file" accept="image\/\*,video\/\*" multiple onChange=\{handleFileSelect\}/);
-  assert.match(editor, /ref=\{captureInputRef\} type="file" accept="image\/\*,video\/\*" capture="environment" onChange=\{handleFileSelect\}/);
+  assert.match(editor, /ref=\{mobileAttachmentInputRef\}[\s\S]*?accept="image\/\*,video\/\*,\.pdf[\s\S]*?onChange=\{handleFileSelect\}/);
+  assert.doesNotMatch(editor, /mediaInputRef|captureInputRef|capture="environment"/);
   assert.match(editor, /if \(file\.type\.startsWith\('image\/'\)\) \{\s*handleImageUpload\(file\);\s*\} else \{\s*handleFileUpload\(file\);/);
   assert.match(editor, /await onAddAttachment\(uploadNoteId, file\)/);
-  assert.match(editor, /onCaptureMedia=\{\(\) => captureInputRef\.current\?\.click\(\)\}/);
-  const menu = sheets.match(/export function MobileAttachmentMenuSheet[\s\S]*?export interface MobileInlineImage/)?.[0] ?? '';
-  assert.match(menu, /choose\(onAttachFile\)/);
-  assert.match(menu, /choose\(onChooseMedia\)/);
-  assert.match(menu, /choose\(onCaptureMedia\)/);
-  assert.match(menu, /const choose = \(action: \(\) => void\) => \{ onClose\(\); action\(\); \}/);
 });
 
 test('note-scoped attachment browser includes inline images and saved files with empty state and actions', () => {
@@ -64,7 +51,6 @@ test('uploads expose in-progress, completed and failed feedback without blocking
 });
 
 test('mobile attachment sheet styles retain touch-sized controls and long-name truncation', () => {
-  assert.match(css, /\.tanooki-mobile-attachment-actions > button \{ min-height: 54px;/);
   assert.match(css, /\.tanooki-mobile-attachment-meta strong \{ overflow: hidden;[\s\S]*text-overflow: ellipsis;/);
   assert.match(css, /\.tanooki-mobile-attachment-menu-popover button \{ display: flex; min-height: 42px;/);
   assert.match(css, /\.tanooki-mobile-attachment-empty/);

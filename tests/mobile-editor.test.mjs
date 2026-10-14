@@ -79,8 +79,9 @@ test('same-note reopen after a null note prop rehydrates editor DOM without rewr
   assert.match(reconcile, /if \(!idChanged && localDirty && remoteContentChanged\) \{\s*conflictRef\.current = true;/);
 });
 
-test('mobile tools retain note metadata and tag management while attachments use the dedicated picker menu', () => {
-  assert.match(editor, /<MobileAttachmentMenuSheet[\s\S]*onAttachFile=\{\(\) => fileInputRef\.current\?\.click\(\)\}/);
+test('mobile tools retain note metadata and tag management while the paperclip opens the native picker', () => {
+  assert.doesNotMatch(editor, /MobileAttachmentMenuSheet|attachment-menu/);
+  assert.match(editor, /onClick=\{\(\) => mobileAttachmentInputRef\.current\?\.click\(\)\} aria-label="Đính kèm"/);
   const tools = sheets.match(/interface MobileEditorToolsSheetProps[\s\S]*?interface MobileEditorMoreSheetProps/)?.[0] || '';
   assert.match(tools, /title="Công cụ"/);
   assert.match(tools, /<NoteTagManager mobile/);
@@ -107,10 +108,10 @@ test('mobile editor toolbar has exactly four primary actions and preserves the e
   const toolbar = editor.match(/<nav className="tanooki-mobile-editor-bottom-bar"[\s\S]*?<\/nav>/)?.[0];
   assert.ok(toolbar);
   assert.equal((toolbar.match(/<button type="button"/g) || []).length, 4);
-  assert.match(toolbar, /onClick=\{\(\) => setMobileSheet\('attachment-menu'\)\}/);
+  assert.match(toolbar, /onClick=\{\(\) => mobileAttachmentInputRef\.current\?\.click\(\)\}/);
   assert.match(toolbar, /onClick=\{onCreateNote\}/);
   assert.match(app, /onCreateNote=\{createMobileNote\}/);
-  assert.match(editor, /<MobileAttachmentMenuSheet[\s\S]*onAttachFile=\{\(\) => fileInputRef\.current\?\.click\(\)\}[\s\S]*onChooseMedia=\{\(\) => mediaInputRef\.current\?\.click\(\)\}[\s\S]*onCaptureMedia=\{\(\) => captureInputRef\.current\?\.click\(\)\}/);
+  assert.match(editor, /ref=\{mobileAttachmentInputRef\}[\s\S]*?type="file"[\s\S]*?onChange=\{handleFileSelect\}/);
 });
 
 test('mobile More menu opens/closes as an accessible sheet and unsupported tools report a safe placeholder', () => {

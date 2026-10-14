@@ -1,27 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Archive, ArchiveRestore, Camera, Calculator, CalendarDays, Clock3, Copy, File, FileText, Folder, Grid2X2, Hash, Image, LockKeyhole, MoreHorizontal, Paperclip, Pin, ScanLine, Search, Share2, Sun, Trash2, Video, X, Edit3 } from 'lucide-react';
+import { Archive, ArchiveRestore, Calculator, CalendarDays, Clock3, Copy, File, FileText, Folder, Grid2X2, Hash, Image, LockKeyhole, MoreHorizontal, Paperclip, Pin, ScanLine, Search, Share2, Sun, Trash2, Video, X, Edit3 } from 'lucide-react';
 import type { Attachment, Folder as NoteFolder, Note } from '@/types';
 import { getDesktopNoteProperties } from '@/lib/desktopWorkspace.js';
 import { extractTags, htmlToText } from '@/lib/utils';
 import { NoteTagManager } from '@/components/NoteTagManager';
 import { formatFileSize } from '@/lib/attachments';
-
-export function MobileAttachmentMenuSheet({ open, onClose, onAttachFile, onChooseMedia, onCaptureMedia }: {
-  open: boolean;
-  onClose: () => void;
-  onAttachFile: () => void;
-  onChooseMedia: () => void;
-  onCaptureMedia: () => void;
-}) {
-  const choose = (action: () => void) => { onClose(); action(); };
-  return <MobileBottomSheet open={open} title="Thêm tệp đính kèm" onClose={onClose} labelledBy="mobile-attachment-menu">
-    <div className="tanooki-mobile-sheet-actions tanooki-mobile-attachment-actions">
-      <button type="button" onClick={() => choose(onAttachFile)}><File size={20} />Đính kèm tệp</button>
-      <button type="button" onClick={() => choose(onChooseMedia)}><Image size={20} />Chọn ảnh hoặc video</button>
-      <button type="button" onClick={() => choose(onCaptureMedia)}><Camera size={20} />Chụp ảnh hoặc video</button>
-    </div>
-  </MobileBottomSheet>;
-}
 
 export interface MobileInlineImage {
   src: string;
