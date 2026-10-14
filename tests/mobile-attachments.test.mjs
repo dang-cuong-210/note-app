@@ -8,14 +8,18 @@ const [editor, sheets, css] = await Promise.all([
   readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
 ]);
 
-test('mobile attachment toolbar action opens a focused menu with exactly three choices', () => {
+test('mobile paperclip opens the attachment sheet directly with exactly three picker actions', () => {
   assert.match(editor, /onClick=\{\(\) => setMobileSheet\('attachment-menu'\)\} aria-label="Đính kèm"/);
-  assert.match(sheets, /Đính kèm tệp/);
-  assert.match(sheets, /Chọn ảnh hoặc video/);
-  assert.match(sheets, /Chụp ảnh hoặc video/);
-  assert.doesNotMatch(sheets, /Ghi âm thanh|Quét tài liệu|Quét văn bản/);
   const menu = sheets.match(/export function MobileAttachmentMenuSheet[\s\S]*?export interface MobileInlineImage/)?.[0] ?? '';
+  assert.match(menu, /<MobileBottomSheet open=\{open\} title="Thêm tệp đính kèm"/);
+  assert.match(menu, /Đính kèm tệp/);
+  assert.match(menu, /Chọn ảnh hoặc video/);
+  assert.match(menu, /Chụp ảnh hoặc video/);
+  assert.doesNotMatch(menu, /Thư viện ảnh|Chụp ảnh hoặc quay video|Chọn tệp/);
+  assert.equal((menu.match(/<MobileBottomSheet\b/g) ?? []).length, 1);
   assert.equal((menu.match(/<button type="button" onClick=\{\(\) => choose\(/g) ?? []).length, 3);
+  assert.match(editor, /<MobileAttachmentMenuSheet open=\{mobileSheet === 'attachment-menu'\}/);
+  assert.doesNotMatch(editor, /setMobileSheet\('attachment-browser'\)[\s\S]{0,100}onAttachFile/);
 });
 
 test('file, media and camera pickers reuse the existing file selection/upload handlers', () => {
@@ -25,6 +29,11 @@ test('file, media and camera pickers reuse the existing file selection/upload ha
   assert.match(editor, /if \(file\.type\.startsWith\('image\/'\)\) \{\s*handleImageUpload\(file\);\s*\} else \{\s*handleFileUpload\(file\);/);
   assert.match(editor, /await onAddAttachment\(uploadNoteId, file\)/);
   assert.match(editor, /onCaptureMedia=\{\(\) => captureInputRef\.current\?\.click\(\)\}/);
+  const menu = sheets.match(/export function MobileAttachmentMenuSheet[\s\S]*?export interface MobileInlineImage/)?.[0] ?? '';
+  assert.match(menu, /choose\(onAttachFile\)/);
+  assert.match(menu, /choose\(onChooseMedia\)/);
+  assert.match(menu, /choose\(onCaptureMedia\)/);
+  assert.match(menu, /const choose = \(action: \(\) => void\) => \{ onClose\(\); action\(\); \}/);
 });
 
 test('note-scoped attachment browser includes inline images and saved files with empty state and actions', () => {
