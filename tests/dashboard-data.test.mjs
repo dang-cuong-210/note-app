@@ -15,7 +15,6 @@ import {
   getMobileDestinationAfterView,
   getMobileFolderState,
   getMobileNewNoteState,
-  getMobileRecentState,
   getMobileSearchState,
   shouldShowMobileBottomNav,
 } from '../src/lib/mobileNavigation.js';
@@ -137,10 +136,6 @@ test('empty mobile search still routes to All Notes with an empty query', () => 
 
 test('search query is trimmed before reaching the existing notes list', () => {
   assert.deepEqual(getDashboardSearchDestination('\n ideas  '), { view: { kind: 'all' }, query: 'ideas' });
-});
-
-test('opening recent from mobile Home keeps the existing recent view', () => {
-  assert.deepEqual(getMobileRecentState(), { destination: 'search', view: { kind: 'recent' }, selectedNoteId: null });
 });
 
 test('opening a mobile folder routes into the existing folder list with its id', () => {

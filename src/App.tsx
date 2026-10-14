@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Menu, CloudOff } from 'lucide-react';
+import { CloudOff } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { ToastProvider } from '@/components/ToastProvider';
 import { AuthProvider } from '@/components/AuthProvider';
@@ -505,14 +505,6 @@ function AppContent() {
               } w-full max-lg:min-w-0 max-lg:max-w-full lg:w-[300px] xl:w-[320px] 2xl:w-[340px] flex-shrink-0 border-r flex-col relative`}
               style={{ borderColor: 'var(--border)' }}
             >
-              {/* Mobile menu button */}
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="hidden"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                <Menu size={20} />
-              </button>
               <NoteList
                 notes={data.notes}
                 folders={data.folders}

@@ -13,10 +13,6 @@ export function getMobileFolderState(folderId) {
   return { destination: 'search', view: { kind: 'folder', id: folderId }, selectedNoteId: null };
 }
 
-export function getMobileRecentState() {
-  return { destination: 'search', view: { kind: 'recent' }, selectedNoteId: null };
-}
-
 export function getMobileNewNoteState(noteId) {
   return { destination: 'search', view: { kind: 'all' }, folderId: null, selectedNoteId: noteId };
 }
