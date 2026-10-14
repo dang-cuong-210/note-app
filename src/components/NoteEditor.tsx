@@ -19,6 +19,7 @@ import {
   FileCode,
   File as FileIcon,
   Image as ImageIcon,
+  Video,
   Loader2,
   Move,
   Maximize2,
@@ -41,7 +42,7 @@ import { isAcceptedImageType, uploadNoteImage, deleteNoteImage } from '@/lib/ima
 import { formatFileSize, getFileIcon, refreshAttachmentUrl } from '@/lib/attachments';
 import { extractTags } from '@/lib/utils';
 import { addTagToContent, readManagedTags, removeTagFromContent, writeManagedTags } from '@/lib/tagUtils.js';
-import { MobileEditorMoreSheet, MobileEditorToolsSheet } from '@/components/MobileEditorSheets';
+import { MobileAttachmentBrowserSheet, MobileAttachmentMenuSheet, MobileEditorMoreSheet, MobileEditorToolsSheet, type MobileInlineImage } from '@/components/MobileEditorSheets';
 import { MobileFormattingSheet } from '@/components/MobileFormattingSheet';
 import { NoteTagManager } from '@/components/NoteTagManager';
 import { MOBILE_FORMATTING_GROUPS, setChecklistItemChecked } from '@/lib/mobileFormatting.js';
@@ -168,7 +169,8 @@ export function NoteEditor({
   const displayedNoteId = useRef<string | null>(null);
   const [content, setContent] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [mobileSheet, setMobileSheet] = useState<'tools' | 'actions' | 'formatting' | null>(null);
+  const [mobileSheet, setMobileSheet] = useState<'tools' | 'actions' | 'formatting' | 'attachment-menu' | 'attachment-browser' | null>(null);
+  const [mobileInlineImages, setMobileInlineImages] = useState<MobileInlineImage[]>([]);
   const [activeFormatting, setActiveFormatting] = useState<string[]>([]);
   const [mobileFindOpen, setMobileFindOpen] = useState(false);
   const [mobileFindQuery, setMobileFindQuery] = useState('');
@@ -202,6 +204,8 @@ export function NoteEditor({
   const uploading = uploadsInProgress > 0;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const captureInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
   const editorScrollRef = useRef<HTMLDivElement>(null);
@@ -1385,6 +1389,65 @@ export function NoteEditor({
     }
   };
 
+  const handleShareAttachment = async (attachment: Attachment) => {
+    const url = attachment.url || await refreshAttachmentUrl(attachment.storagePath);
+    if (!url) { toast('Không thể mở tệp'); return; }
+    try {
+      if (navigator.share && navigator.canShare) {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Unable to download attachment for sharing');
+        const file = new File([await response.blob()], attachment.name, { type: attachment.type || 'application/octet-stream' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: attachment.name });
+          return;
+        }
+      }
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = attachment.name;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      document.body.append(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      // Signed URLs remain a safe browser-native fallback when file sharing is unavailable.
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const handleShareInlineImage = async (image: MobileInlineImage) => {
+    try {
+      if (navigator.share && navigator.canShare) {
+        const response = await fetch(image.src);
+        if (!response.ok) throw new Error('Unable to download image for sharing');
+        const file = new File([await response.blob()], image.name || 'hinh-anh', { type: response.headers.get('content-type') || 'image/*' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: image.name || 'Hình ảnh' });
+          return;
+        }
+      }
+      const link = document.createElement('a');
+      link.href = image.src;
+      link.download = image.name || 'hinh-anh';
+      link.target = '_blank';
+      link.rel = 'noopener';
+      document.body.append(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      window.open(image.src, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const renameAttachment = (attachment: Attachment) => {
+    const name = window.prompt('Đổi tên tệp đính kèm', attachment.name);
+    if (!name?.trim() || name.trim() === attachment.name) return;
+    void onRenameAttachment(attachment.id, name.trim()).then(ok => toast(ok ? 'Đã đổi tên' : 'Không thể đổi tên'));
+  };
+
   const openMobileFind = () => {
     setMobileSheet(null);
     setMobileFindQuery('');
@@ -1442,9 +1505,10 @@ export function NoteEditor({
   };
 
   const handleShowAttachments = () => {
-    const attachmentNode = editorScrollRef.current?.querySelector<HTMLElement>('.noted-inline-attachment, [data-attachment-id]');
-    if (!attachments.length || !attachmentNode) { toast('Chế độ xem tệp đính kèm sẽ hỗ trợ sau'); return; }
-    window.requestAnimationFrame(() => attachmentNode.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+    const images = [...(editorRef.current?.querySelectorAll<HTMLImageElement>('img') || [])]
+      .map((image) => ({ src: image.currentSrc || image.src, name: image.alt || 'Hình ảnh' }));
+    setMobileInlineImages(images);
+    setMobileSheet('attachment-browser');
   };
 
   if (!note) {
@@ -1788,7 +1852,7 @@ export function NoteEditor({
                     }}
                     onContextMenu={(e) => { if (!canEdit) return; e.preventDefault(); setSelectedAttachmentId(att.id); }}>
                     {canEdit && <div className="mb-1 flex justify-end"><button type="button" className="text-xs px-2 py-1 rounded-lg border" onClick={() => insertAttachmentAtCaret(att)}>Chèn tại vị trí con trỏ ↑</button></div>}
-                    <AttachmentItem attachment={att} selected={selectedAttachmentId === att.id} actionsEnabled={canEdit}
+                    <AttachmentItem attachment={att} selected={selectedAttachmentId === att.id} actionsEnabled={canEdit} mobilePreview={!desktopPresentation}
                       onSelect={() => { setSelectedImage(null); setSelectedAttachmentId(att.id); }}
                       onOpen={() => { if (selectedAttachmentId !== att.id) void handleOpenAttachment(att); }}
                       onDelete={() => handleDeleteAttachment(att)} />
@@ -1799,10 +1863,8 @@ export function NoteEditor({
                     }} onPointerUp={() => { attachmentGesture.current = null; }}><Maximize2 size={14}/></button>}
                     {selectedAttachmentId === att.id && <div className="noted-attachment-toolbar" onPointerDown={e => e.stopPropagation()}>
                       <button onClick={() => handleOpenAttachment(att)}>Mở</button>
-                      <button onClick={() => {
-                        const name = window.prompt('Đổi tên tệp đính kèm', att.name);
-                        if (name?.trim() && name.trim() !== att.name) void onRenameAttachment(att.id, name.trim()).then(ok => toast(ok ? 'Đã đổi tên' : 'Không thể đổi tên'));
-                      }}><Edit3 size={14} /> Đổi tên</button>
+                      <button onClick={() => renameAttachment(att)}><Edit3 size={14} /> Đổi tên</button>
+                      {!desktopPresentation && <button onClick={() => void handleShareAttachment(att)}><Share2 size={14} /> Chia sẻ / Xuất</button>}
                       <button aria-label="Di chuyển tệp đính kèm lên" disabled={index === 0} onClick={() => moveAttachment(att.id, unplacedAttachments[index-1].id)}><ArrowUp size={15}/></button>
                       <button aria-label="Di chuyển tệp đính kèm xuống" disabled={index === unplacedAttachments.length-1} onClick={() => {
                         const ids = orderedAttachments.map(a => a.id);
@@ -1843,6 +1905,7 @@ export function NoteEditor({
               }
               toast(ok ? 'Đã đổi tên' : 'Không thể đổi tên');
             }}><Edit3 size={14} /> Đổi tên</button>
+            {!desktopPresentation && <button onClick={() => void handleShareAttachment(att)}><Share2 size={14} /> Chia sẻ / Xuất</button>}
             <button title="Thu hẹp thẻ" aria-label="Thu hẹp thẻ" onClick={() => resizeInlineAttachment(selectedInlineAttachment, widthPct - 10)}>−</button>
             <button title="Mở rộng thẻ" aria-label="Mở rộng thẻ" onClick={() => resizeInlineAttachment(selectedInlineAttachment, widthPct + 10)}>+</button>
             <button title="Gỡ khỏi nội dung mà không xóa tệp" onClick={() => unlinkInlineAttachment(selectedInlineAttachment)}>Gỡ khỏi ghi chú</button>
@@ -1921,6 +1984,8 @@ export function NoteEditor({
           onChange={handleFileSelect}
           className="hidden"
         />
+        <input ref={mediaInputRef} type="file" accept="image/*,video/*" multiple onChange={handleFileSelect} className="hidden" />
+        <input ref={captureInputRef} type="file" accept="image/*,video/*" capture="environment" onChange={handleFileSelect} className="hidden" />
         <button
           onPointerDown={rememberCaret}
           onClick={() => fileInputRef.current?.click()}
@@ -1948,9 +2013,10 @@ export function NoteEditor({
         )}
       </div>
 
+      {!desktopPresentation && uploading && <div className="tanooki-mobile-upload-status" role="status" aria-live="polite"><Loader2 size={15} className="animate-spin" />Đang tải {uploadsInProgress} tệp lên…</div>}
       {!desktopPresentation && <nav className="tanooki-mobile-editor-bottom-bar" aria-label="Công cụ ghi chú">
         <button type="button" onPointerDown={rememberCaret} onClick={() => { rememberCaret(); refreshActiveFormatting(); setMobileSheet('formatting'); }} aria-label="Định dạng và checklist" title="Định dạng và checklist"><ListChecks size={25} /></button>
-        <button type="button" onClick={() => setMobileSheet('tools')} aria-label="Đính kèm" title="Đính kèm"><Paperclip size={25} /></button>
+        <button type="button" onPointerDown={rememberCaret} onClick={() => setMobileSheet('attachment-menu')} aria-label="Đính kèm" title="Đính kèm"><Paperclip size={25} /></button>
         <button type="button" onClick={() => toast('Vẽ và đánh dấu sẽ hỗ trợ sau')} aria-label="Vẽ và đánh dấu" title="Vẽ và đánh dấu"><PenTool size={25} /></button>
         <button type="button" onClick={onCreateNote} aria-label="Tạo ghi chú mới" title="Tạo ghi chú mới"><SquarePen size={25} /></button>
       </nav>}
@@ -1960,7 +2026,9 @@ export function NoteEditor({
           setMobileSheet(null);
           window.requestAnimationFrame(() => restoreEditorSelection());
         }} onFormat={handleMobileFormat} />
-        <MobileEditorToolsSheet note={note} folders={folders} attachments={attachments} tags={noteTags} existingTags={existingTags} onAddTag={addNoteTag} onRemoveTag={removeNoteTag} onOpenTag={onOpenTag} open={mobileSheet === 'tools'} onClose={() => setMobileSheet(null)} onChooseImage={() => imageInputRef.current?.click()} onChooseFile={() => fileInputRef.current?.click()} />
+        <MobileEditorToolsSheet note={note} folders={folders} attachments={attachments} tags={noteTags} existingTags={existingTags} onAddTag={addNoteTag} onRemoveTag={removeNoteTag} onOpenTag={onOpenTag} open={mobileSheet === 'tools'} onClose={() => setMobileSheet(null)} />
+        <MobileAttachmentMenuSheet open={mobileSheet === 'attachment-menu'} onClose={() => setMobileSheet(null)} onAttachFile={() => fileInputRef.current?.click()} onChooseMedia={() => mediaInputRef.current?.click()} onCaptureMedia={() => captureInputRef.current?.click()} />
+        <MobileAttachmentBrowserSheet open={mobileSheet === 'attachment-browser'} onClose={() => setMobileSheet(null)} attachments={attachments} images={mobileInlineImages} onOpen={(attachment) => void handleOpenAttachment(attachment)} onRename={renameAttachment} onShare={(attachment) => void handleShareAttachment(attachment)} onDelete={(attachment) => void handleDeleteAttachment(attachment)} onOpenImage={(image) => { setImageViewer(image.src); setViewerScale(1); }} onShareImage={(image) => void handleShareInlineImage(image)} onDeleteImage={(image) => handleRemoveImage(image.src)} />
         <MobileEditorMoreSheet note={note} folders={folders} open={mobileSheet === 'actions'} onClose={() => setMobileSheet(null)} onTogglePin={onTogglePin} onArchive={onArchive} onMove={onMove} onDuplicate={onDuplicate} onTrash={onTrash} onFind={openMobileFind} onPlaceholder={() => toast('Sẽ hỗ trợ sau')} onNavigateRecent={() => { flushCurrentDraft(); onNavigateRecent(); }} onTogglePaper={() => { setMobileSheet(null); setMobilePaperMode((value) => !value); }} onShowAttachments={handleShowAttachments} paperMode={mobilePaperMode} />
       </>}
 
@@ -2032,6 +2100,7 @@ function AttachmentItem({
   attachment,
   selected,
   actionsEnabled,
+  mobilePreview,
   onSelect,
   onOpen,
   onDelete,
@@ -2039,6 +2108,7 @@ function AttachmentItem({
   attachment: Attachment;
   selected: boolean;
   actionsEnabled: boolean;
+  mobilePreview: boolean;
   onSelect: () => void;
   onOpen: () => void;
   onDelete: () => void;
@@ -2055,7 +2125,7 @@ function AttachmentItem({
       case 'ppt': return <FileChartColumn size={20} />;
       case 'zip': return <FileArchive size={20} />;
       case 'txt': return <FileCode size={20} />;
-      default: return <FileIcon size={20} />;
+      default: return attachment.type.startsWith('video/') ? <Video size={20} /> : <FileIcon size={20} />;
     }
   })();
 
@@ -2064,8 +2134,10 @@ function AttachmentItem({
       className="flex items-center gap-3 p-2.5 rounded-lg border transition-colors hover-bg"
       style={{ borderColor: selected ? 'var(--accent)' : 'var(--border)', backgroundColor: 'var(--bg-secondary)' }}
     >
-      <div className="flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>
-        {icon}
+      <div className={`flex-shrink-0${mobilePreview ? ' tanooki-mobile-attachment-icon' : ''}`} style={{ color: 'var(--text-tertiary)' }}>
+        {mobilePreview && attachment.type.startsWith('image/') && attachment.url
+          ? <img src={attachment.url} alt="" loading="lazy" />
+          : icon}
       </div>
       <button
         onClick={onOpen}

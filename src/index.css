@@ -1121,6 +1121,7 @@ input[data-global-search]:focus-visible {
   .tanooki-mobile-editor-canvas .note-content th, .tanooki-mobile-editor-canvas .note-content td { overflow-wrap: anywhere; }
   .tanooki-mobile-editor-bottom-bar { display: grid; min-height: 56px; flex: 0 0 auto; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; border-top: 1px solid var(--border); background: var(--bg); padding: 4px 8px calc(5px + env(safe-area-inset-bottom)); color: var(--accent); }
   .tanooki-mobile-editor-bottom-bar > button { display: grid; min-width: 48px; min-height: 44px; place-items: center; border-radius: 10px; color: var(--accent); }
+  .tanooki-mobile-upload-status { display: flex; min-height: 30px; flex: none; align-items: center; justify-content: center; gap: 7px; border-top: 1px solid var(--border); background: var(--bg); color: var(--text-secondary); font-size: 12px; }
   .tanooki-mobile-editor.is-light-paper .tanooki-mobile-editor-canvas { background: #fff; }
   .tanooki-mobile-editor.is-light-paper .tanooki-mobile-editor-canvas > input,
   .tanooki-mobile-editor.is-light-paper .tanooki-mobile-editor-canvas > .note-content { color: #25211f !important; }
@@ -1153,6 +1154,24 @@ input[data-global-search]:focus-visible {
   .tanooki-mobile-sheet-actions > button, .tanooki-mobile-sheet-select > span { display: flex; min-height: 48px; width: 100%; align-items: center; gap: 12px; border-radius: 11px; padding: 10px 12px; color: var(--text); font-size: 14px; text-align: left; }
   .tanooki-mobile-sheet-actions > button:hover, .tanooki-mobile-sheet-select:focus-within { background: var(--bg-secondary); }
   .tanooki-mobile-sheet-actions svg, .tanooki-mobile-sheet-select svg { color: var(--tanooki-brown); }
+  .tanooki-mobile-attachment-actions > button { min-height: 54px; }
+  .tanooki-mobile-attachment-actions > button svg { flex: none; }
+  .tanooki-mobile-attachment-empty { border: 1px dashed var(--border); border-radius: 12px; background: var(--bg-secondary); padding: 22px 14px; color: var(--text-secondary); font-size: 14px; text-align: center; }
+  .tanooki-mobile-attachment-browser { display: grid; gap: 9px; padding-bottom: 4px; }
+  .tanooki-mobile-attachment-card { position: relative; display: flex; min-width: 0; min-height: 62px; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); padding: 8px; }
+  .tanooki-mobile-attachment-preview { display: grid; width: 44px; height: 44px; flex: none; place-items: center; overflow: hidden; border-radius: 9px; background: color-mix(in srgb, var(--accent) 10%, var(--bg)); color: var(--accent); }
+  .tanooki-mobile-attachment-preview img { width: 100%; height: 100%; object-fit: cover; }
+  .tanooki-mobile-attachment-meta { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+  .tanooki-mobile-attachment-meta strong { overflow: hidden; color: var(--text); font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .tanooki-mobile-attachment-meta span { overflow: hidden; color: var(--text-tertiary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+  .tanooki-mobile-attachment-more-menu { position: relative; flex: none; color: var(--text-secondary); }
+  .tanooki-mobile-attachment-more-menu > summary { display: grid; width: 40px; height: 42px; place-items: center; border-radius: 9px; cursor: pointer; list-style: none; }
+  .tanooki-mobile-attachment-more-menu > summary::-webkit-details-marker { display: none; }
+  .tanooki-mobile-attachment-menu-popover { position: absolute; z-index: 2; top: calc(100% + 3px); right: 0; display: grid; width: min(220px, calc(100vw - 52px)); gap: 2px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); padding: 5px; box-shadow: 0 8px 24px rgb(37 33 31 / 16%); }
+  .tanooki-mobile-attachment-menu-popover button { display: flex; min-height: 42px; align-items: center; gap: 10px; border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 13px; text-align: left; }
+  .tanooki-mobile-attachment-menu-popover button.is-danger { color: var(--danger); }
+  .tanooki-mobile-attachment-icon { display: grid; width: 42px; height: 42px; place-items: center; overflow: hidden; border-radius: 9px; background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
+  .tanooki-mobile-attachment-icon img { width: 100%; height: 100%; object-fit: cover; }
   .tanooki-mobile-sheet-actions > button.is-danger { color: var(--danger); }
   .tanooki-mobile-note-menu-quick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; border-bottom: 1px solid var(--border); padding: 2px 0 12px; }
   .tanooki-mobile-note-menu-quick > button { display: flex; min-width: 0; min-height: 76px; flex-direction: column; align-items: center; justify-content: center; gap: 7px; border-radius: 12px; background: var(--bg-secondary); color: var(--text); font-size: 12px; }

@@ -1,9 +1,84 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Archive, ArchiveRestore, Calculator, CalendarDays, Clock3, Copy, FileText, Folder, Grid2X2, Hash, Image, LockKeyhole, Paperclip, Pin, ScanLine, Search, Sun, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Camera, Calculator, CalendarDays, Clock3, Copy, File, FileText, Folder, Grid2X2, Hash, Image, LockKeyhole, MoreHorizontal, Paperclip, Pin, ScanLine, Search, Share2, Sun, Trash2, Video, X, Edit3 } from 'lucide-react';
 import type { Attachment, Folder as NoteFolder, Note } from '@/types';
 import { getDesktopNoteProperties } from '@/lib/desktopWorkspace.js';
 import { extractTags, htmlToText } from '@/lib/utils';
 import { NoteTagManager } from '@/components/NoteTagManager';
+import { formatFileSize } from '@/lib/attachments';
+
+export function MobileAttachmentMenuSheet({ open, onClose, onAttachFile, onChooseMedia, onCaptureMedia }: {
+  open: boolean;
+  onClose: () => void;
+  onAttachFile: () => void;
+  onChooseMedia: () => void;
+  onCaptureMedia: () => void;
+}) {
+  const choose = (action: () => void) => { onClose(); action(); };
+  return <MobileBottomSheet open={open} title="Thêm tệp đính kèm" onClose={onClose} labelledBy="mobile-attachment-menu">
+    <div className="tanooki-mobile-sheet-actions tanooki-mobile-attachment-actions">
+      <button type="button" onClick={() => choose(onAttachFile)}><File size={20} />Đính kèm tệp</button>
+      <button type="button" onClick={() => choose(onChooseMedia)}><Image size={20} />Chọn ảnh hoặc video</button>
+      <button type="button" onClick={() => choose(onCaptureMedia)}><Camera size={20} />Chụp ảnh hoặc video</button>
+    </div>
+  </MobileBottomSheet>;
+}
+
+export interface MobileInlineImage {
+  src: string;
+  name: string;
+}
+
+export function MobileAttachmentBrowserSheet({ open, onClose, attachments, images, onOpen, onRename, onShare, onDelete, onOpenImage, onShareImage, onDeleteImage }: {
+  open: boolean;
+  onClose: () => void;
+  attachments: Attachment[];
+  images: MobileInlineImage[];
+  onOpen: (attachment: Attachment) => void;
+  onRename: (attachment: Attachment) => void;
+  onShare: (attachment: Attachment) => void;
+  onDelete: (attachment: Attachment) => void;
+  onOpenImage: (image: MobileInlineImage) => void;
+  onShareImage: (image: MobileInlineImage) => void;
+  onDeleteImage: (image: MobileInlineImage) => void;
+}) {
+  const count = attachments.length + images.length;
+  return <MobileBottomSheet open={open} title={`Tệp đính kèm (${count})`} onClose={onClose} labelledBy="mobile-attachment-browser">
+    {count === 0 ? <p className="tanooki-mobile-attachment-empty">Chưa có tệp đính kèm</p> : <div className="tanooki-mobile-attachment-browser">
+      {images.map((image) => <article className="tanooki-mobile-attachment-card is-image" key={image.src}>
+        <button type="button" className="tanooki-mobile-attachment-preview" onClick={() => onOpenImage(image)} aria-label={`Xem ${image.name}`}><img src={image.src} alt="" loading="lazy" /></button>
+        <div className="tanooki-mobile-attachment-meta"><strong title={image.name}>{image.name || 'Hình ảnh'}</strong><span>Hình ảnh trong ghi chú</span></div>
+        <details className="tanooki-mobile-attachment-more-menu">
+          <summary aria-label={`Thao tác với ${image.name}`}><MoreHorizontal size={20} /></summary>
+          <div className="tanooki-mobile-attachment-menu-popover">
+            <button type="button" onClick={() => onOpenImage(image)}><Image size={16} />Xem</button>
+            <button type="button" onClick={() => onShareImage(image)}><Share2 size={16} />Chia sẻ / Xuất</button>
+            <button type="button" className="is-danger" onClick={() => onDeleteImage(image)}><Trash2 size={16} />Xóa khỏi ghi chú</button>
+          </div>
+        </details>
+      </article>)}
+      {attachments.map((attachment) => {
+        const isImage = attachment.type.startsWith('image/');
+        const isVideo = attachment.type.startsWith('video/');
+        const Icon = isVideo ? Video : FileText;
+        return <article className={`tanooki-mobile-attachment-card${isImage ? ' is-image' : ''}`} key={attachment.id}>
+          <button type="button" className="tanooki-mobile-attachment-preview" onClick={() => onOpen(attachment)} aria-label={`Mở ${attachment.name}`}>
+            {isImage && attachment.url ? <img src={attachment.url} alt="" loading="lazy" /> : <Icon size={24} />}
+          </button>
+          <div className="tanooki-mobile-attachment-meta"><strong title={attachment.name}>{attachment.name}</strong><span>{isVideo ? 'Video' : isImage ? 'Hình ảnh' : 'Tệp'} · {formatFileSize(attachment.size)}</span></div>
+          <details className="tanooki-mobile-attachment-more-menu">
+            <summary aria-label={`Thao tác với ${attachment.name}`}><MoreHorizontal size={20} /></summary>
+            <div className="tanooki-mobile-attachment-menu-popover">
+              <button type="button" onClick={() => onOpen(attachment)}><File size={16} />Mở</button>
+              <button type="button" onClick={() => onRename(attachment)}><Edit3 size={16} />Đổi tên</button>
+              <button type="button" onClick={() => onShare(attachment)}><Share2 size={16} />Chia sẻ / Xuất</button>
+              <button type="button" className="is-danger" onClick={() => onDelete(attachment)}><Trash2 size={16} />Xóa</button>
+            </div>
+          </details>
+        </article>;
+      })}
+    </div>}
+  </MobileBottomSheet>;
+}
 
 interface MobileBottomSheetProps {
   open: boolean;
@@ -66,8 +141,6 @@ interface MobileEditorToolsSheetProps {
   attachments: Attachment[];
   open: boolean;
   onClose: () => void;
-  onChooseImage: () => void;
-  onChooseFile: () => void;
   tags: string[];
   existingTags: string[];
   onAddTag: (tag: string) => void;
@@ -75,16 +148,9 @@ interface MobileEditorToolsSheetProps {
   onOpenTag: (tag: string) => void;
 }
 
-export function MobileEditorToolsSheet({ note, folders, attachments, open, onClose, onChooseImage, onChooseFile, tags, existingTags, onAddTag, onRemoveTag, onOpenTag }: MobileEditorToolsSheetProps) {
+export function MobileEditorToolsSheet({ note, folders, attachments, open, onClose, tags, existingTags, onAddTag, onRemoveTag, onOpenTag }: MobileEditorToolsSheetProps) {
   const properties = getDesktopNoteProperties(note, folders, attachments, htmlToText(note.content), extractTags(note.content));
   return <MobileBottomSheet open={open} title="Công cụ" onClose={onClose} labelledBy="mobile-editor-tools">
-    <section className="tanooki-mobile-sheet-group" aria-labelledby="mobile-tools-insert">
-      <h3 id="mobile-tools-insert">Chèn</h3>
-      <div className="tanooki-mobile-sheet-actions">
-        <button type="button" onClick={() => { onClose(); onChooseImage(); }}><Image size={19} />Thêm hình ảnh</button>
-        <button type="button" onClick={() => { onClose(); onChooseFile(); }}><Paperclip size={19} />Đính kèm tệp</button>
-      </div>
-    </section>
     <section className="tanooki-mobile-sheet-group tanooki-mobile-sheet-info" aria-labelledby="mobile-tools-info">
       <h3 id="mobile-tools-info">Thông tin</h3>
       <dl>
