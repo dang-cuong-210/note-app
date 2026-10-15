@@ -190,7 +190,7 @@ export function NoteEditor({
   const [freeResize, setFreeResize] = useState(false);
   const [moveImageMode, setMoveImageMode] = useState(false);
   const imagePointers = useRef(new Map<number, { x: number; y: number }>());
-  const imageGesture = useRef<{ mode: 'drag' | 'resize' | 'pinch'; x: number; y: number; w: number; h: number; distance?: number; dx?: number; dy?: number; target?: HTMLImageElement } | null>(null);
+  const imageGesture = useRef<{ mode: 'resize' | 'pinch'; x: number; y: number; w: number; h: number; distance?: number; target?: HTMLImageElement } | null>(null);
   const [attachmentLayout, setAttachmentLayout] = useState<AttachmentLayout>(EMPTY_LAYOUT);
   const layoutRef = useRef<AttachmentLayout>(EMPTY_LAYOUT);
   const [selectedAttachmentId, setSelectedAttachmentId] = useState<string | null>(null);
