@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { CloudOff } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { ToastProvider } from '@/components/ToastProvider';
@@ -19,16 +19,20 @@ import { MobileBottomNav, MobileMoreView, type MobileDestination } from '@/compo
 import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ViewType } from '@/lib/navigation';
+import type { Note } from '@/types';
 import { getInitialView, getDashboardNoteDestination, shouldAutoSelectNote } from '@/lib/dashboardData.js';
 import { getMobileDestinationAfterView, getMobileFolderState, getMobileNewNoteState, getMobileSearchState, shouldShowMobileBottomNav } from '@/lib/mobileNavigation.js';
 import { getRecentNotes, loadRecentOpenTimes, recordRecentOpen } from '@/lib/recentNotes.js';
 import { getDesktopViewLabel } from '@/lib/desktopWorkspace.js';
 import { getAllTags, noteHasTag, searchNotes } from '@/lib/utils';
 import { cleanupExpiredTrashedNotes, isExpiredTrashedNote } from '@/lib/trashRetention.js';
+import { isMeaningfulNoteContent, shouldDiscardNewEmptyDraft } from '@/lib/editorBehavior.js';
 
 function AppContent() {
   const { user, loading: authLoading, signOut } = useAuth();
   const data = useAppData(user?.id ?? null);
+  const dataRef = useRef(data);
+  dataRef.current = data;
   const { loaded: accountDataLoaded, online, permanentDelete } = data;
   const notesRef = useRef(data.notes);
   notesRef.current = data.notes;
@@ -36,16 +40,28 @@ function AppContent() {
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
   const [view, setView] = useState<ViewType>(() => getInitialView());
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const ephemeralDraftIds = useRef(new Set<string>());
+  const meaningfulDraftIds = useRef(new Set<string>());
+  const explicitlyTrashedDraftIds = useRef(new Set<string>());
   const [mobileNewNoteId, setMobileNewNoteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileDestination, setMobileDestination] = useState<MobileDestination>('home');
   const [recentOpenState, setRecentOpenState] = useState<{ accountId: string | null; times: Record<string, number> }>({ accountId: null, times: {} });
   const [recentReturn, setRecentReturn] = useState<{ view: ViewType; selectedNoteId: string | null; mobileDestination: MobileDestination; searchQuery: string } | null>(null);
+  const draftOwnerRef = useRef(user?.id ?? null);
   const [focusSearchPending, setFocusSearchPending] = useState(false);
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
   const { toast } = useToast();
   const recentOpenedAt = recentOpenState.accountId === user?.id ? recentOpenState.times : {};
+
+  useEffect(() => {
+    if (draftOwnerRef.current === (user?.id ?? null)) return;
+    ephemeralDraftIds.current.clear();
+    meaningfulDraftIds.current.clear();
+    explicitlyTrashedDraftIds.current.clear();
+    draftOwnerRef.current = user?.id ?? null;
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -168,6 +184,40 @@ function AppContent() {
     setMobileDestination('search');
   };
 
+  const registerNewDraft = useCallback((note: Note) => {
+    ephemeralDraftIds.current.add(note.id);
+    return note;
+  }, []);
+  const markDraftMeaningful = useCallback((id: string) => {
+    if (ephemeralDraftIds.current.has(id)) meaningfulDraftIds.current.add(id);
+  }, []);
+  const handleNoteUpdate = useCallback((id: string, title: string, content: string) => {
+    if (isMeaningfulNoteContent(title, content, dataRef.current.getAttachmentsForNote(id).length > 0)) markDraftMeaningful(id);
+    dataRef.current.updateNoteContent(id, title, content);
+  }, [markDraftMeaningful]);
+  const finishEditorSession = useCallback((id: string) => {
+    const explicitlyTrashed = explicitlyTrashedDraftIds.current.delete(id);
+    const isEphemeral = ephemeralDraftIds.current.delete(id);
+    const wasMeaningful = meaningfulDraftIds.current.delete(id);
+    if (shouldDiscardNewEmptyDraft({ createdInSession: isEphemeral, everMeaningful: wasMeaningful, explicitlyDeleted: explicitlyTrashed })) {
+      void dataRef.current.discardEmptyNoteDraft(id).catch((error) => {
+        console.warn('Empty draft cleanup failed:', error);
+      });
+    }
+  }, []);
+
+  const editorVisible = Boolean(selectedNoteId) && view.kind !== 'settings' && view.kind !== 'trash' &&
+    !(isDesktop && view.kind === 'home') &&
+    !( !isDesktop && (mobileDestination === 'folders' || mobileDestination === 'more' || (mobileDestination === 'home' && view.kind === 'home')) );
+  const activeEditorSessionRef = useRef<{ id: string | null; visible: boolean }>({ id: null, visible: false });
+  useEffect(() => {
+    const previous = activeEditorSessionRef.current;
+    activeEditorSessionRef.current = { id: selectedNoteId, visible: editorVisible };
+    if (previous.id && previous.visible && (previous.id !== selectedNoteId || !editorVisible)) {
+      finishEditorSession(previous.id);
+    }
+  }, [selectedNoteId, editorVisible, finishEditorSession]);
+
   const handleViewChange = (v: ViewType) => {
     setView(v);
     setMobileDestination(getMobileDestinationAfterView(v));
@@ -186,18 +236,23 @@ function AppContent() {
 
   const handleAddNote = () => {
     const folderId = view.kind === 'folder' ? view.id : null;
-    const note = data.addNote(folderId);
+    const note = registerNewDraft(data.addNote(folderId));
     setSelectedNoteId(note.id);
   };
 
   const handleDashboardAddNote = () => {
     const folderId = view.kind === 'folder' ? view.id : null;
-    const note = data.addNote(folderId);
+    const note = registerNewDraft(data.addNote(folderId));
     if (view.kind !== 'folder') setView({ kind: 'all' });
     setSelectedNoteId(note.id);
   };
 
   const handleTrash = (id: string) => {
+    if (selectedNoteId === id) explicitlyTrashedDraftIds.current.add(id);
+    else {
+      ephemeralDraftIds.current.delete(id);
+      meaningfulDraftIds.current.delete(id);
+    }
     data.trashNote(id);
     if (selectedNoteId === id) {
       const remaining = getVisibleNotes().filter((n) => n.id !== id);
@@ -274,7 +329,7 @@ function AppContent() {
   };
 
   // Keyboard shortcuts for common note actions.
-  const addNoteShortcut = data.addNote;
+  const addNoteShortcut = useCallback((folderId: string | null = null) => registerNewDraft(dataRef.current.addNote(folderId)), [registerNewDraft]);
   const dataLoaded = data.loaded;
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -378,7 +433,7 @@ function AppContent() {
     setSelectedNoteId(null);
   };
   const createMobileNote = () => {
-    const note = data.addNote(null);
+    const note = registerNewDraft(data.addNote(null));
     setMobileNewNoteId(note.id);
     const destination = getMobileNewNoteState(note.id);
     setView(destination.view);
@@ -390,7 +445,7 @@ function AppContent() {
       createMobileNote();
       return;
     }
-    const note = data.addNote(view.id);
+    const note = registerNewDraft(data.addNote(view.id));
     setMobileNewNoteId(note.id);
     setSelectedNoteId(note.id);
   };
@@ -591,12 +646,17 @@ function AppContent() {
                 note={selectedNote}
                 folders={data.folders}
                 attachments={data.getAttachmentsForNote(selectedNote?.id || '')}
-                onUpdate={data.updateNoteContent}
+                onUpdate={handleNoteUpdate}
+                onNoteMeaningful={markDraftMeaningful}
                 onTogglePin={data.togglePin}
                 onTrash={handleTrash}
                 onMove={data.moveNote}
                 onArchive={data.archiveNote}
-                onAddAttachment={data.addAttachment}
+                onAddAttachment={async (id, file) => {
+                  const attachment = await data.addAttachment(id, file);
+                  if (attachment) markDraftMeaningful(id);
+                  return attachment;
+                }}
                 onRemoveAttachment={data.removeAttachment}
                 onRenameAttachment={data.renameAttachment}
                 onDuplicate={handleDuplicate}

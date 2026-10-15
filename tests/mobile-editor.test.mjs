@@ -36,7 +36,7 @@ test('mobile title Enter and NumpadEnter move focus to the body and place the ca
   assert.match(focusBody, /selection\?\.addRange\(range\)/);
   assert.doesNotMatch(focusBody, /innerHTML\s*=|textContent\s*=|append(?:Child)?\(/);
   assert.match(editor, /!desktopPresentation && <input[^\n]*onKeyDown=\{handleMobileTitleKeyDown\}/);
-  const desktopTitleInput = editor.match(/<input value=\{title\} onChange=\{\(e\) => setTitle\(e\.target\.value\)\}[^\n]*/);
+  const desktopTitleInput = editor.match(/<input value=\{title\} onChange=\{\(e\) => handleTitleChange\(e\.target\.value\)\}[^\n]*/);
   assert.ok(desktopTitleInput);
   assert.doesNotMatch(desktopTitleInput[0], /onKeyDown/);
 });
@@ -154,7 +154,8 @@ test('mobile editor styles are scoped below 1024px and desktop tools remain unch
   assert.match(css, /\.tanooki-mobile-editor \{ display: flex; width: 100%; max-width: 100%; min-width: 0; flex: 1 1 0%; height: 100dvh;/);
   assert.match(editor, /tanooki-mobile-editor-scroll/);
   assert.doesNotMatch(editor, /min-h-\[200px\]/);
-  assert.match(editor, /event\.target !== event\.currentTarget/);
+  assert.match(editor, /placeCaretAtBlankTap/);
+  assert.match(editor, /target !== editor && target !== event\.currentTarget/);
   assert.match(editor, /range\.selectNodeContents\(editor\)/);
   assert.match(css, /\.tanooki-mobile-editor-scroll \{ display: flex; width: 100%; min-height: 0; flex: 1 1 0; flex-direction: column; overflow-y: auto; \}/);
   assert.match(css, /\.tanooki-mobile-editor-canvas \{ display: flex; width: 100%; min-width: 0; max-width: none; min-height: 100%; flex: 1 0 auto; flex-direction: column;/);

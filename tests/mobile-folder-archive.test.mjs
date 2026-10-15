@@ -33,7 +33,7 @@ test('mobile Folder and Archive use current view filtering and existing note ope
   assert.match(app, /mobileWorkspaceMode/);
   assert.match(app, /onBackToHome=\{openMobileHome\}/);
   assert.match(app, /onAddFolder=\{data\.addFolder\}/);
-  assert.match(app, /const note = data\.addNote\(view\.id\)/);
+  assert.match(app, /registerNewDraft\(data\.addNote\(view\.id\)\)/);
   assert.match(app, /!showMobileWorkspace/);
 });
 

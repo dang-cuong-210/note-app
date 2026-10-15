@@ -19,7 +19,7 @@ function Harness() {
     React.createElement(NoteEditor, {
       note: data.notes[0] ?? null, folders: data.folders,
       attachments: data.getAttachmentsForNote('note-1'),
-      onUpdate: noop, onTogglePin: noop, onTrash: noop, onMove: noop, onArchive: noop,
+      onUpdate: noop, onNoteMeaningful: noop, onTogglePin: noop, onTrash: noop, onMove: noop, onArchive: noop,
       onAddAttachment: async () => null, onRemoveAttachment: async () => {},
       onRenameAttachment: async () => false, onBack: noop,
     }));

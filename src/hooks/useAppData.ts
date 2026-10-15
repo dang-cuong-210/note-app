@@ -7,6 +7,7 @@ import { uid, createNote, applyTheme, applyFontSize } from '@/lib/utils';
 import { deleteAllNoteImages } from '@/lib/images';
 import { createAttachmentSync } from '@/lib/attachmentSync';
 import { createFolderSync, mapRemoteFolder, type FolderRecord } from '@/lib/folderSync';
+import { canDiscardUnsentDraftOffline } from '@/lib/editorBehavior.js';
 import {
   uploadAttachment,
   deleteAttachment,
@@ -1148,6 +1149,53 @@ export function useAppData(userId: string | null) {
     [userId]
   );
 
+  // Empty editor drafts are hard-discarded rather than moved to Trash. Online,
+  // reuse the established hard-delete path so a draft already synced during a
+  // long editing session is removed from cloud and local attachment metadata.
+  // Offline, only discard when the pending save is still in its debounce window
+  // and no request has started; otherwise keep the draft to avoid losing a
+  // possibly accepted remote write.
+  const discardEmptyNoteDraft = useCallback(async (id: string): Promise<boolean> => {
+    const note = notesRef.current.find((item) => item.id === id);
+    if (!note) return true;
+    if (online && navigator.onLine) {
+      await permanentDelete(id);
+      return true;
+    }
+
+    const activeSync = inFlightTasks.current.get(`${userId}:${id}`);
+    if (!canDiscardUnsentDraftOffline({
+      debouncePending: saveTimers.current.has(id),
+      confirmedRevision: confirmedRevisions.current.get(id) ?? note.revision,
+      inFlight: Boolean(activeSync),
+    })) return false;
+
+    deletingNotes.current.add(id);
+    const saveTimer = saveTimers.current.get(id);
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimers.current.delete(id);
+    const retryTimer = retryTimers.current.get(id);
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimers.current.delete(id);
+
+    try {
+      await Promise.all([
+        localDb.deleteNote(userId!, id),
+        localDb.deleteAttachmentsByNote(userId!, id),
+      ]);
+    } catch (error) {
+      deletingNotes.current.delete(id);
+      saveNote(note);
+      throw error;
+    }
+
+    pendingNotes.current.delete(id);
+    confirmedRevisions.current.delete(id);
+    setNotes((prev) => prev.filter((item) => item.id !== id));
+    if (attachmentSync.current?.accountId === userId) attachmentSync.current.removeForNote(id);
+    return true;
+  }, [online, permanentDelete, saveNote, userId]);
+
   const togglePin = useCallback(
     (id: string) => {
       setNotes((prev) =>
@@ -1386,6 +1434,7 @@ export function useAppData(userId: string | null) {
     trashNote,
     restoreNote,
     permanentDelete,
+    discardEmptyNoteDraft,
     togglePin,
     archiveNote,
     moveNote,

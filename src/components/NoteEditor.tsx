@@ -46,6 +46,7 @@ import { MobileAttachmentBrowserSheet, MobileEditorMoreSheet, MobileEditorToolsS
 import { MobileFormattingSheet } from '@/components/MobileFormattingSheet';
 import { NoteTagManager } from '@/components/NoteTagManager';
 import { MOBILE_FORMATTING_GROUPS, setChecklistItemChecked } from '@/lib/mobileFormatting.js';
+import { getBlankLinesToAppend, isMeaningfulNoteContent } from '@/lib/editorBehavior.js';
 
 // Attachment display settings travel inside note HTML, so no database migration is needed.
 // The marker is a comment, never a visible or editable element.
@@ -118,6 +119,7 @@ interface NoteEditorProps {
   folders: Folder[];
   attachments: Attachment[];
   onUpdate: (id: string, title: string, content: string) => void;
+  onNoteMeaningful: (id: string) => void;
   onTogglePin: (id: string) => void;
   onTrash: (id: string) => void;
   onMove: (id: string, folderId: string | null) => void;
@@ -143,6 +145,7 @@ export function NoteEditor({
   folders,
   attachments,
   onUpdate,
+  onNoteMeaningful,
   onTogglePin,
   onTrash,
   onMove,
@@ -311,6 +314,15 @@ export function NoteEditor({
   titleRef.current = title;
   contentRef.current = content;
 
+  const reportMeaningfulContent = (nextTitle = titleRef.current, nextContent = editorRef.current?.innerHTML ?? contentRef.current) => {
+    if (note && isMeaningfulNoteContent(nextTitle, nextContent, attachments.length > 0)) onNoteMeaningful(note.id);
+  };
+  const handleTitleChange = (nextTitle: string) => {
+    titleRef.current = nextTitle;
+    setTitle(nextTitle);
+    reportMeaningfulContent(nextTitle);
+  };
+
   const flushCurrentDraft = () => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = null;
@@ -386,6 +398,7 @@ export function NoteEditor({
     const html = withLayout(writeManagedTags(editorRef.current.innerHTML, readManagedTags(contentRef.current)), layout);
     contentRef.current = html;
     setContent(html);
+    reportMeaningfulContent(titleRef.current, html);
   };
   const updateNoteTags = (update: (html: string) => { content: string; changed: boolean }) => {
     if (!note || conflictRef.current) return;
@@ -397,6 +410,7 @@ export function NoteEditor({
     if (editorRef.current) editorRef.current.innerHTML = stripLayout(nextContent);
     contentRef.current = nextContent;
     setContent(nextContent);
+    reportMeaningfulContent(titleRef.current, nextContent);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = null;
     onUpdate(note.id, titleRef.current, nextContent);
@@ -409,6 +423,52 @@ export function NoteEditor({
     layoutRef.current = next;
     setAttachmentLayout(next);
     commitEditor(next);
+  };
+
+  const placeCaretAtBlankTap = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (desktopPresentation || !mobileWriting || !canEdit) return false;
+    const editor = editorRef.current;
+    const target = event.target as HTMLElement;
+    if (!editor || (target !== editor && target !== event.currentTarget)) return false;
+
+    const editorRect = editor.getBoundingClientRect();
+    const style = window.getComputedStyle(editor);
+    const fontSize = Number.parseFloat(style.fontSize) || 16;
+    const lineHeight = Number.parseFloat(style.lineHeight) || fontSize * 1.65;
+    const rangeAtEnd = document.createRange();
+    rangeAtEnd.selectNodeContents(editor);
+    rangeAtEnd.collapse(false);
+    const caretRect = rangeAtEnd.getBoundingClientRect();
+    const lastBlockRect = editor.lastElementChild?.getBoundingClientRect();
+    const contentRange = document.createRange();
+    contentRange.selectNodeContents(editor);
+    const contentRects = Array.from(contentRange.getClientRects()).filter((rect) => rect.width || rect.height);
+    const lastContentRect = contentRects[contentRects.length - 1];
+    const endY = caretRect.bottom > 0
+      ? caretRect.bottom
+      : (lastBlockRect?.bottom || lastContentRect?.bottom || editorRect.top);
+    const blankLines = getBlankLinesToAppend(event.clientY, endY, lineHeight);
+    if (!blankLines) return false;
+
+    event.preventDefault();
+    editor.focus();
+    let targetBlock: HTMLDivElement | null = null;
+    for (let index = 0; index < blankLines; index += 1) {
+      targetBlock = document.createElement('div');
+      targetBlock.appendChild(document.createElement('br'));
+      editor.appendChild(targetBlock);
+    }
+    if (!targetBlock) return true;
+
+    const range = document.createRange();
+    range.selectNodeContents(targetBlock);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    lastCaretRange.current = range.cloneRange();
+    commitEditor();
+    return true;
   };
   // An attachment is a non-editable inline node in note HTML, not a file URL.
   // Its ID refers to the existing Supabase attachment row; dragging never moves file bytes.
@@ -1262,6 +1322,7 @@ export function NoteEditor({
       toast('Chỉ hỗ trợ ảnh JPG, PNG, GIF và WEBP');
       return;
     }
+    onNoteMeaningful(note.id);
     setUploadsInProgress((count) => count + 1);
     try {
       const uploadNoteId = note.id;
@@ -1305,6 +1366,7 @@ export function NoteEditor({
 
   const handleFileUpload = async (file: File) => {
     if (!note) return;
+    onNoteMeaningful(note.id);
     setUploadsInProgress((count) => count + 1);
     try {
       const uploadNoteId = note.id;
@@ -1680,7 +1742,7 @@ export function NoteEditor({
 
       {desktopPresentation && <section className="tanooki-editor-document-header">
         <div className="tanooki-editor-document-title-row">
-          <input value={title} onChange={(e) => setTitle(e.target.value)} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" className="tanooki-editor-title" style={{ color: 'var(--text)' }} />
+          <input value={title} onChange={(e) => handleTitleChange(e.target.value)} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" className="tanooki-editor-title" style={{ color: 'var(--text)' }} />
         </div>
         <NoteTagManager className="tanooki-editor-tags" tags={desktopTags} existingTags={existingTags} onAddTag={addNoteTag} onRemoveTag={removeNoteTag} onOpenTag={onOpenTag} />
       </section>}
@@ -1709,19 +1771,8 @@ export function NoteEditor({
 
       {/* Editor area */}
       <div ref={editorScrollRef} className={`flex-1 overflow-y-auto ${desktopPresentation ? 'tanooki-editor-scroll' : 'tanooki-mobile-editor-scroll'}`} onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
-        <div className={desktopPresentation ? 'tanooki-editor-canvas' : 'tanooki-mobile-editor-canvas'} onPointerDown={(event) => {
-          if (desktopPresentation || !mobileWriting || event.target !== event.currentTarget) return;
-          const editor = editorRef.current;
-          if (!editor) return;
-          editor.focus();
-          const selection = window.getSelection();
-          const range = document.createRange();
-          range.selectNodeContents(editor);
-          range.collapse(false);
-          selection?.removeAllRanges();
-          selection?.addRange(range);
-        }}>
-          {!desktopPresentation && <input value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={handleMobileTitleKeyDown} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" className="tanooki-mobile-editor-document-title" />}
+        <div className={desktopPresentation ? 'tanooki-editor-canvas' : 'tanooki-mobile-editor-canvas'} onPointerDown={placeCaretAtBlankTap}>
+          {!desktopPresentation && <input value={title} onChange={(event) => handleTitleChange(event.target.value)} onKeyDown={handleMobileTitleKeyDown} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" className="tanooki-mobile-editor-document-title" />}
           <div
             ref={editorRef}
             contentEditable={canEdit}
@@ -1735,7 +1786,7 @@ export function NoteEditor({
             onKeyUp={rememberCaret}
             onMouseUp={rememberCaret}
             onTouchEnd={rememberCaret}
-            onPointerDown={e => { if ((e.target as HTMLElement).closest('[data-note-checklist-toggle]')) { rememberCaret(); return; } if (!canEdit) return; if (!onInlinePointerDown(e)) onImagePointerDown(e); }}
+            onPointerDown={e => { if ((e.target as HTMLElement).closest('[data-note-checklist-toggle]')) { rememberCaret(); return; } if (e.target === e.currentTarget && placeCaretAtBlankTap(e)) return; if (!canEdit) return; if (!onInlinePointerDown(e)) onImagePointerDown(e); }}
             onPointerMove={e => { if (!canEdit) return; if (!onInlinePointerMove(e)) onImagePointerMove(e); }}
             onPointerUp={e => { if (!canEdit) return; if (!onInlinePointerEnd(e)) onImagePointerUp(e); rememberCaret(); }}
             onPointerCancel={(e) => {
