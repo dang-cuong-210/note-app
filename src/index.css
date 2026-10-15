@@ -423,14 +423,8 @@
   -webkit-user-drag: none;
   touch-action: pan-y;
 }
-@media (max-width: 1023px) {
-  .noted-image-toolbar { pointer-events: none; }
-  .noted-image-toolbar button { pointer-events: auto; }
-}
 .noted-dragging-source {
   opacity: .42 !important;
-  user-select: none;
-  -webkit-user-select: none;
   touch-action: none !important;
   transition: opacity 120ms ease;
 }
@@ -507,8 +501,6 @@
   border: 2px solid var(--accent);
   border-radius: 8px;
 }
-.noted-image-outline-calm { top: 0; left: 0; border-width: 1px; border-radius: 7px; }
-.noted-image-toolbar { top: 0; left: 0; will-change: transform; }
 .noted-image-handle {
   position: fixed;
   z-index: 57;
@@ -520,33 +512,6 @@
   transform: translate(-50%, -50%);
   touch-action: none;
 }
-.noted-image-handle-touch {
-  top: 0;
-  left: 0;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  box-shadow: none;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  will-change: transform;
-}
-.noted-image-handle-touch::after {
-  width: 11px;
-  height: 11px;
-  border: 1px solid white;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 22%);
-  content: '';
-  pointer-events: none;
-}
-.noted-image-handle-touch[data-active="true"]::after { transform: scale(1.12); }
 .noted-media-toolbar {
   position: fixed;
   z-index: 58;

@@ -55,14 +55,13 @@ test('offline discard is allowed only while a new note is certainly unsent', () 
 
 test('editor creates flowing blank blocks only when a blank surface is tapped below existing content', () => {
   assert.match(editor, /const placeCaretAtBlankTap = \(event: React\.PointerEvent<HTMLDivElement>\)/);
-  assert.match(editor, /const createBlankBlocksAtY = \(clientY: number\) => \{/);
   assert.match(editor, /getComputedStyle\(editor\)/);
-  assert.match(editor, /getBlankLinesToAppend\(clientY, endY, lineHeight\)/);
+  assert.match(editor, /getBlankLinesToAppend\(event\.clientY, endY, lineHeight\)/);
   assert.match(editor, /targetBlock = document\.createElement\('div'\)/);
   assert.match(editor, /targetBlock\.appendChild\(document\.createElement\('br'\)\)/);
   assert.match(editor, /selection\?\.addRange\(range\)/);
   assert.match(editor, /target !== editor && target !== event\.currentTarget/);
-  assert.match(editor, /onPointerDown=\{e => \{[\s\S]*?placeCaretAtBlankTap\(e\);/);
+  assert.match(editor, /onPointerDown=\{placeCaretAtBlankTap\}/);
   assert.match(editor, /onNoteMeaningful\(note\.id\)/);
 });
 

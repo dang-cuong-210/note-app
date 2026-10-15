@@ -48,8 +48,6 @@ import { NoteTagManager } from '@/components/NoteTagManager';
 import { MOBILE_FORMATTING_GROUPS, setChecklistItemChecked } from '@/lib/mobileFormatting.js';
 import { getBlankLinesToAppend, isMeaningfulNoteContent } from '@/lib/editorBehavior.js';
 import { MobileDrawingMarkup } from '@/components/MobileDrawingMarkup';
-import { calculateImageResize, type ImageResizeResult } from '@/lib/imageResize.js';
-import { getImageInsertionSide, isTapPlacement } from '@/lib/imagePlacement.js';
 
 // Attachment display settings travel inside note HTML, so no database migration is needed.
 // The marker is a comment, never a visible or editable element.
@@ -98,34 +96,6 @@ type EditorDragSession = {
   resizeObserver: ResizeObserver | null;
   mutationObserver: MutationObserver | null;
 };
-type ImageGesture = {
-  mode: 'resize' | 'pinch';
-  target: HTMLImageElement;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  handle: string;
-  distance?: number;
-  latestX: number;
-  latestY: number;
-  latestDistance?: number;
-  frame: number | null;
-  result: ImageResizeResult;
-  startRect: DOMRect;
-  startMarginLeft: number;
-  startMarginTop: number;
-  inlineWidth: string;
-  inlineHeight: string;
-  inlineTransition: string;
-  inlineMarginLeft: string;
-  inlineMarginTop: string;
-  maxWidth: number;
-  freeResize: boolean;
-  toolbarWidth: number;
-  toolbarPlacement: 'top' | 'bottom';
-};
-type PendingImagePlacement = { pointerId: number; x: number; y: number; target: HTMLElement };
 const LAYOUT_MARKER = /<!--NOTED_ATTACHMENT_LAYOUT:([^>]*)-->/g;
 const EMPTY_LAYOUT: AttachmentLayout = { order: [], widths: {} };
 function readLayout(html: string): AttachmentLayout {
@@ -220,12 +190,7 @@ export function NoteEditor({
   const [freeResize, setFreeResize] = useState(false);
   const [moveImageMode, setMoveImageMode] = useState(false);
   const imagePointers = useRef(new Map<number, { x: number; y: number }>());
-  const imageGesture = useRef<ImageGesture | null>(null);
-  const pendingImagePlacement = useRef<PendingImagePlacement | null>(null);
-  const suppressImagePlacementClick = useRef<number | null>(null);
-  const imageOutlineRef = useRef<HTMLDivElement>(null);
-  const imageToolbarRef = useRef<HTMLDivElement>(null);
-  const imageHandleRefs = useRef(new Map<string, HTMLButtonElement>());
+  const imageGesture = useRef<{ mode: 'drag' | 'resize' | 'pinch'; x: number; y: number; w: number; h: number; distance?: number; dx?: number; dy?: number; target?: HTMLImageElement } | null>(null);
   const [attachmentLayout, setAttachmentLayout] = useState<AttachmentLayout>(EMPTY_LAYOUT);
   const layoutRef = useRef<AttachmentLayout>(EMPTY_LAYOUT);
   const [selectedAttachmentId, setSelectedAttachmentId] = useState<string | null>(null);
@@ -413,35 +378,6 @@ export function NoteEditor({
     else setImageFrame(null);
   }, [selectedImage]);
 
-  const getImageHandlePosition = (handle: string, frame: Pick<DOMRect, 'left' | 'top' | 'width' | 'height' | 'right' | 'bottom'>) => {
-    const left = handle.includes('w') ? frame.left : handle.includes('e') ? frame.right : frame.left + frame.width / 2;
-    const top = handle.includes('n') ? frame.top : handle.includes('s') ? frame.bottom : frame.top + frame.height / 2;
-    return desktopPresentation ? { left, top } : {
-      left: Math.max(16, Math.min(window.innerWidth - 16, left)),
-      top: Math.max(16, Math.min(window.innerHeight - 16, top)),
-    };
-  };
-
-  const updateImageOverlayFrame = (frame: Pick<DOMRect, 'left' | 'top' | 'width' | 'height' | 'right' | 'bottom'>, gesture: ImageGesture) => {
-    const outline = imageOutlineRef.current;
-    if (outline) {
-      outline.style.width = `${frame.width}px`;
-      outline.style.height = `${frame.height}px`;
-      outline.style.transform = `translate3d(${frame.left}px, ${frame.top}px, 0)`;
-    }
-    for (const [handle, element] of imageHandleRefs.current) {
-      const position = getImageHandlePosition(handle, frame);
-      element.style.transform = `translate3d(${position.left}px, ${position.top}px, 0) translate(-50%, -50%)`;
-    }
-    const toolbar = imageToolbarRef.current;
-    if (toolbar) {
-      const left = Math.max(8, Math.min(window.innerWidth - gesture.toolbarWidth - 8, frame.left));
-      const preferredTop = gesture.toolbarPlacement === 'top' ? frame.top - 52 : frame.bottom + 9;
-      const top = Math.max(8, Math.min(window.innerHeight - 48, preferredTop));
-      toolbar.style.transform = `translate3d(${left}px, ${top}px, 0)`;
-    }
-  };
-
   useEffect(() => {
     if (!selectedImage) return;
     const refresh = () => refreshImageFrame(selectedImage);
@@ -456,16 +392,6 @@ export function NoteEditor({
 
   useEffect(() => () => {
     cancelEditorDrag();
-    const gesture = imageGesture.current;
-    if (gesture) {
-      if (gesture.frame != null) cancelAnimationFrame(gesture.frame);
-      gesture.target.style.width = gesture.inlineWidth;
-      gesture.target.style.height = gesture.inlineHeight;
-      gesture.target.style.marginLeft = gesture.inlineMarginLeft;
-      gesture.target.style.marginTop = gesture.inlineMarginTop;
-      gesture.target.style.transition = gesture.inlineTransition;
-      imageGesture.current = null;
-    }
     if (attachmentLongPress.current) clearTimeout(attachmentLongPress.current);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -502,9 +428,11 @@ export function NoteEditor({
     commitEditor(next);
   };
 
-  const createBlankBlocksAtY = (clientY: number) => {
+  const placeCaretAtBlankTap = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (desktopPresentation || !mobileWriting || !canEdit) return false;
     const editor = editorRef.current;
-    if (!editor) return null;
+    const target = event.target as HTMLElement;
+    if (!editor || (target !== editor && target !== event.currentTarget)) return false;
 
     const editorRect = editor.getBoundingClientRect();
     const style = window.getComputedStyle(editor);
@@ -522,27 +450,18 @@ export function NoteEditor({
     const endY = caretRect.bottom > 0
       ? caretRect.bottom
       : (lastBlockRect?.bottom || lastContentRect?.bottom || editorRect.top);
-    const blankLines = getBlankLinesToAppend(clientY, endY, lineHeight);
-    if (!blankLines) return null;
+    const blankLines = getBlankLinesToAppend(event.clientY, endY, lineHeight);
+    if (!blankLines) return false;
+
+    event.preventDefault();
+    editor.focus();
     let targetBlock: HTMLDivElement | null = null;
     for (let index = 0; index < blankLines; index += 1) {
       targetBlock = document.createElement('div');
       targetBlock.appendChild(document.createElement('br'));
       editor.appendChild(targetBlock);
     }
-    return targetBlock;
-  };
-
-  const placeCaretAtBlankTap = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (desktopPresentation || !mobileWriting || !canEdit) return false;
-    const editor = editorRef.current;
-    const target = event.target as HTMLElement;
-    if (!editor || (target !== editor && target !== event.currentTarget)) return false;
-    const targetBlock = createBlankBlocksAtY(event.clientY);
-    if (!targetBlock) return false;
-
-    event.preventDefault();
-    editor.focus();
+    if (!targetBlock) return true;
 
     const range = document.createRange();
     range.selectNodeContents(targetBlock);
@@ -558,95 +477,6 @@ export function NoteEditor({
   // Its ID refers to the existing Supabase attachment row; dragging never moves file bytes.
   const embeddedIds = new Set(Array.from(content.matchAll(/data-noted-attachment-id=["']([^"']+)["']/g), match => match[1]));
   const attachmentSelector = '[data-noted-attachment-id]';
-
-  const armImagePlacement = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (desktopPresentation || !selectedImage?.isConnected) return false;
-    const editor = editorRef.current;
-    const target = event.target as HTMLElement;
-    if (!editor || target === selectedImage || target.closest('img, [data-noted-attachment-id], button, a, input, textarea, select, [role="button"], [data-note-checklist-toggle], [contenteditable="false"], .noted-media-toolbar, .noted-image-handle')) return false;
-    if (target !== editor && !editor.contains(target) && target !== event.currentTarget) return false;
-    pendingImagePlacement.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, target };
-    try { editor.setPointerCapture(event.pointerId); } catch { pendingImagePlacement.current = null; return false; }
-    event.stopPropagation();
-    return true;
-  };
-
-  const moveSelectedImageToPoint = (target: HTMLElement, clientX: number, clientY: number) => {
-    const editor = editorRef.current;
-    const image = selectedImage;
-    if (!editor || !image?.isConnected) return false;
-    const targetIsBlankSurface = target === editor || !editor.contains(target);
-    const blankBlock = targetIsBlankSurface ? createBlankBlocksAtY(clientY) : null;
-    if (targetIsBlankSurface && !blankBlock) return false;
-    let anchor: Node | null = blankBlock;
-
-    if (!anchor) {
-      const doc = document as Document & {
-        caretRangeFromPoint?: (x: number, y: number) => Range | null;
-        caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
-      };
-      let range = doc.caretRangeFromPoint?.(clientX, clientY) || null;
-      if (!range) {
-        const caret = doc.caretPositionFromPoint?.(clientX, clientY);
-        if (caret) { range = document.createRange(); range.setStart(caret.offsetNode, caret.offset); }
-      }
-      const pointNode = range?.startContainer;
-      const pointElement = pointNode instanceof Element ? pointNode : pointNode?.parentElement || target;
-      if (range && !editor.contains(range.startContainer)) return false;
-      const list = pointElement.closest<HTMLElement>('ul, ol');
-      anchor = list || pointElement.closest<HTMLElement>('p, div, blockquote, pre, h1, h2, h3, h4, h5, h6, table, hr');
-      if (!anchor || anchor === editor) {
-        let rootNode: Node | null = pointNode || target;
-        while (rootNode?.parentNode && rootNode.parentNode !== editor) rootNode = rootNode.parentNode;
-        anchor = rootNode && rootNode.parentNode === editor ? rootNode : null;
-      }
-    }
-
-    if (!anchor || anchor === image || anchor instanceof Element && anchor.contains(image) || !anchor.parentNode) return false;
-    rememberCaret();
-    const anchorElement = anchor instanceof HTMLElement ? anchor : null;
-    const isEmptyLine = Boolean(anchorElement && !anchorElement.textContent?.trim() && !anchorElement.querySelector('img, [data-noted-attachment-id]'));
-    if (isEmptyLine && anchor !== blankBlock) {
-      anchorElement!.insertBefore(image, anchorElement!.firstChild);
-    } else if (anchor === blankBlock) {
-      (anchor as HTMLElement).insertBefore(image, (anchor as HTMLElement).firstChild);
-      const range = document.createRange();
-      range.selectNodeContents(anchor as HTMLElement);
-      range.collapse(false);
-      lastCaretRange.current = range.cloneRange();
-    } else {
-      const rect = anchor instanceof Element ? anchor.getBoundingClientRect() : (() => {
-        const range = document.createRange();
-        range.selectNodeContents(anchor);
-        return range.getBoundingClientRect();
-      })();
-      const side = getImageInsertionSide(clientY, rect.top, rect.bottom);
-      anchor.parentNode.insertBefore(image, side === 'before' ? anchor : anchor.nextSibling);
-    }
-
-    commitEditor();
-    if (image.isConnected) setImageFrame(image.getBoundingClientRect());
-    return true;
-  };
-
-  const finishImagePlacementPointer = (event: React.PointerEvent<HTMLDivElement>, cancelled = false) => {
-    const pending = pendingImagePlacement.current;
-    if (!pending || pending.pointerId !== event.pointerId) return false;
-    pendingImagePlacement.current = null;
-    const editor = editorRef.current;
-    if (cancelled) {
-      try { if (editor?.hasPointerCapture(event.pointerId)) editor.releasePointerCapture(event.pointerId); } catch { /* pointer already interrupted */ }
-      return true;
-    }
-    if (!isTapPlacement(pending.x, pending.y, event.clientX, event.clientY)) {
-      try { if (editor?.hasPointerCapture(event.pointerId)) editor.releasePointerCapture(event.pointerId); } catch { /* pointer already released */ }
-      return false;
-    }
-    const moved = moveSelectedImageToPoint(pending.target, event.clientX, event.clientY);
-    try { if (editor?.hasPointerCapture(event.pointerId)) editor.releasePointerCapture(event.pointerId); } catch { /* pointer already released */ }
-    if (moved) suppressImagePlacementClick.current = performance.now() + 500;
-    return moved;
-  };
 
   const makeAttachmentNode = (att: Attachment): HTMLSpanElement => {
     const node = document.createElement('span');
@@ -1380,16 +1210,6 @@ export function NoteEditor({
     setImageFrame(img.getBoundingClientRect());
   };
   const clearSelection = () => {
-    const gesture = imageGesture.current;
-    if (gesture) {
-      if (gesture.frame != null) cancelAnimationFrame(gesture.frame);
-      gesture.target.style.width = gesture.inlineWidth;
-      gesture.target.style.height = gesture.inlineHeight;
-      gesture.target.style.marginLeft = gesture.inlineMarginLeft;
-      gesture.target.style.marginTop = gesture.inlineMarginTop;
-      gesture.target.style.transition = gesture.inlineTransition;
-      imageGesture.current = null;
-    }
     setSelectedImage(null);
     setImageFrame(null);
     setSelectedAttachmentId(null);
@@ -1397,8 +1217,9 @@ export function NoteEditor({
     setInlineFrame(null);
     setMoveImageMode(false);
     imagePointers.current.clear();
+    imageGesture.current = null;
   };
-  const resizeImageLegacy = (img: HTMLImageElement, width: number, height?: number) => {
+  const resizeImage = (img: HTMLImageElement, width: number, height?: number) => {
     const maxWidth = editorRef.current?.clientWidth || 900;
     img.style.width = `${Math.round(Math.min(maxWidth, Math.max(72, width)))}px`;
     img.style.maxWidth = '100%';
@@ -1406,122 +1227,19 @@ export function NoteEditor({
     else img.style.height = 'auto';
     refreshImageFrame(img);
   };
-  const createImageGesture = (
-    img: HTMLImageElement,
-    mode: ImageGesture['mode'],
-    clientX: number,
-    clientY: number,
-    handle: string,
-    distance?: number,
-  ): ImageGesture => {
-    const rect = img.getBoundingClientRect();
-    const editorRect = editorRef.current?.getBoundingClientRect();
-    const computed = window.getComputedStyle(img);
-    const toolbarWidth = imageToolbarRef.current?.getBoundingClientRect().width || 310;
-    const availableWidth = handle.includes('w')
-      ? rect.right - (editorRect?.left ?? 0)
-      : handle.includes('e')
-        ? (editorRect?.right ?? window.innerWidth) - rect.left
-        : editorRef.current?.clientWidth || 900;
-    return {
-      mode, target: img, x: clientX, y: clientY, w: rect.width, h: rect.height,
-      handle, distance, latestX: clientX, latestY: clientY, latestDistance: distance,
-      frame: null, result: { width: rect.width, height: rect.height, offsetX: 0, offsetY: 0 }, startRect: rect,
-      startMarginLeft: Number.parseFloat(computed.marginLeft) || 0,
-      startMarginTop: Number.parseFloat(computed.marginTop) || 0,
-      inlineWidth: img.style.width, inlineHeight: img.style.height,
-      inlineTransition: img.style.transition,
-      inlineMarginLeft: img.style.marginLeft, inlineMarginTop: img.style.marginTop,
-      maxWidth: Math.max(1, Math.min(editorRef.current?.clientWidth || 900, availableWidth)),
-      freeResize: mode === 'pinch' ? false : freeResize,
-      toolbarWidth,
-      toolbarPlacement: rect.top > 65 ? 'top' : 'bottom',
-    };
-  };
-  const renderImageGestureFrame = (gesture: ImageGesture) => {
-    if (imageGesture.current !== gesture || !gesture.target.isConnected) return;
-    gesture.frame = null;
-    let deltaX = gesture.latestX - gesture.x;
-    let deltaY = gesture.latestY - gesture.y;
-    if (gesture.mode === 'pinch') {
-      const scale = gesture.latestDistance! / (gesture.distance || 1);
-      deltaX = gesture.w * (scale - 1);
-      deltaY = gesture.h * (scale - 1);
-    }
-    const result = calculateImageResize({
-      startWidth: gesture.w,
-      startHeight: gesture.h,
-      deltaX,
-      deltaY,
-      handle: gesture.handle,
-      preserveAspectRatio: !gesture.freeResize,
-      maxWidth: gesture.maxWidth,
-    });
-    gesture.result = result;
-    const img = gesture.target;
-    img.style.transition = 'none';
-    img.style.width = `${result.width}px`;
-    img.style.maxWidth = '100%';
-    img.style.height = gesture.freeResize ? `${result.height}px` : 'auto';
-    img.style.marginLeft = `${gesture.startMarginLeft + result.offsetX}px`;
-    img.style.marginTop = `${gesture.startMarginTop + result.offsetY}px`;
-    updateImageOverlayFrame({
-      left: gesture.startRect.left + result.offsetX,
-      top: gesture.startRect.top + result.offsetY,
-      width: result.width,
-      height: result.height,
-      right: gesture.startRect.left + result.offsetX + result.width,
-      bottom: gesture.startRect.top + result.offsetY + result.height,
-    }, gesture);
-  };
-  const queueImageGestureFrame = (gesture: ImageGesture) => {
-    if (gesture.frame == null) gesture.frame = requestAnimationFrame(() => renderImageGestureFrame(gesture));
-  };
-  const finishImageGesture = (event: React.PointerEvent<HTMLElement>, cancelled = false) => {
-    const gesture = imageGesture.current;
-    if (!gesture) return;
-    if (gesture.frame != null) cancelAnimationFrame(gesture.frame);
-    gesture.frame = null;
-    const moved = gesture.mode === 'pinch'
-      ? Math.abs((gesture.latestDistance || gesture.distance || 0) - (gesture.distance || 0)) > 0.5
-      : Math.hypot(gesture.latestX - gesture.x, gesture.latestY - gesture.y) > 0.5;
-    if (cancelled || !moved) {
-      gesture.target.style.width = gesture.inlineWidth;
-      gesture.target.style.height = gesture.inlineHeight;
-      gesture.target.style.marginLeft = gesture.inlineMarginLeft;
-      gesture.target.style.marginTop = gesture.inlineMarginTop;
-    } else renderImageGestureFrame(gesture);
-    imageGesture.current = null;
-    gesture.target.style.transition = gesture.inlineTransition;
-    if (!cancelled && moved && (Math.abs(gesture.result.width - gesture.w) > 0.5 || Math.abs(gesture.result.height - gesture.h) > 0.5 || Math.abs(gesture.result.offsetX) > 0.5 || Math.abs(gesture.result.offsetY) > 0.5)) commitEditor();
-    if (gesture.target.isConnected) setImageFrame(gesture.target.getBoundingClientRect());
-    try { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* pointer may already be cancelled */ }
-  };
-  const cancelImageGesture = () => {
-    const gesture = imageGesture.current;
-    if (!gesture) return;
-    if (gesture.frame != null) cancelAnimationFrame(gesture.frame);
-    gesture.target.style.width = gesture.inlineWidth;
-    gesture.target.style.height = gesture.inlineHeight;
-    gesture.target.style.marginLeft = gesture.inlineMarginLeft;
-    gesture.target.style.marginTop = gesture.inlineMarginTop;
-    gesture.target.style.transition = gesture.inlineTransition;
-    imageGesture.current = null;
-    if (gesture.target.isConnected) setImageFrame(gesture.target.getBoundingClientRect());
-  };
   const onImagePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!(e.target instanceof HTMLImageElement)) return;
     const img = e.target;
     imagePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (selectedImage === img && imagePointers.current.size >= 2) {
       cancelEditorDrag();
-      cancelImageGesture();
       e.currentTarget.setPointerCapture(e.pointerId);
+      const w = img.getBoundingClientRect().width;
+      const h = img.getBoundingClientRect().height;
       const [a, b] = [...imagePointers.current.values()];
-      imageGesture.current = createImageGesture(img, 'pinch', e.clientX, e.clientY, 'se', Math.hypot(a.x-b.x, a.y-b.y));
+      imageGesture.current = { mode: 'pinch', x: e.clientX, y: e.clientY, w, h, distance: Math.hypot(a.x-b.x, a.y-b.y), target: img };
       return;
     }
-    if (!desktopPresentation) return;
     if (e.pointerType === 'mouse' && selectedImage !== img) {
       suppressMediaClick.current = { source: img, until: performance.now() + 500 };
       selectImage(img);
@@ -1533,32 +1251,23 @@ export function NoteEditor({
     if (!imagePointers.current.has(e.pointerId)) return;
     imagePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const g = imageGesture.current;
-    if (g?.mode === 'pinch' && imagePointers.current.size >= 2) {
+    const resizedImage = g?.target || selectedImage;
+    if (g && resizedImage && imagePointers.current.size >= 2 && g.mode === 'pinch') {
       const [a, b] = [...imagePointers.current.values()];
-      g.latestDistance = Math.hypot(a.x-b.x, a.y-b.y);
-      if (desktopPresentation) resizeImageLegacy(g.target, g.w * g.latestDistance / (g.distance || 1));
-      else queueImageGestureFrame(g);
+      const ratio = Math.hypot(a.x-b.x, a.y-b.y) / (g.distance || 1);
+      resizeImage(resizedImage, g.w * ratio);
       e.preventDefault();
       return;
     }
     if (editorDrag.current?.kind === 'image') updateEditorDrag(e);
   };
   const onImagePointerUp = (e: React.PointerEvent<HTMLDivElement>, cancelled = false) => {
-    if (imagePointers.current.has(e.pointerId)) imagePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (!cancelled && imageGesture.current?.mode === 'pinch' && imagePointers.current.size >= 2) {
-      const [a, b] = [...imagePointers.current.values()];
-      imageGesture.current.latestDistance = Math.hypot(a.x-b.x, a.y-b.y);
-    }
-    if (cancelled && imageGesture.current?.mode === 'pinch') finishImageGesture(e, true);
     imagePointers.current.delete(e.pointerId);
     if (editorDrag.current?.kind === 'image') finishEditorDrag(e, cancelled);
-    if (imageGesture.current?.mode === 'pinch' && imagePointers.current.size < 2) {
-      if (desktopPresentation) {
-        if (!cancelled) commitEditor();
-        imageGesture.current = null;
-      } else finishImageGesture(e, cancelled);
+    if (selectedImage && imageGesture.current?.mode === 'pinch' && imagePointers.current.size < 2) {
+      commitEditor();
+      imageGesture.current = null;
     } else if (imagePointers.current.size === 0) imageGesture.current = null;
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   };
   const orderedAttachments = [...attachments].sort((a, b) => {
     const ai = attachmentLayout.order.indexOf(a.id), bi = attachmentLayout.order.indexOf(b.id);
@@ -2065,10 +1774,7 @@ export function NoteEditor({
 
       {/* Editor area */}
       <div ref={editorScrollRef} className={`flex-1 overflow-y-auto ${desktopPresentation ? 'tanooki-editor-scroll' : 'tanooki-mobile-editor-scroll'}`} onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
-        <div className={desktopPresentation ? 'tanooki-editor-canvas' : 'tanooki-mobile-editor-canvas'} onPointerDown={e => {
-          if (!desktopPresentation && e.target === e.currentTarget && selectedImage && armImagePlacement(e)) return;
-          placeCaretAtBlankTap(e);
-        }}>
+        <div className={desktopPresentation ? 'tanooki-editor-canvas' : 'tanooki-mobile-editor-canvas'} onPointerDown={placeCaretAtBlankTap}>
           {!desktopPresentation && <input value={title} onChange={(event) => handleTitleChange(event.target.value)} onKeyDown={handleMobileTitleKeyDown} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" className="tanooki-mobile-editor-document-title" />}
           <div
             ref={editorRef}
@@ -2083,24 +1789,13 @@ export function NoteEditor({
             onKeyUp={rememberCaret}
             onMouseUp={rememberCaret}
             onTouchEnd={rememberCaret}
-            onPointerDown={e => {
-              const target = e.target as HTMLElement;
-              if (target.closest('[data-note-checklist-toggle]')) { rememberCaret(); return; }
-              if (!canEdit) return;
-              if (!desktopPresentation && selectedImage && armImagePlacement(e)) return;
-              if (e.target === e.currentTarget && placeCaretAtBlankTap(e)) return;
-              if (!onInlinePointerDown(e)) onImagePointerDown(e);
-            }}
+            onPointerDown={e => { if ((e.target as HTMLElement).closest('[data-note-checklist-toggle]')) { rememberCaret(); return; } if (e.target === e.currentTarget && placeCaretAtBlankTap(e)) return; if (!canEdit) return; if (!onInlinePointerDown(e)) onImagePointerDown(e); }}
             onPointerMove={e => { if (!canEdit) return; if (!onInlinePointerMove(e)) onImagePointerMove(e); }}
-            onPointerUp={e => { if (!canEdit) return; if (finishImagePlacementPointer(e)) return; if (!onInlinePointerEnd(e)) onImagePointerUp(e); rememberCaret(); }}
+            onPointerUp={e => { if (!canEdit) return; if (!onInlinePointerEnd(e)) onImagePointerUp(e); rememberCaret(); }}
             onPointerCancel={(e) => {
               if (!canEdit) return;
-              if (finishImagePlacementPointer(e, true)) return;
               onInlinePointerEnd(e, true);
               onImagePointerUp(e, true);
-            }}
-            onLostPointerCapture={e => {
-              if (pendingImagePlacement.current?.pointerId === e.pointerId) pendingImagePlacement.current = null;
             }}
             onContextMenu={(e) => {
               if (!canEdit) return;
@@ -2109,11 +1804,6 @@ export function NoteEditor({
               else if (e.target instanceof HTMLImageElement) { e.preventDefault(); selectImage(e.target); }
             }}
             onClick={(e) => {
-              if (suppressImagePlacementClick.current != null) {
-                const suppressedUntil = suppressImagePlacementClick.current;
-                suppressImagePlacementClick.current = null;
-                if (performance.now() <= suppressedUntil) { e.preventDefault(); e.stopPropagation(); return; }
-              }
               const checklistToggle = (e.target as HTMLElement).closest('[data-note-checklist-toggle]');
               if (checklistToggle) { handleChecklistClick(e); return; }
               const suppressed = suppressMediaClick.current;
@@ -2292,9 +1982,9 @@ export function NoteEditor({
 
       {/* Selection UI lives outside contentEditable so it cannot pollute saved HTML. */}
       {selectedImage && imageFrame && <>
-        <div ref={imageOutlineRef} className={`noted-image-outline ${desktopPresentation ? '' : 'noted-image-outline-calm'}`} style={desktopPresentation ? { left: imageFrame.left, top: imageFrame.top, width: imageFrame.width, height: imageFrame.height } : { width: imageFrame.width, height: imageFrame.height, transform: `translate3d(${imageFrame.left}px, ${imageFrame.top}px, 0)` }} />
-        <div ref={imageToolbarRef} className={`noted-media-toolbar ${desktopPresentation ? '' : 'noted-image-toolbar'}`} style={desktopPresentation ? { left: Math.max(8, Math.min(window.innerWidth - 310, imageFrame.left)), top: Math.max(8, imageFrame.top > 65 ? imageFrame.top - 52 : imageFrame.bottom + 9) } : { transform: `translate3d(${Math.max(8, Math.min(window.innerWidth - 318, imageFrame.left))}px, ${Math.max(8, imageFrame.top > 65 ? imageFrame.top - 52 : imageFrame.bottom + 9)}px, 0)` }}>
-          {desktopPresentation && <button onClick={() => setMoveImageMode(v => !v)} aria-pressed={moveImageMode} title="Kéo để di chuyển"> <Move size={16}/> {moveImageMode ? 'Đang di chuyển' : 'Di chuyển'}</button>}
+        <div className="noted-image-outline" style={{ left: imageFrame.left, top: imageFrame.top, width: imageFrame.width, height: imageFrame.height }} />
+        <div className="noted-media-toolbar" style={{ left: Math.max(8, Math.min(window.innerWidth - 310, imageFrame.left)), top: Math.max(8, imageFrame.top > 65 ? imageFrame.top - 52 : imageFrame.bottom + 9) }}>
+          <button onClick={() => setMoveImageMode(v => !v)} aria-pressed={moveImageMode} title="Kéo để di chuyển"> <Move size={16}/> {moveImageMode ? 'Đang di chuyển' : 'Di chuyển'}</button>
           <button onClick={() => {setFreeResize(v=>!v);}} aria-pressed={freeResize} title="Bật hoặc tắt đổi kích thước tự do"><Maximize2 size={16}/> {freeResize ? 'Tự do' : 'Giữ tỷ lệ'}</button>
           <button onClick={() => {setImageViewer(selectedImage.src);setViewerScale(1);}}>Xem trước</button>
           <button onClick={() => duplicateImage(selectedImage)} title="Nhân bản hình ảnh" aria-label="Nhân bản hình ảnh"><Copy size={16}/></button>
@@ -2302,35 +1992,28 @@ export function NoteEditor({
           <button onClick={clearSelection} title="Bỏ chọn" aria-label="Bỏ chọn"><X size={16}/></button>
         </div>
         {(['nw','n','ne','e','se','s','sw','w'] as const).map(handle => {
-          const { left, top } = getImageHandlePosition(handle, imageFrame);
-          return <button key={handle} ref={element => { if (element) imageHandleRefs.current.set(handle, element); else imageHandleRefs.current.delete(handle); }} className={`noted-image-handle ${desktopPresentation ? '' : 'noted-image-handle-touch'}`} aria-label={`Đổi kích thước ${handle}`} style={desktopPresentation ? {left, top, cursor:`${handle}-resize`} : {left: 0, top: 0, transform: `translate3d(${left}px, ${top}px, 0) translate(-50%, -50%)`, cursor:`${handle}-resize`}}
+          const left = handle.includes('w') ? imageFrame.left : handle.includes('e') ? imageFrame.right : (imageFrame.left + imageFrame.right) / 2;
+          const top = handle.includes('n') ? imageFrame.top : handle.includes('s') ? imageFrame.bottom : (imageFrame.top + imageFrame.bottom) / 2;
+          return <button key={handle} className="noted-image-handle" aria-label={`Đổi kích thước ${handle}`} style={{left,top,cursor:`${handle}-resize`}}
             onPointerDown={e => {
               e.preventDefault(); e.stopPropagation();
               e.currentTarget.setPointerCapture(e.pointerId);
-              e.currentTarget.dataset.active = 'true';
-              imageGesture.current = createImageGesture(selectedImage, 'resize', e.clientX, e.clientY, handle);
+              imageGesture.current = { mode:'resize', x:e.clientX, y:e.clientY, w:imageFrame.width,h:imageFrame.height };
             }}
             onPointerMove={e => {
               const g = imageGesture.current;
               if (!g || g.mode !== 'resize' || !e.currentTarget.hasPointerCapture(e.pointerId)) return;
-              if (desktopPresentation) {
-                const dx = handle.includes('e') ? e.clientX-g.x : handle.includes('w') ? g.x-e.clientX : 0;
-                const dy = handle.includes('s') ? e.clientY-g.y : handle.includes('n') ? g.y-e.clientY : 0;
-                if (handle === 'n' || handle === 's') {
-                  if (freeResize) resizeImageLegacy(selectedImage, g.w, g.h+dy);
-                  else resizeImageLegacy(selectedImage, g.w*(1+dy/Math.max(1,g.h)));
-                } else if (handle === 'e' || handle === 'w') resizeImageLegacy(selectedImage, g.w+dx, g.h);
-                else resizeImageLegacy(selectedImage, g.w+dx, g.h+dy);
-                return;
-              }
-              e.preventDefault();
-              g.latestX = e.clientX;
-              g.latestY = e.clientY;
-              queueImageGestureFrame(g);
+              const dx = handle.includes('e') ? e.clientX-g.x : handle.includes('w') ? g.x-e.clientX : 0;
+              const dy = handle.includes('s') ? e.clientY-g.y : handle.includes('n') ? g.y-e.clientY : 0;
+              if (handle === 'n' || handle === 's') {
+                if (freeResize) resizeImage(selectedImage, g.w, g.h+dy);
+                else resizeImage(selectedImage, g.w*(1+dy/Math.max(1,g.h)));
+              } else if (handle === 'e' || handle === 'w') {
+                resizeImage(selectedImage, g.w+dx, g.h);
+              } else resizeImage(selectedImage, g.w+dx, g.h+dy);
             }}
-            onPointerUp={e => { e.stopPropagation(); e.currentTarget.dataset.active = 'false'; if (desktopPresentation) { if (imageGesture.current?.mode === 'resize') { commitEditor(); imageGesture.current = null; } } else finishImageGesture(e); }}
-            onPointerCancel={e => { e.stopPropagation(); e.currentTarget.dataset.active = 'false'; if (desktopPresentation) imageGesture.current = null; else finishImageGesture(e, true); }}
-            onLostPointerCapture={e => { if (imageGesture.current?.mode === 'resize') { if (desktopPresentation) imageGesture.current = null; else finishImageGesture(e, true); } }} />;
+            onPointerUp={() => { if (imageGesture.current?.mode === 'resize') {commitEditor();imageGesture.current=null;} }}
+            onPointerCancel={() => { imageGesture.current=null; }} />;
         })}
       </>}
 
