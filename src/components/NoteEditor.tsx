@@ -49,6 +49,7 @@ import { MOBILE_FORMATTING_GROUPS, setChecklistItemChecked } from '@/lib/mobileF
 import { getBlankLinesToAppend, isMeaningfulNoteContent } from '@/lib/editorBehavior.js';
 import { MobileDrawingMarkup } from '@/components/MobileDrawingMarkup';
 import { calculateImageResize, type ImageResizeResult } from '@/lib/imageResize.js';
+import { getImageInsertionSide, isTapPlacement } from '@/lib/imagePlacement.js';
 
 // Attachment display settings travel inside note HTML, so no database migration is needed.
 // The marker is a comment, never a visible or editable element.
@@ -98,7 +99,7 @@ type EditorDragSession = {
   mutationObserver: MutationObserver | null;
 };
 type ImageGesture = {
-  mode: 'move' | 'resize' | 'pinch';
+  mode: 'resize' | 'pinch';
   target: HTMLImageElement;
   x: number;
   y: number;
@@ -119,14 +120,12 @@ type ImageGesture = {
   inlineTransition: string;
   inlineMarginLeft: string;
   inlineMarginTop: string;
-  inlineTransform: string;
   maxWidth: number;
   freeResize: boolean;
   toolbarWidth: number;
   toolbarPlacement: 'top' | 'bottom';
-  moved: boolean;
-  dropBoundaries: DropBoundary[];
 };
+type PendingImagePlacement = { pointerId: number; x: number; y: number; target: HTMLElement };
 const LAYOUT_MARKER = /<!--NOTED_ATTACHMENT_LAYOUT:([^>]*)-->/g;
 const EMPTY_LAYOUT: AttachmentLayout = { order: [], widths: {} };
 function readLayout(html: string): AttachmentLayout {
@@ -222,6 +221,8 @@ export function NoteEditor({
   const [moveImageMode, setMoveImageMode] = useState(false);
   const imagePointers = useRef(new Map<number, { x: number; y: number }>());
   const imageGesture = useRef<ImageGesture | null>(null);
+  const pendingImagePlacement = useRef<PendingImagePlacement | null>(null);
+  const suppressImagePlacementClick = useRef<number | null>(null);
   const imageOutlineRef = useRef<HTMLDivElement>(null);
   const imageToolbarRef = useRef<HTMLDivElement>(null);
   const imageHandleRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -462,9 +463,7 @@ export function NoteEditor({
       gesture.target.style.height = gesture.inlineHeight;
       gesture.target.style.marginLeft = gesture.inlineMarginLeft;
       gesture.target.style.marginTop = gesture.inlineMarginTop;
-      gesture.target.style.transform = gesture.inlineTransform;
       gesture.target.style.transition = gesture.inlineTransition;
-      gesture.target.classList.remove('noted-image-moving');
       imageGesture.current = null;
     }
     if (attachmentLongPress.current) clearTimeout(attachmentLongPress.current);
@@ -503,11 +502,9 @@ export function NoteEditor({
     commitEditor(next);
   };
 
-  const placeCaretAtBlankTap = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (desktopPresentation || !mobileWriting || !canEdit) return false;
+  const createBlankBlocksAtY = (clientY: number) => {
     const editor = editorRef.current;
-    const target = event.target as HTMLElement;
-    if (!editor || (target !== editor && target !== event.currentTarget)) return false;
+    if (!editor) return null;
 
     const editorRect = editor.getBoundingClientRect();
     const style = window.getComputedStyle(editor);
@@ -525,18 +522,27 @@ export function NoteEditor({
     const endY = caretRect.bottom > 0
       ? caretRect.bottom
       : (lastBlockRect?.bottom || lastContentRect?.bottom || editorRect.top);
-    const blankLines = getBlankLinesToAppend(event.clientY, endY, lineHeight);
-    if (!blankLines) return false;
-
-    event.preventDefault();
-    editor.focus();
+    const blankLines = getBlankLinesToAppend(clientY, endY, lineHeight);
+    if (!blankLines) return null;
     let targetBlock: HTMLDivElement | null = null;
     for (let index = 0; index < blankLines; index += 1) {
       targetBlock = document.createElement('div');
       targetBlock.appendChild(document.createElement('br'));
       editor.appendChild(targetBlock);
     }
-    if (!targetBlock) return true;
+    return targetBlock;
+  };
+
+  const placeCaretAtBlankTap = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (desktopPresentation || !mobileWriting || !canEdit) return false;
+    const editor = editorRef.current;
+    const target = event.target as HTMLElement;
+    if (!editor || (target !== editor && target !== event.currentTarget)) return false;
+    const targetBlock = createBlankBlocksAtY(event.clientY);
+    if (!targetBlock) return false;
+
+    event.preventDefault();
+    editor.focus();
 
     const range = document.createRange();
     range.selectNodeContents(targetBlock);
@@ -552,6 +558,95 @@ export function NoteEditor({
   // Its ID refers to the existing Supabase attachment row; dragging never moves file bytes.
   const embeddedIds = new Set(Array.from(content.matchAll(/data-noted-attachment-id=["']([^"']+)["']/g), match => match[1]));
   const attachmentSelector = '[data-noted-attachment-id]';
+
+  const armImagePlacement = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (desktopPresentation || !selectedImage?.isConnected) return false;
+    const editor = editorRef.current;
+    const target = event.target as HTMLElement;
+    if (!editor || target === selectedImage || target.closest('img, [data-noted-attachment-id], button, a, input, textarea, select, [role="button"], [data-note-checklist-toggle], [contenteditable="false"], .noted-media-toolbar, .noted-image-handle')) return false;
+    if (target !== editor && !editor.contains(target) && target !== event.currentTarget) return false;
+    pendingImagePlacement.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, target };
+    try { editor.setPointerCapture(event.pointerId); } catch { pendingImagePlacement.current = null; return false; }
+    event.stopPropagation();
+    return true;
+  };
+
+  const moveSelectedImageToPoint = (target: HTMLElement, clientX: number, clientY: number) => {
+    const editor = editorRef.current;
+    const image = selectedImage;
+    if (!editor || !image?.isConnected) return false;
+    const targetIsBlankSurface = target === editor || !editor.contains(target);
+    const blankBlock = targetIsBlankSurface ? createBlankBlocksAtY(clientY) : null;
+    if (targetIsBlankSurface && !blankBlock) return false;
+    let anchor: Node | null = blankBlock;
+
+    if (!anchor) {
+      const doc = document as Document & {
+        caretRangeFromPoint?: (x: number, y: number) => Range | null;
+        caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+      };
+      let range = doc.caretRangeFromPoint?.(clientX, clientY) || null;
+      if (!range) {
+        const caret = doc.caretPositionFromPoint?.(clientX, clientY);
+        if (caret) { range = document.createRange(); range.setStart(caret.offsetNode, caret.offset); }
+      }
+      const pointNode = range?.startContainer;
+      const pointElement = pointNode instanceof Element ? pointNode : pointNode?.parentElement || target;
+      if (range && !editor.contains(range.startContainer)) return false;
+      const list = pointElement.closest<HTMLElement>('ul, ol');
+      anchor = list || pointElement.closest<HTMLElement>('p, div, blockquote, pre, h1, h2, h3, h4, h5, h6, table, hr');
+      if (!anchor || anchor === editor) {
+        let rootNode: Node | null = pointNode || target;
+        while (rootNode?.parentNode && rootNode.parentNode !== editor) rootNode = rootNode.parentNode;
+        anchor = rootNode && rootNode.parentNode === editor ? rootNode : null;
+      }
+    }
+
+    if (!anchor || anchor === image || anchor instanceof Element && anchor.contains(image) || !anchor.parentNode) return false;
+    rememberCaret();
+    const anchorElement = anchor instanceof HTMLElement ? anchor : null;
+    const isEmptyLine = Boolean(anchorElement && !anchorElement.textContent?.trim() && !anchorElement.querySelector('img, [data-noted-attachment-id]'));
+    if (isEmptyLine && anchor !== blankBlock) {
+      anchorElement!.insertBefore(image, anchorElement!.firstChild);
+    } else if (anchor === blankBlock) {
+      (anchor as HTMLElement).insertBefore(image, (anchor as HTMLElement).firstChild);
+      const range = document.createRange();
+      range.selectNodeContents(anchor as HTMLElement);
+      range.collapse(false);
+      lastCaretRange.current = range.cloneRange();
+    } else {
+      const rect = anchor instanceof Element ? anchor.getBoundingClientRect() : (() => {
+        const range = document.createRange();
+        range.selectNodeContents(anchor);
+        return range.getBoundingClientRect();
+      })();
+      const side = getImageInsertionSide(clientY, rect.top, rect.bottom);
+      anchor.parentNode.insertBefore(image, side === 'before' ? anchor : anchor.nextSibling);
+    }
+
+    commitEditor();
+    if (image.isConnected) setImageFrame(image.getBoundingClientRect());
+    return true;
+  };
+
+  const finishImagePlacementPointer = (event: React.PointerEvent<HTMLDivElement>, cancelled = false) => {
+    const pending = pendingImagePlacement.current;
+    if (!pending || pending.pointerId !== event.pointerId) return false;
+    pendingImagePlacement.current = null;
+    const editor = editorRef.current;
+    if (cancelled) {
+      try { if (editor?.hasPointerCapture(event.pointerId)) editor.releasePointerCapture(event.pointerId); } catch { /* pointer already interrupted */ }
+      return true;
+    }
+    if (!isTapPlacement(pending.x, pending.y, event.clientX, event.clientY)) {
+      try { if (editor?.hasPointerCapture(event.pointerId)) editor.releasePointerCapture(event.pointerId); } catch { /* pointer already released */ }
+      return false;
+    }
+    const moved = moveSelectedImageToPoint(pending.target, event.clientX, event.clientY);
+    try { if (editor?.hasPointerCapture(event.pointerId)) editor.releasePointerCapture(event.pointerId); } catch { /* pointer already released */ }
+    if (moved) suppressImagePlacementClick.current = performance.now() + 500;
+    return moved;
+  };
 
   const makeAttachmentNode = (att: Attachment): HTMLSpanElement => {
     const node = document.createElement('span');
@@ -1279,10 +1374,8 @@ export function NoteEditor({
   };
 
   const selectImage = (img: HTMLImageElement) => {
-    if (selectedImage && selectedImage !== img) selectedImage.classList.remove('noted-image-selected');
     setSelectedAttachmentId(null);
     setSelectedInlineAttachment(null);
-    if (!desktopPresentation) img.classList.add('noted-image-selected');
     setSelectedImage(img);
     setImageFrame(img.getBoundingClientRect());
   };
@@ -1294,12 +1387,9 @@ export function NoteEditor({
       gesture.target.style.height = gesture.inlineHeight;
       gesture.target.style.marginLeft = gesture.inlineMarginLeft;
       gesture.target.style.marginTop = gesture.inlineMarginTop;
-      gesture.target.style.transform = gesture.inlineTransform;
       gesture.target.style.transition = gesture.inlineTransition;
-      gesture.target.classList.remove('noted-image-moving');
       imageGesture.current = null;
     }
-    selectedImage?.classList.remove('noted-image-selected');
     setSelectedImage(null);
     setImageFrame(null);
     setSelectedAttachmentId(null);
@@ -1342,34 +1432,15 @@ export function NoteEditor({
       inlineWidth: img.style.width, inlineHeight: img.style.height,
       inlineTransition: img.style.transition,
       inlineMarginLeft: img.style.marginLeft, inlineMarginTop: img.style.marginTop,
-      inlineTransform: img.style.transform,
       maxWidth: Math.max(1, Math.min(editorRef.current?.clientWidth || 900, availableWidth)),
       freeResize: mode === 'pinch' ? false : freeResize,
       toolbarWidth,
       toolbarPlacement: rect.top > 65 ? 'top' : 'bottom',
-      moved: false,
-      dropBoundaries: [],
     };
   };
   const renderImageGestureFrame = (gesture: ImageGesture) => {
     if (imageGesture.current !== gesture || !gesture.target.isConnected) return;
     gesture.frame = null;
-    if (gesture.mode === 'move') {
-      const deltaX = gesture.latestX - gesture.x;
-      const deltaY = gesture.latestY - gesture.y;
-      gesture.target.style.transition = 'none';
-      gesture.target.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0) ${gesture.inlineTransform}`.trim();
-      gesture.target.classList.add('noted-image-moving');
-      updateImageOverlayFrame({
-        left: gesture.startRect.left + deltaX,
-        top: gesture.startRect.top + deltaY,
-        width: gesture.startRect.width,
-        height: gesture.startRect.height,
-        right: gesture.startRect.right + deltaX,
-        bottom: gesture.startRect.bottom + deltaY,
-      }, gesture);
-      return;
-    }
     let deltaX = gesture.latestX - gesture.x;
     let deltaY = gesture.latestY - gesture.y;
     if (gesture.mode === 'pinch') {
@@ -1411,9 +1482,7 @@ export function NoteEditor({
     if (!gesture) return;
     if (gesture.frame != null) cancelAnimationFrame(gesture.frame);
     gesture.frame = null;
-    const moved = gesture.mode === 'move'
-      ? gesture.moved
-      : gesture.mode === 'pinch'
+    const moved = gesture.mode === 'pinch'
       ? Math.abs((gesture.latestDistance || gesture.distance || 0) - (gesture.distance || 0)) > 0.5
       : Math.hypot(gesture.latestX - gesture.x, gesture.latestY - gesture.y) > 0.5;
     if (cancelled || !moved) {
@@ -1421,29 +1490,10 @@ export function NoteEditor({
       gesture.target.style.height = gesture.inlineHeight;
       gesture.target.style.marginLeft = gesture.inlineMarginLeft;
       gesture.target.style.marginTop = gesture.inlineMarginTop;
-      gesture.target.style.transform = gesture.inlineTransform;
-      gesture.target.classList.remove('noted-image-moving');
     } else renderImageGestureFrame(gesture);
-    let didMove = false;
-    if (!cancelled && moved && gesture.mode === 'move') {
-      const boundary = gesture.dropBoundaries.reduce<DropBoundary | null>((nearest, candidate) =>
-        !nearest || Math.abs(candidate.y - gesture.latestY) < Math.abs(nearest.y - gesture.latestY) ? candidate : nearest, null);
-      const source = gesture.target;
-      const oldParent = source.parentNode;
-      const oldNext = source.nextSibling;
-      source.style.transform = gesture.inlineTransform;
-      source.classList.remove('noted-image-moving');
-      if (boundary && oldParent && !source.contains(boundary.parent)) {
-        const noOp = boundary.parent === oldParent && (boundary.before === source || boundary.before === oldNext);
-        if (!noOp) {
-          boundary.parent.insertBefore(source, boundary.before);
-          didMove = true;
-        }
-      }
-    }
     imageGesture.current = null;
     gesture.target.style.transition = gesture.inlineTransition;
-    if (didMove || !cancelled && moved && gesture.mode !== 'move' && (Math.abs(gesture.result.width - gesture.w) > 0.5 || Math.abs(gesture.result.height - gesture.h) > 0.5 || Math.abs(gesture.result.offsetX) > 0.5 || Math.abs(gesture.result.offsetY) > 0.5)) commitEditor();
+    if (!cancelled && moved && (Math.abs(gesture.result.width - gesture.w) > 0.5 || Math.abs(gesture.result.height - gesture.h) > 0.5 || Math.abs(gesture.result.offsetX) > 0.5 || Math.abs(gesture.result.offsetY) > 0.5)) commitEditor();
     if (gesture.target.isConnected) setImageFrame(gesture.target.getBoundingClientRect());
     try { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* pointer may already be cancelled */ }
   };
@@ -1455,9 +1505,7 @@ export function NoteEditor({
     gesture.target.style.height = gesture.inlineHeight;
     gesture.target.style.marginLeft = gesture.inlineMarginLeft;
     gesture.target.style.marginTop = gesture.inlineMarginTop;
-    gesture.target.style.transform = gesture.inlineTransform;
     gesture.target.style.transition = gesture.inlineTransition;
-    gesture.target.classList.remove('noted-image-moving');
     imageGesture.current = null;
     if (gesture.target.isConnected) setImageFrame(gesture.target.getBoundingClientRect());
   };
@@ -1473,17 +1521,7 @@ export function NoteEditor({
       imageGesture.current = createImageGesture(img, 'pinch', e.clientX, e.clientY, 'se', Math.hypot(a.x-b.x, a.y-b.y));
       return;
     }
-    if (!desktopPresentation) {
-      // First tap selects. Once selected, direct pointer movement manipulates the image.
-      if (selectedImage !== img) return;
-      e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      const gesture = createImageGesture(img, 'move', e.clientX, e.clientY, 'move');
-      img.style.transition = 'none';
-      gesture.dropBoundaries = collectDropBoundaries(img, true);
-      imageGesture.current = gesture;
-      return;
-    }
+    if (!desktopPresentation) return;
     if (e.pointerType === 'mouse' && selectedImage !== img) {
       suppressMediaClick.current = { source: img, until: performance.now() + 500 };
       selectImage(img);
@@ -1495,16 +1533,6 @@ export function NoteEditor({
     if (!imagePointers.current.has(e.pointerId)) return;
     imagePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const g = imageGesture.current;
-    if (g?.mode === 'move') {
-      g.latestX = e.clientX;
-      g.latestY = e.clientY;
-      if (!g.moved && Math.hypot(g.latestX - g.x, g.latestY - g.y) >= 3) g.moved = true;
-      if (g.moved) {
-        e.preventDefault();
-        queueImageGestureFrame(g);
-      }
-      return;
-    }
     if (g?.mode === 'pinch' && imagePointers.current.size >= 2) {
       const [a, b] = [...imagePointers.current.values()];
       g.latestDistance = Math.hypot(a.x-b.x, a.y-b.y);
@@ -1520,15 +1548,6 @@ export function NoteEditor({
     if (!cancelled && imageGesture.current?.mode === 'pinch' && imagePointers.current.size >= 2) {
       const [a, b] = [...imagePointers.current.values()];
       imageGesture.current.latestDistance = Math.hypot(a.x-b.x, a.y-b.y);
-    }
-    if (imageGesture.current?.mode === 'move') {
-      const gesture = imageGesture.current;
-      gesture.latestX = e.clientX;
-      gesture.latestY = e.clientY;
-      if (!gesture.moved && Math.hypot(gesture.latestX - gesture.x, gesture.latestY - gesture.y) >= 3) gesture.moved = true;
-      imagePointers.current.delete(e.pointerId);
-      finishImageGesture(e, cancelled);
-      return;
     }
     if (cancelled && imageGesture.current?.mode === 'pinch') finishImageGesture(e, true);
     imagePointers.current.delete(e.pointerId);
@@ -2046,7 +2065,10 @@ export function NoteEditor({
 
       {/* Editor area */}
       <div ref={editorScrollRef} className={`flex-1 overflow-y-auto ${desktopPresentation ? 'tanooki-editor-scroll' : 'tanooki-mobile-editor-scroll'}`} onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
-        <div className={desktopPresentation ? 'tanooki-editor-canvas' : 'tanooki-mobile-editor-canvas'} onPointerDown={placeCaretAtBlankTap}>
+        <div className={desktopPresentation ? 'tanooki-editor-canvas' : 'tanooki-mobile-editor-canvas'} onPointerDown={e => {
+          if (!desktopPresentation && e.target === e.currentTarget && selectedImage && armImagePlacement(e)) return;
+          placeCaretAtBlankTap(e);
+        }}>
           {!desktopPresentation && <input value={title} onChange={(event) => handleTitleChange(event.target.value)} onKeyDown={handleMobileTitleKeyDown} onPaste={handlePaste} placeholder="Chưa có tiêu đề" aria-label="Tiêu đề ghi chú" className="tanooki-mobile-editor-document-title" />}
           <div
             ref={editorRef}
@@ -2061,16 +2083,24 @@ export function NoteEditor({
             onKeyUp={rememberCaret}
             onMouseUp={rememberCaret}
             onTouchEnd={rememberCaret}
-            onPointerDown={e => { if ((e.target as HTMLElement).closest('[data-note-checklist-toggle]')) { rememberCaret(); return; } if (e.target === e.currentTarget && placeCaretAtBlankTap(e)) return; if (!canEdit) return; if (!onInlinePointerDown(e)) onImagePointerDown(e); }}
+            onPointerDown={e => {
+              const target = e.target as HTMLElement;
+              if (target.closest('[data-note-checklist-toggle]')) { rememberCaret(); return; }
+              if (!canEdit) return;
+              if (!desktopPresentation && selectedImage && armImagePlacement(e)) return;
+              if (e.target === e.currentTarget && placeCaretAtBlankTap(e)) return;
+              if (!onInlinePointerDown(e)) onImagePointerDown(e);
+            }}
             onPointerMove={e => { if (!canEdit) return; if (!onInlinePointerMove(e)) onImagePointerMove(e); }}
-            onPointerUp={e => { if (!canEdit) return; if (!onInlinePointerEnd(e)) onImagePointerUp(e); rememberCaret(); }}
+            onPointerUp={e => { if (!canEdit) return; if (finishImagePlacementPointer(e)) return; if (!onInlinePointerEnd(e)) onImagePointerUp(e); rememberCaret(); }}
             onPointerCancel={(e) => {
               if (!canEdit) return;
+              if (finishImagePlacementPointer(e, true)) return;
               onInlinePointerEnd(e, true);
               onImagePointerUp(e, true);
             }}
             onLostPointerCapture={e => {
-              if (imageGesture.current?.mode === 'move') finishImageGesture(e, true);
+              if (pendingImagePlacement.current?.pointerId === e.pointerId) pendingImagePlacement.current = null;
             }}
             onContextMenu={(e) => {
               if (!canEdit) return;
@@ -2079,6 +2109,11 @@ export function NoteEditor({
               else if (e.target instanceof HTMLImageElement) { e.preventDefault(); selectImage(e.target); }
             }}
             onClick={(e) => {
+              if (suppressImagePlacementClick.current != null) {
+                const suppressedUntil = suppressImagePlacementClick.current;
+                suppressImagePlacementClick.current = null;
+                if (performance.now() <= suppressedUntil) { e.preventDefault(); e.stopPropagation(); return; }
+              }
               const checklistToggle = (e.target as HTMLElement).closest('[data-note-checklist-toggle]');
               if (checklistToggle) { handleChecklistClick(e); return; }
               const suppressed = suppressMediaClick.current;
@@ -2259,7 +2294,7 @@ export function NoteEditor({
       {selectedImage && imageFrame && <>
         <div ref={imageOutlineRef} className={`noted-image-outline ${desktopPresentation ? '' : 'noted-image-outline-calm'}`} style={desktopPresentation ? { left: imageFrame.left, top: imageFrame.top, width: imageFrame.width, height: imageFrame.height } : { width: imageFrame.width, height: imageFrame.height, transform: `translate3d(${imageFrame.left}px, ${imageFrame.top}px, 0)` }} />
         <div ref={imageToolbarRef} className={`noted-media-toolbar ${desktopPresentation ? '' : 'noted-image-toolbar'}`} style={desktopPresentation ? { left: Math.max(8, Math.min(window.innerWidth - 310, imageFrame.left)), top: Math.max(8, imageFrame.top > 65 ? imageFrame.top - 52 : imageFrame.bottom + 9) } : { transform: `translate3d(${Math.max(8, Math.min(window.innerWidth - 318, imageFrame.left))}px, ${Math.max(8, imageFrame.top > 65 ? imageFrame.top - 52 : imageFrame.bottom + 9)}px, 0)` }}>
-          <button onClick={() => setMoveImageMode(v => !v)} aria-pressed={moveImageMode} title="Kéo để di chuyển"> <Move size={16}/> {moveImageMode ? 'Đang di chuyển' : 'Di chuyển'}</button>
+          {desktopPresentation && <button onClick={() => setMoveImageMode(v => !v)} aria-pressed={moveImageMode} title="Kéo để di chuyển"> <Move size={16}/> {moveImageMode ? 'Đang di chuyển' : 'Di chuyển'}</button>}
           <button onClick={() => {setFreeResize(v=>!v);}} aria-pressed={freeResize} title="Bật hoặc tắt đổi kích thước tự do"><Maximize2 size={16}/> {freeResize ? 'Tự do' : 'Giữ tỷ lệ'}</button>
           <button onClick={() => {setImageViewer(selectedImage.src);setViewerScale(1);}}>Xem trước</button>
           <button onClick={() => duplicateImage(selectedImage)} title="Nhân bản hình ảnh" aria-label="Nhân bản hình ảnh"><Copy size={16}/></button>

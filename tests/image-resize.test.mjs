@@ -76,39 +76,67 @@ test('pinch resize and desktop image reordering preserve pointer capture and rAF
   assert.match(editor, /if \(session\.surface\.hasPointerCapture\(session\.pointerId\)\) session\.surface\.releasePointerCapture/);
 });
 
-test('selected mobile image uses immediate pointer capture and direct rAF translation, without the drag ghost path', () => {
+test('mobile selection no longer starts drag movement while desktop image movement remains intact', () => {
   const down = editor.match(/const onImagePointerDown = \(e: React\.PointerEvent<HTMLDivElement>\) => \{([\s\S]*?)\n  \};/)?.[1];
   assert.ok(down);
-  assert.match(down, /if \(!desktopPresentation\)[\s\S]*?selectedImage !== img\) return;[\s\S]*?setPointerCapture\(e\.pointerId\)[\s\S]*?createImageGesture\(img, 'move'/);
-  assert.match(down, /gesture\.dropBoundaries = collectDropBoundaries\(img, true\)/);
-  const mobileBranch = down.match(/if \(!desktopPresentation\) \{([\s\S]*?)\n    \}/)?.[1];
-  assert.ok(mobileBranch);
-  assert.doesNotMatch(mobileBranch, /armEditorDrag|ghost|setTimeout/);
+  assert.match(down, /if \(!desktopPresentation\) return;/);
   assert.match(down, /armEditorDrag\(e, img, 'image'\);/);
-  const move = editor.match(/const onImagePointerMove = \(e: React\.PointerEvent<HTMLDivElement>\) => \{([\s\S]*?)\n  \};/)?.[1];
-  assert.ok(move);
-  assert.match(move, /g\?\.mode === 'move'[\s\S]*?Math\.hypot\([^;]*\) >= 3[\s\S]*?queueImageGestureFrame\(g\)/);
-  assert.doesNotMatch(move, /commitEditor\(\)|insertBefore|setImageFrame/);
-  assert.match(editor, /gesture\.target\.style\.transform = `translate3d\(\$\{deltaX\}px, \$\{deltaY\}px, 0\)/);
+  assert.doesNotMatch(editor, /createImageGesture\(img, 'move'|noted-image-moving|gesture\.target\.style\.transform = `translate3d\(\$\{deltaX\}/);
 });
 
-test('mobile image move commits one final DOM reorder and pointercancel restores the transient transform', () => {
-  const finish = editor.match(/const finishImageGesture = \([\s\S]*?\n  \};/)?.[0];
-  assert.ok(finish);
-  assert.match(finish, /gesture\.dropBoundaries\.reduce/);
-  assert.match(finish, /boundary\.parent\.insertBefore\(source, boundary\.before\)/);
-  assert.match(finish, /if \(didMove \|\|[\s\S]*?commitEditor\(\)/);
-  assert.match(finish, /cancelled \|\| !moved[\s\S]*?gesture\.target\.style\.transform = gesture\.inlineTransform/);
-  assert.match(editor, /onLostPointerCapture=\{e => \{\s*if \(imageGesture\.current\?\.mode === 'move'\) finishImageGesture\(e, true\);/);
+test('tap placement uses pointer capture without preventing normal vertical scrolling and excludes interactive/media targets', () => {
+  const arm = editor.match(/const armImagePlacement = \(event: React\.PointerEvent<HTMLDivElement>\) => \{([\s\S]*?)\n  \};/)?.[1];
+  assert.ok(arm);
+  assert.match(arm, /target\.closest\('img, \[data-noted-attachment-id\], button, a, input, textarea, select, \[role="button"\], \[data-note-checklist-toggle\], \[contenteditable="false"\], \.noted-media-toolbar, \.noted-image-handle'\)/);
+  assert.match(arm, /editor\.setPointerCapture\(event\.pointerId\)/);
+  assert.doesNotMatch(arm, /preventDefault/);
+  const editorSurface = editor.match(/ref=\{editorRef\}[\s\S]*?onPointerDown=\{e => \{([\s\S]*?)\n            \}\}/)?.[1];
+  assert.ok(editorSurface);
+  assert.match(editorSurface, /target\.closest\('\[data-note-checklist-toggle\]'\)[\s\S]*?armImagePlacement\(e\)/);
+});
+
+test('tap placement moves the existing image node around a valid block and commits once', () => {
+  const placement = editor.match(/const moveSelectedImageToPoint = \(target: HTMLElement, clientX: number, clientY: number\) => \{([\s\S]*?)\n  \};/)?.[1];
+  assert.ok(placement);
+  assert.match(placement, /caretRangeFromPoint|caretPositionFromPoint/);
+  assert.match(placement, /pointElement\.closest<HTMLElement>\('ul, ol'\)/);
+  assert.match(placement, /getImageInsertionSide\(clientY, rect\.top, rect\.bottom\)/);
+  assert.match(placement, /anchor\.parentNode\.insertBefore\(image, side === 'before' \? anchor : anchor\.nextSibling\)/);
+  assert.match(placement, /anchorElement!\.insertBefore\(image, anchorElement!\.firstChild\)/);
+  assert.match(placement, /createBlankBlocksAtY\(clientY\)/);
+  assert.equal((placement.match(/commitEditor\(\)/g) || []).length, 1);
+  assert.doesNotMatch(placement, /cloneNode|uploadNoteImage|setSelectedImage/);
+  assert.match(editor, /const moved = moveSelectedImageToPoint\(pending\.target, event\.clientX, event\.clientY\)/);
+  assert.match(editor, /onPointerUp=\{e => \{ if \(!canEdit\) return; if \(finishImagePlacementPointer\(e\)\) return;/);
+});
+
+test('placement uses upper/lower half ordering and supports capped blank-line generation', async () => {
+  const { getImageInsertionSide, isTapPlacement } = await import('../src/lib/imagePlacement.js');
+  const { getBlankLinesToAppend } = await import('../src/lib/editorBehavior.js');
+  assert.equal(getImageInsertionSide(29, 10, 50), 'before');
+  assert.equal(getImageInsertionSide(31, 10, 50), 'after');
+  assert.equal(isTapPlacement(10, 10, 16, 12), true);
+  assert.equal(isTapPlacement(10, 10, 30, 12), false);
+  assert.match(editor, /getBlankLinesToAppend\(clientY, endY, lineHeight\)/);
+  assert.equal(getBlankLinesToAppend(10000, 100, 20), 32);
+});
+
+test('placement leaves selection and URL on the same image, suppresses follow-up deselection, and keeps normal caret behavior after close', () => {
+  const placement = editor.match(/const moveSelectedImageToPoint = \(target: HTMLElement, clientX: number, clientY: number\) => \{([\s\S]*?)\n  \};/)?.[1];
+  assert.ok(placement);
+  assert.match(placement, /const image = selectedImage/);
+  assert.match(placement, /commitEditor\(\)/);
+  assert.match(placement, /setImageFrame\(image\.getBoundingClientRect\(\)\)/);
+  assert.match(editor, /if \(moved\) suppressImagePlacementClick\.current = performance\.now\(\) \+ 500/);
+  assert.match(editor, /else if \(selectedImage !== e\.target\) selectImage\(e\.target\)/);
+  assert.match(editor, /else \{ clearSelection\(\); rememberCaret\(\); \}/);
+  assert.match(editor, /desktopPresentation && <button onClick=\{\(\) => setMoveImageMode/);
 });
 
 test('mobile normal editor scrolling remains available outside selected images and move toolbar is not a touch blocker', () => {
   assert.match(css, /\.note-content img \{[\s\S]*?touch-action: pan-y/);
-  assert.match(css, /\.note-content img\.noted-image-selected \{[\s\S]*?touch-action: none/);
   assert.match(css, /\.noted-image-toolbar \{ pointer-events: none; \}\s*\.noted-image-toolbar button \{ pointer-events: auto; \}/);
-  const down = editor.match(/const onImagePointerDown = \(e: React\.PointerEvent<HTMLDivElement>\) => \{([\s\S]*?)\n  \};/)?.[1];
-  assert.ok(down);
-  assert.match(down, /if \(!desktopPresentation\) \{[\s\S]*?return;[\s\S]*?\n    \}[\s\S]*?armEditorDrag\(e, img, 'image'\)/);
+  assert.match(editor, /finishImagePlacementPointer\(e\)\) return;[\s\S]*?onImagePointerUp\(e\); rememberCaret\(\)/);
 });
 
 test('image frame is refined while retaining 32px transparent targets around compact visible handles', () => {
