@@ -6,6 +6,7 @@ import { getDashboardActiveNotes, getDashboardPinnedNotes, getDashboardQuickTags
 import { TanookiMark } from '@/components/TanookiBrand';
 import { LiveSearchResults } from '@/components/LiveSearchResults';
 import { normalizeSearchText } from '@/lib/advancedSearch.js';
+import { getEffectiveRecentTime } from '@/lib/recentNotes.js';
 
 interface TanookiDashboardProps {
   notes: Note[];
@@ -15,6 +16,7 @@ interface TanookiDashboardProps {
   onSearchSubmit: (query: string) => void;
   onViewChange: (view: ViewType) => void;
   onOpenNote: (noteId: string) => void;
+  recentOpenedAt?: Record<string, number>;
 }
 
 function greeting() {
@@ -32,10 +34,10 @@ function NoteTags({ note, tags, onOpenTag }: { note: Note; tags: TagInfo[]; onOp
   </div>;
 }
 
-export function TanookiDashboard({ notes, folders, searchQuery, onSearchChange, onSearchSubmit, onViewChange, onOpenNote }: TanookiDashboardProps) {
+export function TanookiDashboard({ notes, folders, searchQuery, onSearchChange, onSearchSubmit, onViewChange, onOpenNote, recentOpenedAt = {} }: TanookiDashboardProps) {
   const activeNotes = getDashboardActiveNotes(notes);
   const pinnedNotes = getDashboardPinnedNotes(activeNotes);
-  const recentNotes = getDashboardRecentNotes(activeNotes);
+  const recentNotes = getDashboardRecentNotes(activeNotes, 5, recentOpenedAt);
   const tags = getAllTags(activeNotes);
   const quickTags = getDashboardQuickTags(tags);
   const hasQuery = Boolean(normalizeSearchText(searchQuery));
@@ -87,7 +89,7 @@ export function TanookiDashboard({ notes, folders, searchQuery, onSearchChange, 
                 <span className="min-w-0 flex-1"><span className="tanooki-dashboard-note-title">{note.title.trim() || 'Chưa có tiêu đề'}</span><span className="tanooki-dashboard-preview">{getPreview(note.content, 90) || 'Chưa có nội dung'}</span></span>
               </button>
               <div className="hidden min-w-0 xl:block"><NoteTags note={note} tags={tags} onOpenTag={openTag} /></div>
-              <span className="hidden whitespace-nowrap text-xs text-tertiary md:block">{formatTime(note.updatedAt)}</span>
+              <span className="hidden whitespace-nowrap text-xs text-tertiary md:block">{recentOpenedAt[note.id] > note.updatedAt ? 'Đã mở' : 'Đã sửa'} {formatTime(getEffectiveRecentTime(note, recentOpenedAt))}</span>
               {note.pinned && <Pin size={15} aria-label="Đã ghim" className="hidden shrink-0 text-accent sm:block" />}
             </div>)}
           </div> : <p className="tanooki-dashboard-empty">Chưa có ghi chú gần đây.</p>}

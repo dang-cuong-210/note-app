@@ -21,6 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { ViewType } from '@/lib/navigation';
 import { getInitialView, getDashboardNoteDestination, shouldAutoSelectNote } from '@/lib/dashboardData.js';
 import { getMobileDestinationAfterView, getMobileFolderState, getMobileNewNoteState, getMobileSearchState, shouldShowMobileBottomNav } from '@/lib/mobileNavigation.js';
+import { getRecentNotes, loadRecentOpenTimes, recordRecentOpen } from '@/lib/recentNotes.js';
 import { getDesktopViewLabel } from '@/lib/desktopWorkspace.js';
 import { getAllTags, noteHasTag, searchNotes } from '@/lib/utils';
 import { cleanupExpiredTrashedNotes, isExpiredTrashedNote } from '@/lib/trashRetention.js';
@@ -39,9 +40,22 @@ function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileDestination, setMobileDestination] = useState<MobileDestination>('home');
+  const [recentOpenState, setRecentOpenState] = useState<{ accountId: string | null; times: Record<string, number> }>({ accountId: null, times: {} });
+  const [recentReturn, setRecentReturn] = useState<{ view: ViewType; selectedNoteId: string | null; mobileDestination: MobileDestination; searchQuery: string } | null>(null);
   const [focusSearchPending, setFocusSearchPending] = useState(false);
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
   const { toast } = useToast();
+  const recentOpenedAt = recentOpenState.accountId === user?.id ? recentOpenState.times : {};
+
+  useEffect(() => {
+    if (!user?.id) {
+      setRecentOpenState({ accountId: null, times: {} });
+      return;
+    }
+    let storage: Storage | null = null;
+    try { storage = window.localStorage; } catch { /* Recent tracking can remain in memory if storage is unavailable. */ }
+    setRecentOpenState({ accountId: user.id, times: loadRecentOpenTimes(storage, user.id) });
+  }, [user?.id]);
   const diagnosticsPanel = import.meta.env.DEV ? (
     <RealtimeDiagnosticsPanel diagnostics={data.realtimeDiagnostics} />
   ) : null;
@@ -141,7 +155,7 @@ function AppContent() {
       }
     });
     const queryFiltered = searchQuery ? searchNotes(visible, searchQuery) : visible;
-    return view.kind === 'recent' ? queryFiltered.sort((a, b) => b.updatedAt - a.updatedAt) : queryFiltered;
+    return view.kind === 'recent' ? getRecentNotes(queryFiltered, recentOpenedAt) : queryFiltered;
   }
 
   const selectedNote = data.notes.find((n) => n.id === selectedNoteId) || null;
@@ -222,7 +236,41 @@ function AppContent() {
 
   const handleSelectNote = (id: string) => {
     setMobileNewNoteId(null);
+    recordNoteOpen(id);
     setSelectedNoteId(id);
+  };
+
+  function recordNoteOpen(id: string) {
+    if (!user?.id) return;
+    let storage: Storage | null = null;
+    try { storage = window.localStorage; } catch { /* Keep opening functional when browser storage is unavailable. */ }
+    const currentTimes = recentOpenState.accountId === user.id ? recentOpenState.times : loadRecentOpenTimes(storage, user.id);
+    const result = recordRecentOpen(storage, user.id, id, Date.now(), currentTimes);
+    if (result.recorded || recentOpenState.accountId !== user.id) setRecentOpenState({ accountId: user.id, times: result.times });
+  }
+
+  const handleNavigateRecent = () => {
+    if (isDesktop) {
+      handleViewChange({ kind: 'recent' });
+      return;
+    }
+    setRecentReturn({ view, selectedNoteId, mobileDestination, searchQuery });
+    setView({ kind: 'recent' });
+    setMobileDestination('search');
+    setSearchQuery('');
+    setSelectedNoteId(null);
+  };
+
+  const handleBackFromRecent = () => {
+    if (!recentReturn) {
+      openMobileHome();
+      return;
+    }
+    setView(recentReturn.view);
+    setSelectedNoteId(recentReturn.selectedNoteId);
+    setMobileDestination(recentReturn.mobileDestination);
+    setSearchQuery(recentReturn.searchQuery);
+    setRecentReturn(null);
   };
 
   // Keyboard shortcuts for common note actions.
@@ -315,7 +363,7 @@ function AppContent() {
   const showMobileWorkspace = !isDesktop && !selectedNoteId && mobileDestination === 'search' && (view.kind === 'folder' || view.kind === 'archived');
   const showEditor = view.kind !== 'settings' && view.kind !== 'trash' && !showHome && !showMobileHome && !showMobileFolders && !showMobileMore && !showMobileWorkspace;
   const showSettings = view.kind === 'settings';
-  const showMobileBottomNav = shouldShowMobileBottomNav(isDesktop, selectedNoteId, view) && mobileDestination !== 'all' && view.kind !== 'trash' && !showMobileWorkspace;
+  const showMobileBottomNav = shouldShowMobileBottomNav(isDesktop, selectedNoteId, view) && mobileDestination !== 'all' && view.kind !== 'trash' && view.kind !== 'recent' && !showMobileWorkspace;
 
   const openMobileSearch = () => {
     setMobileDestination('search');
@@ -421,7 +469,8 @@ function AppContent() {
             onSearchChange={setSearchQuery}
             onSearchSubmit={handleSearchSubmit}
             onViewChange={handleViewChange}
-            onOpenNote={(id) => { const destination = getDashboardNoteDestination(id); setView(destination.view); setSelectedNoteId(destination.selectedNoteId); }}
+            onOpenNote={(id) => { recordNoteOpen(id); const destination = getDashboardNoteDestination(id); setView(destination.view); setSelectedNoteId(destination.selectedNoteId); }}
+            recentOpenedAt={recentOpenedAt}
           />
         ) : showMobileHome ? (
           <MobileHome
@@ -430,7 +479,7 @@ function AppContent() {
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             onSearchSubmit={handleSearchSubmit}
-            onOpenNote={(id) => { const destination = getDashboardNoteDestination(id); setView(destination.view); setMobileDestination('search'); setSelectedNoteId(destination.selectedNoteId); }}
+            onOpenNote={(id) => { recordNoteOpen(id); const destination = getDashboardNoteDestination(id); setView(destination.view); setMobileDestination('search'); setSelectedNoteId(destination.selectedNoteId); }}
             onOpenView={(destination) => {
               if (destination.kind === 'all') {
                 setView(destination);
@@ -523,6 +572,9 @@ function AppContent() {
                 onMove={data.moveNote}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
+            mobileRecentMode={!isDesktop && view.kind === 'recent'}
+            recentOpenedAt={recentOpenedAt}
+            onBackFromRecent={handleBackFromRecent}
                 mobileSearchMode={!isDesktop && mobileDestination === 'search' && view.kind === 'all'}
                 mobileAllNotesMode={!isDesktop && mobileDestination === 'all' && view.kind === 'all'}
                 onBackToHome={openMobileHome}
@@ -550,7 +602,7 @@ function AppContent() {
                 onDuplicate={handleDuplicate}
                 onBack={() => { setMobileNewNoteId(null); setSelectedNoteId(null); }}
                 onCreateNote={createMobileNote}
-                onNavigateRecent={() => handleViewChange({ kind: 'recent' })}
+                onNavigateRecent={handleNavigateRecent}
                 desktopPresentation={isDesktop}
                 startInWritingMode={!isDesktop && mobileNewNoteId === selectedNote?.id}
                 breadcrumb={getDesktopViewLabel(view, data.folders)}

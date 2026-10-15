@@ -1,3 +1,5 @@
+import { getRecentNotes } from './recentNotes.js';
+
 /** Pure dashboard selectors shared by the UI and regression tests. */
 export function getInitialView() {
   return { kind: 'home' };
@@ -20,8 +22,8 @@ export function getDashboardPinnedNotes(notes, limit = 4) {
   return getDashboardActiveNotes(notes).filter((note) => note.pinned).slice(0, limit);
 }
 
-export function getDashboardRecentNotes(notes, limit = 5) {
-  return getDashboardActiveNotes(notes).slice(0, limit);
+export function getDashboardRecentNotes(notes, limit = 5, openedAt = {}) {
+  return getRecentNotes(notes, openedAt).slice(0, limit);
 }
 
 export function getDirectFolderNoteCount(notes, folderId) {

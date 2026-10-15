@@ -66,6 +66,6 @@ test('mobile All Notes layout uses safe-area padding, a scrollable grouped list 
   assert.match(css, /\.tanooki-mobile-all-notes-scroll \{[^}]*overflow-y: auto/);
   assert.match(css, /\.tanooki-mobile-all-notes-folder > span \{[^}]*text-overflow: ellipsis/);
   assert.match(list, /mobileAllNoteGroups\.map\(\(group\) => <section[^>]*>[\s\S]*?<h2>\{group\.label\}<\/h2>/);
-  assert.match(list, /useLayoutEffect\(\(\) => \{\s*if \(mobileAllNotesMode && notesScrollRef\.current\) notesScrollRef\.current\.scrollTop = 0;/);
+  assert.match(list, /useLayoutEffect\(\(\) => \{\s*if \(\(mobileAllNotesMode \|\| mobileRecentMode\) && notesScrollRef\.current\) notesScrollRef\.current\.scrollTop = 0;/);
   assert.match(list, /<div ref=\{notesScrollRef\} className=\{`flex-1 min-h-0 overflow-y-auto/);
 });
