@@ -423,6 +423,15 @@
   -webkit-user-drag: none;
   touch-action: pan-y;
 }
+@media (max-width: 1023px) {
+  .note-content img.noted-image-selected {
+    touch-action: none;
+    cursor: grab;
+  }
+  .note-content img.noted-image-selected.noted-image-moving { cursor: grabbing; }
+  .noted-image-toolbar { pointer-events: none; }
+  .noted-image-toolbar button { pointer-events: auto; }
+}
 .noted-dragging-source {
   opacity: .42 !important;
   user-select: none;

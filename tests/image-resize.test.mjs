@@ -67,13 +67,48 @@ test('resize writes image and selection visuals directly per frame, then commits
   assert.match(finish, /setImageFrame\(gesture\.target\.getBoundingClientRect\(\)\)/);
 });
 
-test('pinch resize and long-press image reordering preserve pointer capture and rAF drag rendering', () => {
-  assert.match(editor, /cancelEditorDrag\(\);\s*e\.currentTarget\.setPointerCapture\(e\.pointerId\);\s*const \[a, b\][\s\S]*?imageGesture\.current = createImageGesture\(img, 'pinch'/);
+test('pinch resize and desktop image reordering preserve pointer capture and rAF drag rendering', () => {
+  assert.match(editor, /cancelEditorDrag\(\);\s*cancelImageGesture\(\);\s*e\.currentTarget\.setPointerCapture\(e\.pointerId\);\s*const \[a, b\][\s\S]*?imageGesture\.current = createImageGesture\(img, 'pinch'/);
   assert.match(editor, /g\.latestDistance = Math\.hypot/);
   assert.match(editor, /if \(desktopPresentation\) resizeImageLegacy\(g\.target, g\.w \* g\.latestDistance/);
   assert.match(editor, /session\.ghost!\.style\.transform = `translate3d/);
   assert.match(editor, /session\.active && session\.frame == null\) \{\s*session\.frame = requestAnimationFrame/);
   assert.match(editor, /if \(session\.surface\.hasPointerCapture\(session\.pointerId\)\) session\.surface\.releasePointerCapture/);
+});
+
+test('selected mobile image uses immediate pointer capture and direct rAF translation, without the drag ghost path', () => {
+  const down = editor.match(/const onImagePointerDown = \(e: React\.PointerEvent<HTMLDivElement>\) => \{([\s\S]*?)\n  \};/)?.[1];
+  assert.ok(down);
+  assert.match(down, /if \(!desktopPresentation\)[\s\S]*?selectedImage !== img\) return;[\s\S]*?setPointerCapture\(e\.pointerId\)[\s\S]*?createImageGesture\(img, 'move'/);
+  assert.match(down, /gesture\.dropBoundaries = collectDropBoundaries\(img, true\)/);
+  const mobileBranch = down.match(/if \(!desktopPresentation\) \{([\s\S]*?)\n    \}/)?.[1];
+  assert.ok(mobileBranch);
+  assert.doesNotMatch(mobileBranch, /armEditorDrag|ghost|setTimeout/);
+  assert.match(down, /armEditorDrag\(e, img, 'image'\);/);
+  const move = editor.match(/const onImagePointerMove = \(e: React\.PointerEvent<HTMLDivElement>\) => \{([\s\S]*?)\n  \};/)?.[1];
+  assert.ok(move);
+  assert.match(move, /g\?\.mode === 'move'[\s\S]*?Math\.hypot\([^;]*\) >= 3[\s\S]*?queueImageGestureFrame\(g\)/);
+  assert.doesNotMatch(move, /commitEditor\(\)|insertBefore|setImageFrame/);
+  assert.match(editor, /gesture\.target\.style\.transform = `translate3d\(\$\{deltaX\}px, \$\{deltaY\}px, 0\)/);
+});
+
+test('mobile image move commits one final DOM reorder and pointercancel restores the transient transform', () => {
+  const finish = editor.match(/const finishImageGesture = \([\s\S]*?\n  \};/)?.[0];
+  assert.ok(finish);
+  assert.match(finish, /gesture\.dropBoundaries\.reduce/);
+  assert.match(finish, /boundary\.parent\.insertBefore\(source, boundary\.before\)/);
+  assert.match(finish, /if \(didMove \|\|[\s\S]*?commitEditor\(\)/);
+  assert.match(finish, /cancelled \|\| !moved[\s\S]*?gesture\.target\.style\.transform = gesture\.inlineTransform/);
+  assert.match(editor, /onLostPointerCapture=\{e => \{\s*if \(imageGesture\.current\?\.mode === 'move'\) finishImageGesture\(e, true\);/);
+});
+
+test('mobile normal editor scrolling remains available outside selected images and move toolbar is not a touch blocker', () => {
+  assert.match(css, /\.note-content img \{[\s\S]*?touch-action: pan-y/);
+  assert.match(css, /\.note-content img\.noted-image-selected \{[\s\S]*?touch-action: none/);
+  assert.match(css, /\.noted-image-toolbar \{ pointer-events: none; \}\s*\.noted-image-toolbar button \{ pointer-events: auto; \}/);
+  const down = editor.match(/const onImagePointerDown = \(e: React\.PointerEvent<HTMLDivElement>\) => \{([\s\S]*?)\n  \};/)?.[1];
+  assert.ok(down);
+  assert.match(down, /if \(!desktopPresentation\) \{[\s\S]*?return;[\s\S]*?\n    \}[\s\S]*?armEditorDrag\(e, img, 'image'\)/);
 });
 
 test('image frame is refined while retaining 32px transparent targets around compact visible handles', () => {

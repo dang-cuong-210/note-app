@@ -98,7 +98,7 @@ type EditorDragSession = {
   mutationObserver: MutationObserver | null;
 };
 type ImageGesture = {
-  mode: 'resize' | 'pinch';
+  mode: 'move' | 'resize' | 'pinch';
   target: HTMLImageElement;
   x: number;
   y: number;
@@ -119,10 +119,13 @@ type ImageGesture = {
   inlineTransition: string;
   inlineMarginLeft: string;
   inlineMarginTop: string;
+  inlineTransform: string;
   maxWidth: number;
   freeResize: boolean;
   toolbarWidth: number;
   toolbarPlacement: 'top' | 'bottom';
+  moved: boolean;
+  dropBoundaries: DropBoundary[];
 };
 const LAYOUT_MARKER = /<!--NOTED_ATTACHMENT_LAYOUT:([^>]*)-->/g;
 const EMPTY_LAYOUT: AttachmentLayout = { order: [], widths: {} };
@@ -459,7 +462,9 @@ export function NoteEditor({
       gesture.target.style.height = gesture.inlineHeight;
       gesture.target.style.marginLeft = gesture.inlineMarginLeft;
       gesture.target.style.marginTop = gesture.inlineMarginTop;
+      gesture.target.style.transform = gesture.inlineTransform;
       gesture.target.style.transition = gesture.inlineTransition;
+      gesture.target.classList.remove('noted-image-moving');
       imageGesture.current = null;
     }
     if (attachmentLongPress.current) clearTimeout(attachmentLongPress.current);
@@ -1274,8 +1279,10 @@ export function NoteEditor({
   };
 
   const selectImage = (img: HTMLImageElement) => {
+    if (selectedImage && selectedImage !== img) selectedImage.classList.remove('noted-image-selected');
     setSelectedAttachmentId(null);
     setSelectedInlineAttachment(null);
+    if (!desktopPresentation) img.classList.add('noted-image-selected');
     setSelectedImage(img);
     setImageFrame(img.getBoundingClientRect());
   };
@@ -1287,9 +1294,12 @@ export function NoteEditor({
       gesture.target.style.height = gesture.inlineHeight;
       gesture.target.style.marginLeft = gesture.inlineMarginLeft;
       gesture.target.style.marginTop = gesture.inlineMarginTop;
+      gesture.target.style.transform = gesture.inlineTransform;
       gesture.target.style.transition = gesture.inlineTransition;
+      gesture.target.classList.remove('noted-image-moving');
       imageGesture.current = null;
     }
+    selectedImage?.classList.remove('noted-image-selected');
     setSelectedImage(null);
     setImageFrame(null);
     setSelectedAttachmentId(null);
@@ -1332,15 +1342,34 @@ export function NoteEditor({
       inlineWidth: img.style.width, inlineHeight: img.style.height,
       inlineTransition: img.style.transition,
       inlineMarginLeft: img.style.marginLeft, inlineMarginTop: img.style.marginTop,
+      inlineTransform: img.style.transform,
       maxWidth: Math.max(1, Math.min(editorRef.current?.clientWidth || 900, availableWidth)),
       freeResize: mode === 'pinch' ? false : freeResize,
       toolbarWidth,
       toolbarPlacement: rect.top > 65 ? 'top' : 'bottom',
+      moved: false,
+      dropBoundaries: [],
     };
   };
   const renderImageGestureFrame = (gesture: ImageGesture) => {
     if (imageGesture.current !== gesture || !gesture.target.isConnected) return;
     gesture.frame = null;
+    if (gesture.mode === 'move') {
+      const deltaX = gesture.latestX - gesture.x;
+      const deltaY = gesture.latestY - gesture.y;
+      gesture.target.style.transition = 'none';
+      gesture.target.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0) ${gesture.inlineTransform}`.trim();
+      gesture.target.classList.add('noted-image-moving');
+      updateImageOverlayFrame({
+        left: gesture.startRect.left + deltaX,
+        top: gesture.startRect.top + deltaY,
+        width: gesture.startRect.width,
+        height: gesture.startRect.height,
+        right: gesture.startRect.right + deltaX,
+        bottom: gesture.startRect.bottom + deltaY,
+      }, gesture);
+      return;
+    }
     let deltaX = gesture.latestX - gesture.x;
     let deltaY = gesture.latestY - gesture.y;
     if (gesture.mode === 'pinch') {
@@ -1382,7 +1411,9 @@ export function NoteEditor({
     if (!gesture) return;
     if (gesture.frame != null) cancelAnimationFrame(gesture.frame);
     gesture.frame = null;
-    const moved = gesture.mode === 'pinch'
+    const moved = gesture.mode === 'move'
+      ? gesture.moved
+      : gesture.mode === 'pinch'
       ? Math.abs((gesture.latestDistance || gesture.distance || 0) - (gesture.distance || 0)) > 0.5
       : Math.hypot(gesture.latestX - gesture.x, gesture.latestY - gesture.y) > 0.5;
     if (cancelled || !moved) {
@@ -1390,12 +1421,45 @@ export function NoteEditor({
       gesture.target.style.height = gesture.inlineHeight;
       gesture.target.style.marginLeft = gesture.inlineMarginLeft;
       gesture.target.style.marginTop = gesture.inlineMarginTop;
+      gesture.target.style.transform = gesture.inlineTransform;
+      gesture.target.classList.remove('noted-image-moving');
     } else renderImageGestureFrame(gesture);
+    let didMove = false;
+    if (!cancelled && moved && gesture.mode === 'move') {
+      const boundary = gesture.dropBoundaries.reduce<DropBoundary | null>((nearest, candidate) =>
+        !nearest || Math.abs(candidate.y - gesture.latestY) < Math.abs(nearest.y - gesture.latestY) ? candidate : nearest, null);
+      const source = gesture.target;
+      const oldParent = source.parentNode;
+      const oldNext = source.nextSibling;
+      source.style.transform = gesture.inlineTransform;
+      source.classList.remove('noted-image-moving');
+      if (boundary && oldParent && !source.contains(boundary.parent)) {
+        const noOp = boundary.parent === oldParent && (boundary.before === source || boundary.before === oldNext);
+        if (!noOp) {
+          boundary.parent.insertBefore(source, boundary.before);
+          didMove = true;
+        }
+      }
+    }
     imageGesture.current = null;
     gesture.target.style.transition = gesture.inlineTransition;
-    if (!cancelled && moved && (Math.abs(gesture.result.width - gesture.w) > 0.5 || Math.abs(gesture.result.height - gesture.h) > 0.5 || Math.abs(gesture.result.offsetX) > 0.5 || Math.abs(gesture.result.offsetY) > 0.5)) commitEditor();
+    if (didMove || !cancelled && moved && gesture.mode !== 'move' && (Math.abs(gesture.result.width - gesture.w) > 0.5 || Math.abs(gesture.result.height - gesture.h) > 0.5 || Math.abs(gesture.result.offsetX) > 0.5 || Math.abs(gesture.result.offsetY) > 0.5)) commitEditor();
     if (gesture.target.isConnected) setImageFrame(gesture.target.getBoundingClientRect());
     try { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* pointer may already be cancelled */ }
+  };
+  const cancelImageGesture = () => {
+    const gesture = imageGesture.current;
+    if (!gesture) return;
+    if (gesture.frame != null) cancelAnimationFrame(gesture.frame);
+    gesture.target.style.width = gesture.inlineWidth;
+    gesture.target.style.height = gesture.inlineHeight;
+    gesture.target.style.marginLeft = gesture.inlineMarginLeft;
+    gesture.target.style.marginTop = gesture.inlineMarginTop;
+    gesture.target.style.transform = gesture.inlineTransform;
+    gesture.target.style.transition = gesture.inlineTransition;
+    gesture.target.classList.remove('noted-image-moving');
+    imageGesture.current = null;
+    if (gesture.target.isConnected) setImageFrame(gesture.target.getBoundingClientRect());
   };
   const onImagePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!(e.target instanceof HTMLImageElement)) return;
@@ -1403,9 +1467,21 @@ export function NoteEditor({
     imagePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (selectedImage === img && imagePointers.current.size >= 2) {
       cancelEditorDrag();
+      cancelImageGesture();
       e.currentTarget.setPointerCapture(e.pointerId);
       const [a, b] = [...imagePointers.current.values()];
       imageGesture.current = createImageGesture(img, 'pinch', e.clientX, e.clientY, 'se', Math.hypot(a.x-b.x, a.y-b.y));
+      return;
+    }
+    if (!desktopPresentation) {
+      // First tap selects. Once selected, direct pointer movement manipulates the image.
+      if (selectedImage !== img) return;
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const gesture = createImageGesture(img, 'move', e.clientX, e.clientY, 'move');
+      img.style.transition = 'none';
+      gesture.dropBoundaries = collectDropBoundaries(img, true);
+      imageGesture.current = gesture;
       return;
     }
     if (e.pointerType === 'mouse' && selectedImage !== img) {
@@ -1419,6 +1495,16 @@ export function NoteEditor({
     if (!imagePointers.current.has(e.pointerId)) return;
     imagePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const g = imageGesture.current;
+    if (g?.mode === 'move') {
+      g.latestX = e.clientX;
+      g.latestY = e.clientY;
+      if (!g.moved && Math.hypot(g.latestX - g.x, g.latestY - g.y) >= 3) g.moved = true;
+      if (g.moved) {
+        e.preventDefault();
+        queueImageGestureFrame(g);
+      }
+      return;
+    }
     if (g?.mode === 'pinch' && imagePointers.current.size >= 2) {
       const [a, b] = [...imagePointers.current.values()];
       g.latestDistance = Math.hypot(a.x-b.x, a.y-b.y);
@@ -1434,6 +1520,15 @@ export function NoteEditor({
     if (!cancelled && imageGesture.current?.mode === 'pinch' && imagePointers.current.size >= 2) {
       const [a, b] = [...imagePointers.current.values()];
       imageGesture.current.latestDistance = Math.hypot(a.x-b.x, a.y-b.y);
+    }
+    if (imageGesture.current?.mode === 'move') {
+      const gesture = imageGesture.current;
+      gesture.latestX = e.clientX;
+      gesture.latestY = e.clientY;
+      if (!gesture.moved && Math.hypot(gesture.latestX - gesture.x, gesture.latestY - gesture.y) >= 3) gesture.moved = true;
+      imagePointers.current.delete(e.pointerId);
+      finishImageGesture(e, cancelled);
+      return;
     }
     if (cancelled && imageGesture.current?.mode === 'pinch') finishImageGesture(e, true);
     imagePointers.current.delete(e.pointerId);
@@ -1973,6 +2068,9 @@ export function NoteEditor({
               if (!canEdit) return;
               onInlinePointerEnd(e, true);
               onImagePointerUp(e, true);
+            }}
+            onLostPointerCapture={e => {
+              if (imageGesture.current?.mode === 'move') finishImageGesture(e, true);
             }}
             onContextMenu={(e) => {
               if (!canEdit) return;
