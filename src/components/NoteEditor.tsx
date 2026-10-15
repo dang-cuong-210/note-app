@@ -47,6 +47,7 @@ import { MobileFormattingSheet } from '@/components/MobileFormattingSheet';
 import { NoteTagManager } from '@/components/NoteTagManager';
 import { MOBILE_FORMATTING_GROUPS, setChecklistItemChecked } from '@/lib/mobileFormatting.js';
 import { getBlankLinesToAppend, isMeaningfulNoteContent } from '@/lib/editorBehavior.js';
+import { MobileDrawingMarkup } from '@/components/MobileDrawingMarkup';
 
 // Attachment display settings travel inside note HTML, so no database migration is needed.
 // The marker is a comment, never a visible or editable element.
@@ -180,6 +181,7 @@ export function NoteEditor({
   const [mobileFindIndex, setMobileFindIndex] = useState(-1);
   const [mobileFindCount, setMobileFindCount] = useState(0);
   const [mobilePaperMode, setMobilePaperMode] = useState(false);
+  const [drawingOpen, setDrawingOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [imageViewer, setImageViewer] = useState<string | null>(null);
   const [uploadsInProgress, setUploadsInProgress] = useState(0);
@@ -225,6 +227,7 @@ export function NoteEditor({
     setMobileFindIndex(-1);
     setMobileFindCount(0);
     setMobilePaperMode(false);
+    setDrawingOpen(false);
   }, [note?.id]);
 
   useEffect(() => {
@@ -2073,7 +2076,7 @@ export function NoteEditor({
       {!desktopPresentation && <nav className="tanooki-mobile-editor-bottom-bar" aria-label="Công cụ ghi chú">
         <button type="button" onPointerDown={rememberCaret} onClick={() => { rememberCaret(); refreshActiveFormatting(); setMobileSheet('formatting'); }} aria-label="Định dạng và checklist" title="Định dạng và checklist"><ListChecks size={25} /></button>
         <button type="button" onPointerDown={rememberCaret} onClick={() => mobileAttachmentInputRef.current?.click()} aria-label="Đính kèm" title="Đính kèm"><Paperclip size={25} /></button>
-        <button type="button" onClick={() => toast('Vẽ và đánh dấu sẽ hỗ trợ sau')} aria-label="Vẽ và đánh dấu" title="Vẽ và đánh dấu"><PenTool size={25} /></button>
+        <button type="button" onPointerDown={rememberCaret} onClick={() => { rememberCaret(); setDrawingOpen(true); }} aria-label="Vẽ và đánh dấu" title="Vẽ và đánh dấu"><PenTool size={25} /></button>
         <button type="button" onClick={onCreateNote} aria-label="Tạo ghi chú mới" title="Tạo ghi chú mới"><SquarePen size={25} /></button>
       </nav>}
 
@@ -2086,6 +2089,12 @@ export function NoteEditor({
         <MobileAttachmentBrowserSheet open={mobileSheet === 'attachment-browser'} onClose={() => setMobileSheet(null)} attachments={attachments} images={mobileInlineImages} onOpen={(attachment) => void handleOpenAttachment(attachment)} onRename={renameAttachment} onShare={(attachment) => void handleShareAttachment(attachment)} onDelete={(attachment) => void handleDeleteAttachment(attachment)} onOpenImage={(image) => { setImageViewer(image.src); setViewerScale(1); }} onShareImage={(image) => void handleShareInlineImage(image)} onDeleteImage={(image) => handleRemoveImage(image.src)} />
         <MobileEditorMoreSheet note={note} folders={folders} open={mobileSheet === 'actions'} onClose={() => setMobileSheet(null)} onTogglePin={onTogglePin} onArchive={onArchive} onMove={onMove} onDuplicate={onDuplicate} onTrash={onTrash} onFind={openMobileFind} onPlaceholder={() => toast('Sẽ hỗ trợ sau')} onNavigateRecent={() => { flushCurrentDraft(); onNavigateRecent(); }} onTogglePaper={() => { setMobileSheet(null); setMobilePaperMode((value) => !value); }} onShowAttachments={handleShowAttachments} paperMode={mobilePaperMode} />
       </>}
+
+      {!desktopPresentation && drawingOpen && <MobileDrawingMarkup
+        onCancel={() => setDrawingOpen(false)}
+        onBlankDone={() => { setDrawingOpen(false); toast('Chưa có nét vẽ để thêm'); }}
+        onDone={(image) => { setDrawingOpen(false); void handleImageUpload(image); }}
+      />}
 
       {/* Image viewer modal */}
       {imageViewer && (
