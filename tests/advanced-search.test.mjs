@@ -7,6 +7,7 @@ import {
   getSearchSnippet,
   highlightSegments,
   normalizeSearchText,
+  rankSearchRecords,
   sortSearchNotes,
   stripHtmlToText,
 } from '../src/lib/advancedSearch.js';
@@ -53,6 +54,15 @@ test('body snippets center on the match and safe highlight segments preserve ori
     { text: 'Dùng ', match: false }, { text: 'sUpAbAsE', match: true }, { text: ' hôm nay', match: false },
   ]);
   assert.deepEqual(highlightSegments('<img>', ''), [{ text: '<img>', match: false }]);
+  assert.deepEqual(highlightSegments('Regex [note]+ text', '[note]+'), [
+    { text: 'Regex ', match: false }, { text: '[note]+', match: true }, { text: ' text', match: false },
+  ]);
+});
+
+test('checklist labels are searchable as plain body text', () => {
+  const checklist = buildSearchRecords([note('check', { content: '<ul><li><input type="checkbox" checked>Chuẩn bị hành lý</li></ul>' })]);
+  assert.equal(checklist[0].bodyText, 'Chuẩn bị hành lý');
+  assert.deepEqual(filterSearchRecords(checklist, { query: 'hành lý' }, { kind: 'all' }).map((record) => record.note.id), ['check']);
 });
 
 test('folder, no-folder, tag, pinned and combined filters refine the active view', () => {
@@ -115,4 +125,31 @@ test('partial live queries update results immediately and clearing only the quer
   assert.deepEqual(filterSearchRecords(records, { ...filters, query: 'Nh' }, { kind: 'all' }).map((r) => r.note.id), ['nhap', 'nhat']);
   assert.deepEqual(filterSearchRecords(records, { ...filters, query: 'Nhá' }, { kind: 'all' }).map((r) => r.note.id), ['nhap']);
   assert.deepEqual(filterSearchRecords(records, { ...filters, query: '' }, { kind: 'all' }).map((r) => r.note.id), ['nhap', 'nhat']);
+});
+
+test('search relevance ranks exact, prefix, title, then body matches with recency ties', () => {
+  const values = [
+    note('body-new', { title: 'Other', content: '<ul><li>alpha beta</li></ul>', updatedAt: 100 }),
+    note('contains-old', { title: 'An alpha beta note', updatedAt: 1 }),
+    note('prefix', { title: 'Alpha beta extra', updatedAt: 1 }),
+    note('exact-old', { title: 'ALPHA BETA', updatedAt: 2 }),
+    note('exact-new', { title: 'alpha beta', updatedAt: 5 }),
+  ];
+  const records = buildSearchRecords(values);
+  assert.deepEqual(filterSearchRecords(records, { query: 'alpha beta' }, { kind: 'all' }).map((record) => record.note.id), ['body-new', 'contains-old', 'prefix', 'exact-old', 'exact-new']);
+  assert.deepEqual(rankSearchRecords(records, 'ALPHA BETA').map((record) => record.note.id), ['exact-new', 'exact-old', 'prefix', 'contains-old', 'body-new']);
+  assert.deepEqual(rankSearchRecords(buildSearchRecords([note('special', { title: 'Regex [note]+' })]), '[note]+').map((record) => record.note.id), ['special']);
+  assert.deepEqual(rankSearchRecords(records, '').map((record) => record.note.id), values.map((value) => value.id));
+});
+
+test('recently updated filter is limited to seven days and keeps pinned/archive rules', () => {
+  const now = 20 * 24 * 60 * 60 * 1000;
+  const records = buildSearchRecords([
+    note('recent', { updatedAt: now - 1000 }),
+    note('old', { updatedAt: now - 8 * 24 * 60 * 60 * 1000 }),
+    note('archived', { archived: true, updatedAt: now }),
+    note('trash', { trashed: true, updatedAt: now }),
+  ]);
+  assert.deepEqual(filterSearchRecords(records, { recentlyUpdated: true, now }, { kind: 'all' }).map((record) => record.note.id), ['recent']);
+  assert.deepEqual(filterSearchRecords(records, { pinned: 'pinned', recentlyUpdated: true, now }, { kind: 'all' }), []);
 });

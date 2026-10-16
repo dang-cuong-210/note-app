@@ -20,3 +20,19 @@ test('Home search fields update live results without a submit action', async () 
   assert.match(noteList, /onChange=\{\(e\) => onSearchChange\(e\.target\.value\)\}/);
   assert.match(noteList, /query: searchQuery,[\s\S]*folderId: folderFilter,[\s\S]*tag: tagFilter,[\s\S]*pinned: pinnedFilter/);
 });
+
+test('mobile Search keeps recent queries local, preserves the existing note-open path, and exposes focus/filter states', async () => {
+  const noteList = await readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8');
+  const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const recentSearches = await readFile(new URL('../src/lib/recentSearches.js', import.meta.url), 'utf8');
+  assert.match(noteList, /Tìm kiếm gần đây/);
+  assert.match(noteList, /Chưa có tìm kiếm gần đây/);
+  assert.match(noteList, /onClick=\{forgetAllRecentSearches\}/);
+  assert.match(noteList, /onClick=\{\(\) => \{ onSearchChange\(query\); searchInputRef\.current\?\.focus/);
+  assert.match(noteList, /onOpen=\{\(\) => onSelectNote\(note\.id\)\}/);
+  assert.match(noteList, /Cập nhật trong 7 ngày/);
+  assert.match(noteList, /Không tìm thấy ghi chú/);
+  assert.match(app, /searchAccountId=\{user\?\.id \?\? null\}/);
+  assert.match(recentSearches, /RECENT_SEARCH_LIMIT = 8/);
+  assert.match(recentSearches, /toLocaleLowerCase\(\)/);
+});

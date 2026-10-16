@@ -73,7 +73,7 @@ function isInView(note, view) {
 
 function extractTagsFromHtml(html) { return extractTagsFromContent(html); }
 
-export function filterSearchRecords(records, { query = '', folderId = 'all', tag = 'all', pinned = 'all', archive = 'current' } = {}, view) {
+export function filterSearchRecords(records, { query = '', folderId = 'all', tag = 'all', pinned = 'all', archive = 'current', recentlyUpdated = false, now = Date.now() } = {}, view) {
   const normalizedQuery = normalizeSearchText(query);
   return records.filter(({ note, titleNormalized, bodyNormalized, tags }) => {
     const inScope = view.kind === 'all'
@@ -86,8 +86,27 @@ export function filterSearchRecords(records, { query = '', folderId = 'all', tag
     if (tag !== 'all' && !tags.includes(tag)) return false;
     if (pinned === 'pinned' && !note.pinned) return false;
     if (pinned === 'unpinned' && note.pinned) return false;
+    if (recentlyUpdated && (!Number.isFinite(note.updatedAt) || note.updatedAt < now - 7 * 24 * 60 * 60 * 1000)) return false;
     return !normalizedQuery || titleNormalized.includes(normalizedQuery) || bodyNormalized.includes(normalizedQuery);
   });
+}
+
+export function rankSearchRecords(records, query) {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return records;
+  const rank = ({ titleNormalized, bodyNormalized }) => {
+    if (titleNormalized === normalizedQuery) return 0;
+    if (titleNormalized.startsWith(normalizedQuery)) return 1;
+    if (titleNormalized.includes(normalizedQuery)) return 2;
+    if (bodyNormalized.includes(normalizedQuery)) return 3;
+    return 4;
+  };
+  return records.map((record, index) => ({ record, index }))
+    .sort((left, right) => rank(left.record) - rank(right.record)
+      || (right.record.note.updatedAt || 0) - (left.record.note.updatedAt || 0)
+      || left.record.note.id.localeCompare(right.record.note.id)
+      || left.index - right.index)
+    .map(({ record }) => record);
 }
 
 export function sortSearchNotes(notes, mode = 'updated', promotePinned = false) {

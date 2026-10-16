@@ -627,6 +627,7 @@ function AppContent() {
                 onMove={data.moveNote}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
+                searchAccountId={user?.id ?? null}
             mobileRecentMode={!isDesktop && view.kind === 'recent'}
             recentOpenedAt={recentOpenedAt}
             onBackFromRecent={handleBackFromRecent}
