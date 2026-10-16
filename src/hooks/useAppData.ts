@@ -8,6 +8,7 @@ import { deleteAllNoteImages } from '@/lib/images';
 import { createAttachmentSync } from '@/lib/attachmentSync';
 import { createFolderSync, mapRemoteFolder, type FolderRecord } from '@/lib/folderSync';
 import { canDiscardUnsentDraftOffline } from '@/lib/editorBehavior.js';
+import { removeFolderAndPromoteChildren } from '@/lib/folderHierarchy.js';
 import {
   uploadAttachment,
   deleteAttachment,
@@ -1269,7 +1270,10 @@ export function useAppData(userId: string | null) {
   const removeFolder = useCallback(
     (id: string) => {
       if (!userId || activeAccountId.current !== userId) return;
-      setFolders((prev) => prev.filter((f) => f.id !== id));
+      const removedFolder = folders.find((folder) => folder.id === id);
+      const updatedHierarchy = removeFolderAndPromoteChildren(folders, id);
+      setFolders(updatedHierarchy.folders);
+      updatedHierarchy.reparented.forEach(saveFolder);
       // Move notes in this folder to no folder
       setNotes((prev) =>
         prev.map((n) => {
@@ -1279,13 +1283,12 @@ export function useAppData(userId: string | null) {
           return updated;
         })
       );
-      const folder = folders.find((f) => f.id === id);
       const session = folderSync.current;
-      if (folder && session) void session.remove(folder).then(() => {
+      if (removedFolder && session) void session.remove(removedFolder).then(() => {
         if (navigator.onLine) void session.flush();
       }).catch(() => {});
     },
-    [saveNote, folders, userId]
+    [saveNote, saveFolder, folders, userId]
   );
 
   // ===== Settings =====

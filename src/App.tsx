@@ -432,6 +432,25 @@ function AppContent() {
     setSearchQuery('');
     setSelectedNoteId(null);
   };
+  const openMobileFolderFromOverview = (id: string) => {
+    const destination = getMobileFolderState(id);
+    setView(destination.view);
+    setMobileDestination(destination.destination);
+    setSearchQuery('');
+    setSelectedNoteId(null);
+  };
+  const handleBackFromMobileFolder = () => {
+    if (view.kind === 'folder') {
+      const parentId = data.folders.find((folder) => folder.id === view.id)?.parentId;
+      if (parentId && data.folders.some((folder) => folder.id === parentId)) {
+        setView({ kind: 'folder', id: parentId });
+        setMobileDestination('search');
+        setSelectedNoteId(null);
+        return;
+      }
+    }
+    openMobileHome();
+  };
   const createMobileNote = () => {
     const note = registerNewDraft(data.addNote(null));
     setMobileNewNoteId(note.id);
@@ -545,7 +564,7 @@ function AppContent() {
               }
               handleViewChange(destination);
             }}
-            onOpenFolder={(id) => { const destination = getMobileFolderState(id); setView(destination.view); setMobileDestination(destination.destination); setSearchQuery(''); setSelectedNoteId(destination.selectedNoteId); }}
+            onOpenFolder={openMobileFolderFromOverview}
             onAddFolder={data.addFolder}
             onCreateNote={createMobileNote}
           />
@@ -553,7 +572,7 @@ function AppContent() {
           <MobileFoldersView
             folders={data.folders}
             notes={data.notes}
-            onOpenFolder={(id) => { const destination = getMobileFolderState(id); setView(destination.view); setMobileDestination(destination.destination); setSelectedNoteId(destination.selectedNoteId); }}
+            onOpenFolder={openMobileFolderFromOverview}
             onAddFolder={data.addFolder}
           />
         ) : showMobileMore ? (
@@ -580,8 +599,8 @@ function AppContent() {
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             mobileWorkspaceMode
-            onBackToHome={openMobileHome}
-            onOpenFolder={(id) => { const destination = getMobileFolderState(id); setView(destination.view); setMobileDestination(destination.destination); setSearchQuery(''); setSelectedNoteId(null); }}
+            onBackToHome={handleBackFromMobileFolder}
+            onOpenFolder={(id) => { setView({ kind: 'folder', id }); setMobileDestination('search'); setSelectedNoteId(null); }}
             onAddFolder={data.addFolder}
             onRenameFolder={data.renameFolder}
             onDeleteFolder={deleteMobileWorkspaceFolder}

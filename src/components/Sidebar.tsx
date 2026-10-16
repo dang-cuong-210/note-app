@@ -18,6 +18,7 @@ import {
 import type { Folder, Note } from '@/types';
 import type { ViewType } from '@/lib/navigation';
 import { getAllTags } from '@/lib/utils';
+import { getFolderHierarchy } from '@/lib/folderHierarchy.js';
 
 interface SidebarProps {
   notes: Note[];
@@ -88,7 +89,7 @@ export function Sidebar({
   };
 
   const handleDeleteFolder = (id: string, name: string) => {
-    if (window.confirm(`Xóa thư mục "${name}"? Các ghi chú bên trong sẽ được chuyển về Tất cả ghi chú.`)) {
+    if (window.confirm(`Xóa thư mục "${name}"? Ghi chú trực tiếp sẽ được chuyển về Tất cả ghi chú; thư mục con sẽ được chuyển lên cấp cha.`)) {
       onDeleteFolder(id);
     }
     setFolderMenuFor(null);
@@ -210,11 +211,11 @@ export function Sidebar({
                   Chưa có thư mục
                 </p>
               )}
-              {folders.map((folder) => {
+              {getFolderHierarchy(folders).map(({ folder, depth }) => {
                 const count = activeNotes.filter((n) => n.folderId === folder.id && !n.archived).length;
                 const active = isActive({ kind: 'folder', id: folder.id });
                 return (
-                  <div key={folder.id} className="group relative">
+                  <div key={folder.id} className="group relative" style={{ marginLeft: depth ? `${depth * 12}px` : undefined }}>
                     {editingFolder === folder.id ? (
                       <input
                         autoFocus

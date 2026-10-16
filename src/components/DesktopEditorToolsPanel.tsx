@@ -2,6 +2,7 @@ import { Archive, ArchiveRestore, CalendarDays, FileText, Folder, Hash, Pin, X }
 import type { Attachment, Folder as NoteFolder, Note } from '@/types';
 import { getDesktopNoteProperties } from '@/lib/desktopWorkspace.js';
 import { extractTags, htmlToText } from '@/lib/utils';
+import { getFolderHierarchy, getFolderOptionLabel } from '@/lib/folderHierarchy.js';
 
 interface DesktopEditorToolsPanelProps {
   note: Note;
@@ -33,7 +34,7 @@ export function DesktopEditorToolsPanel({ note, folders, attachments, onClose, i
       <label className="tanooki-tools-folder"><span><Folder size={16} /> Chuyển thư mục</span>
         <select aria-label="Chuyển thư mục" value={note.folderId || ''} onChange={(event) => onMove(note.id, event.target.value || null)}>
           <option value="">Không có thư mục</option>
-          {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+          {getFolderHierarchy(folders).map(({ folder, depth }) => <option key={folder.id} value={folder.id}>{getFolderOptionLabel(folder, depth)}</option>)}
         </select>
       </label>
     </section>

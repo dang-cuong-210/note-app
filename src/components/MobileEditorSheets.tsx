@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Archive, ArchiveRestore, Calculator, CalendarDays, Clock3, Copy, File, FileText, Folder, Grid2X2, Hash, Image, LockKeyhole, MoreHorizontal, Paperclip, Pin, ScanLine, Search, Share2, Sun, Trash2, Video, X, Edit3 } from 'lucide-react';
 import type { Attachment, Folder as NoteFolder, Note } from '@/types';
+import { getFolderHierarchy, getFolderOptionLabel } from '@/lib/folderHierarchy.js';
 import { getDesktopNoteProperties } from '@/lib/desktopWorkspace.js';
 import { extractTags, htmlToText } from '@/lib/utils';
 import { NoteTagManager } from '@/components/NoteTagManager';
@@ -179,7 +180,7 @@ export function MobileEditorMoreSheet({ note, folders, open, onClose, onTogglePi
     </div>
     <div className="tanooki-mobile-note-menu-list">
       <button type="button" onClick={() => run(onFind)}><Search size={19} /><span>Tìm trong ghi chú</span></button>
-      {moving ? <label className="tanooki-mobile-note-menu-move"><Folder size={19} /><span>Di chuyển ghi chú</span><select aria-label="Di chuyển ghi chú" value={note.folderId || ''} onChange={(event) => run(() => onMove(note.id, event.target.value || null))}><option value="">Không có thư mục</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label> : <button type="button" onClick={() => setMoving(true)}><Folder size={19} /><span>Di chuyển ghi chú</span></button>}
+      {moving ? <label className="tanooki-mobile-note-menu-move"><Folder size={19} /><span>Di chuyển ghi chú</span><select aria-label="Di chuyển ghi chú" value={note.folderId || ''} onChange={(event) => run(() => onMove(note.id, event.target.value || null))}><option value="">Không có thư mục</option>{getFolderHierarchy(folders).map(({ folder, depth }) => <option key={folder.id} value={folder.id}>{getFolderOptionLabel(folder, depth)}</option>)}</select></label> : <button type="button" onClick={() => setMoving(true)}><Folder size={19} /><span>Di chuyển ghi chú</span></button>}
       <button type="button" onClick={onPlaceholder}><Calculator size={19} /><span>Kết quả toán học</span></button>
       <button type="button" onClick={() => run(onNavigateRecent)}><Clock3 size={19} /><span>Ghi chú gần đây</span></button>
       <button type="button" onClick={onPlaceholder}><Grid2X2 size={19} /><span>Đường kẻ &amp; lưới</span></button>
@@ -211,7 +212,7 @@ export function MobileNoteActionsSheet({ note, folders, open, onClose, onToggleP
     <div className="tanooki-mobile-sheet-actions">
       <button type="button" onClick={() => run(() => onTogglePin(note.id))}><Pin size={19} />{note.pinned ? 'Bỏ ghim' : 'Ghim'}</button>
       <button type="button" onClick={() => run(() => onArchive(note.id, !note.archived))}>{note.archived ? <ArchiveRestore size={19} /> : <Archive size={19} />}{note.archived ? 'Bỏ lưu trữ' : 'Lưu trữ'}</button>
-      <label className="tanooki-mobile-sheet-select"><span><Folder size={19} /> Chuyển thư mục</span><select aria-label="Chuyển thư mục" value={note.folderId || ''} onChange={(event) => run(() => onMove(note.id, event.target.value || null))}><option value="">Không có thư mục</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>
+      <label className="tanooki-mobile-sheet-select"><span><Folder size={19} /> Chuyển thư mục</span><select aria-label="Chuyển thư mục" value={note.folderId || ''} onChange={(event) => run(() => onMove(note.id, event.target.value || null))}><option value="">Không có thư mục</option>{getFolderHierarchy(folders).map(({ folder, depth }) => <option key={folder.id} value={folder.id}>{getFolderOptionLabel(folder, depth)}</option>)}</select></label>
       <button type="button" onClick={() => run(() => onDuplicate(note.id))}><Copy size={19} />Tạo bản sao</button>
       <button type="button" className="is-danger" onClick={() => run(() => onTrash(note.id))}><Trash2 size={19} />Chuyển vào thùng rác</button>
     </div>

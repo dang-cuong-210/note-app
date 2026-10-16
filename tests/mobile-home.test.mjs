@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { getMobileHomeCounts, getMobileHomeFolderCount, getMatchingMobileHomeFolders } from '../src/lib/mobileHome.js';
 import { getMobileFolderState, shouldShowMobileBottomNav } from '../src/lib/mobileNavigation.js';
+import { getFolderHierarchy } from '../src/lib/folderHierarchy.js';
 
 const note = (id, fields = {}) => ({ id, title: id, content: '', folderId: null, archived: false, trashed: false, ...fields });
 const folders = [
@@ -35,10 +36,11 @@ test('All Notes count excludes archived and trashed notes, matching the existing
   assert.deepEqual(counts, { active: 1, archived: 1, trashed: 1 });
 });
 
-test('folder rows render from existing folder records without sorting or mutating them', async () => {
+test('folder rows render in parent-first hierarchy order without mutating folder records', async () => {
   const home = await readFile(new URL('../src/components/MobileHome.tsx', import.meta.url), 'utf8');
-  assert.match(home, /folders\.map\(\(folder\) => <FolderRow/);
+  assert.match(home, /folderHierarchy\.map\(\(\{ folder, depth \}\) => <FolderRow/);
   assert.deepEqual(folders.map(({ id }) => id), ['f1', 'f2']);
+  assert.deepEqual(getFolderHierarchy(folders).map(({ folder }) => folder.id), ['f1', 'f2']);
 });
 
 test('folder note counts include direct active notes only', () => {
@@ -54,7 +56,7 @@ test('All Notes card invokes the existing all-notes view callback', async () => 
 test('tapping a folder keeps its id and opens the existing folder view', async () => {
   const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
   assert.deepEqual(getMobileFolderState('f1'), { destination: 'search', view: { kind: 'folder', id: 'f1' }, selectedNoteId: null });
-  assert.match(app, /onOpenFolder=\{\(id\) => \{ const destination = getMobileFolderState\(id\); setView\(destination\.view\);/);
+  assert.match(app, /onOpenFolder=\{openMobileFolderFromOverview\}/);
 });
 
 test('Archive row opens the existing archived view', async () => {

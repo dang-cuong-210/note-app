@@ -18,7 +18,6 @@ import {
   ChevronRight,
   SlidersHorizontal,
   ArrowDownUp,
-  Share2,
 } from 'lucide-react';
 import type { Note, Folder } from '@/types';
 import type { ViewType } from '@/lib/navigation';
@@ -29,6 +28,7 @@ import { MobileBottomSheet, MobileNoteActionsSheet, MobileTrashActionsSheet } fr
 import { formatMobileAllNoteDate, groupMobileAllNotes } from '@/lib/mobileAllNotes.js';
 import { getEffectiveRecentTime, getRecentNotes, groupMobileRecentNotes } from '@/lib/recentNotes.js';
 import { getMobileChildFolders, getMobileFolderSummary } from '@/lib/mobileFolderArchive.js';
+import { getFolderHierarchy, getFolderOptionLabel } from '@/lib/folderHierarchy.js';
 import { clearRecentSearches, loadRecentSearches, recordRecentSearch, removeRecentSearch } from '@/lib/recentSearches.js';
 
 interface NoteListProps {
@@ -361,7 +361,6 @@ export function NoteList({
         <div className="tanooki-mobile-workspace-navigation">
           <button type="button" onClick={onBackToHome} aria-label="Quay lại Thư mục"><ChevronLeft size={22} aria-hidden="true" /><span>Thư mục</span></button>
           <div>
-            <button type="button" disabled aria-label="Chia sẻ chưa khả dụng" title="Chia sẻ thư mục chưa khả dụng"><Share2 size={21} aria-hidden="true" /></button>
             {view.kind === 'folder' ? <button type="button" onClick={() => { setFolderAction('menu'); setWorkspaceOptionsOpen(true); }} aria-label="Tùy chọn thư mục"><MoreHorizontal size={22} aria-hidden="true" /></button> : <button type="button" onClick={() => setMobileControlsOpen(true)} aria-label="Tùy chọn ghi chú"><MoreHorizontal size={22} aria-hidden="true" /></button>}
           </div>
         </div>
@@ -651,8 +650,8 @@ export function NoteList({
                               onClick={(e) => e.stopPropagation()}
                             >
                               <MenuItem label="Không có thư mục" onClick={() => { onMove(note.id, null); setMenuFor(null); setMoveFor(null); }} />
-                              {folders.map((f) => (
-                                <MenuItem key={f.id} label={f.name} icon={<FolderIcon size={14} />} onClick={() => { onMove(note.id, f.id); setMenuFor(null); setMoveFor(null); }} />
+                              {getFolderHierarchy(folders).map(({ folder, depth }) => (
+                                <MenuItem key={folder.id} label={getFolderOptionLabel(folder, depth)} icon={<FolderIcon size={14} />} onClick={() => { onMove(note.id, folder.id); setMenuFor(null); setMoveFor(null); }} />
                               ))}
                             </div>
                           )}
@@ -688,7 +687,7 @@ export function NoteList({
           <button type="button" onClick={() => { setWorkspaceOptionsOpen(false); setMobileControlsOpen(true); }}><ArrowDownUp size={19} />Lọc và sắp xếp ghi chú</button>
           <button type="button" onClick={() => { setFolderActionName(currentFolder.name); setFolderAction('rename'); }}><FolderIcon size={19} />Đổi tên thư mục</button>
           <button type="button" onClick={() => { setFolderActionName(''); setFolderAction('add-child'); }}><Plus size={19} />Thêm thư mục con</button>
-          {allChildFolders.length === 0 && <button type="button" className="is-danger" onClick={() => { if (window.confirm(`Xóa thư mục “${currentFolder.name}”? Các ghi chú bên trong sẽ được chuyển về Tất cả ghi chú.`)) { onDeleteFolder?.(currentFolder.id); setWorkspaceOptionsOpen(false); } }}><Trash2 size={19} />Xóa thư mục</button>}
+          <button type="button" className="is-danger" onClick={() => { if (window.confirm(`Xóa thư mục “${currentFolder.name}”? Ghi chú trực tiếp sẽ được chuyển về Tất cả ghi chú; thư mục con sẽ được chuyển lên cấp cha.`)) { onDeleteFolder?.(currentFolder.id); setWorkspaceOptionsOpen(false); } }}><Trash2 size={19} />Xóa thư mục</button>
         </div> : <form className="tanooki-mobile-folder-form" onSubmit={(event) => { event.preventDefault(); if (!folderActionName.trim()) return; if (folderAction === 'rename') onRenameFolder?.(currentFolder.id, folderActionName.trim()); else onAddFolder?.(folderActionName.trim(), currentFolder.id); setWorkspaceOptionsOpen(false); }}>
           <label htmlFor="mobile-folder-action-name">Tên thư mục</label><input id="mobile-folder-action-name" autoFocus value={folderActionName} onChange={(event) => setFolderActionName(event.target.value)} maxLength={80} />
           <div><button type="button" className="is-cancel" onClick={() => { setFolderAction('menu'); setFolderActionName(''); }}>Hủy</button><button type="submit" className="is-save" disabled={!folderActionName.trim()}>{folderAction === 'rename' ? 'Lưu' : 'Tạo'}</button></div>
@@ -822,7 +821,7 @@ function FilterControls({
       <select className={selectClass} style={selectStyle} value={folderFilter} onChange={(event) => onFolderChange(event.target.value)} aria-label="Lọc theo thư mục">
         <option value="all">Tất cả thư mục</option>
         <option value="none">Không có thư mục</option>
-        {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+        {getFolderHierarchy(folders).map(({ folder, depth }) => <option key={folder.id} value={folder.id}>{getFolderOptionLabel(folder, depth)}</option>)}
       </select>
     </label>
     <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Thẻ

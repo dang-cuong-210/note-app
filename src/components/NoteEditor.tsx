@@ -48,6 +48,7 @@ import { NoteTagManager } from '@/components/NoteTagManager';
 import { MOBILE_FORMATTING_GROUPS, setChecklistItemChecked } from '@/lib/mobileFormatting.js';
 import { getBlankLinesToAppend, isMeaningfulNoteContent } from '@/lib/editorBehavior.js';
 import { MobileDrawingMarkup } from '@/components/MobileDrawingMarkup';
+import { getFolderHierarchy, getFolderOptionLabel } from '@/lib/folderHierarchy.js';
 
 // Attachment display settings travel inside note HTML, so no database migration is needed.
 // The marker is a comment, never a visible or editable element.
@@ -1679,11 +1680,11 @@ export function NoteEditor({
                         label="Không có thư mục"
                         onClick={() => { onMove(note.id, null); setMenuOpen(false); setMoveOpen(false); }}
                       />
-                      {folders.map((f) => (
+                      {getFolderHierarchy(folders).map(({ folder: f, depth }) => (
                         <MenuBtn
                           key={f.id}
                           icon={<FolderIcon size={14} />}
-                          label={f.name}
+                          label={getFolderOptionLabel(f, depth)}
                           onClick={() => { onMove(note.id, f.id); setMenuOpen(false); setMoveOpen(false); }}
                         />
                       ))}
