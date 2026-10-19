@@ -4,8 +4,8 @@ import { DEFAULT_SETTINGS } from '@/types';
 import * as localDb from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import { uid, createNote, applyTheme, applyFontSize } from '@/lib/utils';
-import { deleteAllNoteImages } from '@/lib/images';
-import { createAttachmentSync } from '@/lib/attachmentSync';
+import { copyNoteImage, deleteAllNoteImages, signNoteImage } from '@/lib/images';
+import { createAttachmentSync, mapAttachment, type AttachmentRow } from '@/lib/attachmentSync';
 import { createFolderSync, mapRemoteFolder, type FolderRecord } from '@/lib/folderSync';
 import { canDiscardUnsentDraftOffline } from '@/lib/editorBehavior.js';
 import { removeFolderAndPromoteChildren } from '@/lib/folderHierarchy.js';
@@ -15,7 +15,10 @@ import {
   deleteAttachmentStorage,
   getAttachmentStoragePaths,
   loadAllAttachments,
+  copyAttachmentObject,
+  signAttachmentObject,
 } from '@/lib/attachments';
+import { assertMediaDuplicationOnline, noteHasManagedMedia, prepareNoteMediaCopy } from '@/lib/noteMediaDuplication.js';
 
 interface NoteRow {
   id: string;
@@ -1022,10 +1025,13 @@ export function useAppData(userId: string | null) {
   );
 
   const duplicateNote = useCallback(
-    (id: string): Note | null => {
+    async (id: string): Promise<Note | null> => {
       const original = notesRef.current.find((n) => n.id === id);
       if (!original) return null;
       const now = Date.now();
+      const sourceAttachments = attachments.filter((attachment) => attachment.noteId === id);
+      const containsMedia = noteHasManagedMedia(original.content, sourceAttachments);
+      assertMediaDuplicationOnline(containsMedia, online && Boolean(userId) && activeAccountId.current === userId);
       const copy: Note = {
         ...original,
         id: uid(),
@@ -1038,12 +1044,106 @@ export function useAppData(userId: string | null) {
         revision: 0,
         syncPending: true,
       };
-      confirmedRevisions.current.set(copy.id, -1);
-      setNotes((prev) => [copy, ...prev]);
-      saveNote(copy);
-      return copy;
+      if (!containsMedia) {
+        confirmedRevisions.current.set(copy.id, -1);
+        setNotes((prev) => [copy, ...prev]);
+        saveNote(copy);
+        return copy;
+      }
+
+      const prepared = await prepareNoteMediaCopy({
+        note: original,
+        attachments: sourceAttachments,
+        accountId: userId!,
+        newNoteId: copy.id,
+        createId: uid,
+        now,
+        storage: {
+          copyImage: copyNoteImage,
+          signImage: signNoteImage,
+          copyAttachment: copyAttachmentObject,
+          signAttachment: signAttachmentObject,
+          remove: async (objects) => {
+            const imagePaths = objects.filter((object) => object.bucket === 'note-images').map((object) => object.path);
+            const attachmentPaths = objects.filter((object) => object.bucket === 'note-files').map((object) => object.path);
+            const results = await Promise.all([
+              imagePaths.length ? supabase.storage.from('note-images').remove(imagePaths) : Promise.resolve({ error: null }),
+              attachmentPaths.length ? supabase.storage.from('note-files').remove(attachmentPaths) : Promise.resolve({ error: null }),
+            ]);
+            const failure = results.find((result) => result.error)?.error;
+            if (failure) throw new Error(`Copied media cleanup failed: ${failure.message}`);
+          },
+        },
+      });
+
+      const mediaCopy = { ...copy, content: prepared.content, syncPending: false };
+      const attachmentRows = prepared.attachments.map((attachment) => ({
+        id: attachment.id,
+        name: attachment.name,
+        type: attachment.type,
+        size: attachment.size,
+        storage_path: attachment.storagePath,
+        url: attachment.url,
+        created_at: attachment.createdAt,
+      }));
+
+      let result: { status?: string; note?: NoteRow; attachments?: AttachmentRow[] } | null = null;
+      try {
+        if (activeAccountId.current !== userId) throw new Error('Account changed before media duplication completed.');
+        const { data, error } = await supabase.rpc('duplicate_note_with_attachments', {
+          p_source_note_id: id,
+          p_note: noteToRow(mediaCopy),
+          p_attachments: attachmentRows,
+        });
+        if (error) throw new Error(error.message);
+        result = data as typeof result;
+      } catch (error) {
+        // A transport error can happen after Postgres committed. Confirm the
+        // generated ID before cleaning up so a committed duplicate never loses media.
+        const { data: remoteNote, error: probeError } = await supabase.from('notes').select('*').eq('id', copy.id).maybeSingle();
+        if (probeError) {
+          throw new Error('Không thể xác nhận bản sao đã được lưu. Các tệp đã sao chép được giữ an toàn; hãy thử tải lại trước khi nhân bản lại.');
+        }
+        if (remoteNote) {
+          const { data: remoteAttachments, error: attachmentError } = await supabase.from('attachments').select('*').eq('note_id', copy.id);
+          if (attachmentError) throw new Error('Không thể xác nhận đầy đủ tệp đính kèm của bản sao. Các tệp đã sao chép được giữ an toàn.');
+          result = { status: 'saved', note: remoteNote as NoteRow, attachments: remoteAttachments as AttachmentRow[] };
+        } else {
+          await prepared.cleanup();
+          throw error;
+        }
+      }
+
+      const returnedAttachments = Array.isArray(result?.attachments) ? result.attachments : [];
+      const expectedAttachmentPaths = new Map(prepared.attachments.map((attachment) => [attachment.id, attachment.storagePath]));
+      const validResult = result?.status === 'saved' && result.note?.id === copy.id &&
+        result.note.user_id === userId && result.note.revision === 1 &&
+        returnedAttachments.length === prepared.attachments.length &&
+        returnedAttachments.every((attachment) => attachment.note_id === copy.id && attachment.user_id === userId &&
+          expectedAttachmentPaths.get(attachment.id) === attachment.storage_path);
+      if (!validResult) {
+        const { data: remoteNote, error: probeError } = await supabase.from('notes').select('id').eq('id', copy.id).maybeSingle();
+        if (probeError) throw new Error('Không thể xác nhận kết quả nhân bản. Các tệp đã sao chép được giữ an toàn.');
+        if (remoteNote) {
+          // The RPC is atomic, so malformed data here indicates an unexpected
+          // committed response. Remove only this generated destination note.
+          const { error: deleteError } = await supabase.from('notes').delete().eq('id', copy.id).select('id').maybeSingle();
+          if (deleteError) throw new Error('Kết quả nhân bản không hợp lệ; không thể dọn bản sao đích.');
+        }
+        await prepared.cleanup();
+        throw new Error('Dữ liệu trả về khi nhân bản không hợp lệ. Không tạo bản sao.');
+      }
+
+      const saved = { ...mapNote(result!.note!), syncPending: false };
+      confirmedRevisions.current.set(saved.id, saved.revision ?? 1);
+      pendingNotes.current.delete(saved.id);
+      setNotes((prev) => [saved, ...prev.filter((note) => note.id !== saved.id)]);
+      void localDb.putNote(userId!, saved).catch((error) => console.warn('Duplicated note cache write failed:', error));
+      const sync = attachmentSync.current;
+      if (sync?.accountId === userId) returnedAttachments.forEach((row) => sync.upsert(mapAttachment(row)));
+      return saved;
     },
-    [saveNote]
+    [attachments, online, saveNote, userId]
   );
 
   const trashNote = useCallback(

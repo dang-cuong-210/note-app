@@ -111,6 +111,17 @@ export async function deleteNoteImage(path: string): Promise<void> {
   if (error) console.warn('Image delete error:', error.message);
 }
 
+export async function copyNoteImage(sourcePath: string, destinationPath: string): Promise<void> {
+  const { error } = await supabase.storage.from(BUCKET).copy(sourcePath, destinationPath);
+  if (error) throw new Error(`Image copy failed: ${error.message}`);
+}
+
+export async function signNoteImage(path: string): Promise<string> {
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+  if (error || !data?.signedUrl) throw new Error(`Image URL could not be created: ${error?.message ?? 'No URL returned'}`);
+  return data.signedUrl;
+}
+
 /**
  * Delete all images for a note (used when permanently deleting a note).
  */

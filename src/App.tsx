@@ -301,11 +301,15 @@ function AppContent() {
     }
   };
 
-  const handleDuplicate = (id: string) => {
-    const copy = data.duplicateNote(id);
-    if (copy) {
-      setSelectedNoteId(copy.id);
-      toast('Note duplicated');
+  const handleDuplicate = async (id: string) => {
+    try {
+      const copy = await data.duplicateNote(id);
+      if (copy) {
+        setSelectedNoteId(copy.id);
+        toast('Note duplicated');
+      }
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not duplicate note.');
     }
   };
 

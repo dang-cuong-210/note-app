@@ -151,6 +151,17 @@ export async function refreshAttachmentUrl(storagePath: string): Promise<string 
   return data?.signedUrl || null;
 }
 
+export async function copyAttachmentObject(sourcePath: string, destinationPath: string): Promise<void> {
+  const { error } = await supabase.storage.from(BUCKET).copy(sourcePath, destinationPath);
+  if (error) throw new Error(`Attachment copy failed: ${error.message}`);
+}
+
+export async function signAttachmentObject(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, SIGNED_URL_EXPIRY);
+  if (error || !data?.signedUrl) throw new Error(`Attachment URL could not be created: ${error?.message ?? 'No URL returned'}`);
+  return data.signedUrl;
+}
+
 export function getFileIcon(type: string, name: string): string {
   const ext = name.split('.').pop()?.toLowerCase() || '';
   if (type.startsWith('image/')) return 'image';
