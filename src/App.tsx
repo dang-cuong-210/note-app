@@ -22,6 +22,7 @@ import type { ViewType } from '@/lib/navigation';
 import type { Note } from '@/types';
 import { getInitialView, getDashboardNoteDestination } from '@/lib/dashboardData.js';
 import { reconcileDesktopSelection } from '@/lib/desktopSelection.js';
+import { captureSettingsReturnContext, resolveSettingsReturnContext } from '@/lib/settingsNavigation.js';
 import { getMobileDestinationAfterView, getMobileFolderState, getMobileNewNoteState, getMobileSearchState, shouldShowMobileBottomNav } from '@/lib/mobileNavigation.js';
 import { getRecentNotes, loadRecentOpenTimes, recordRecentOpen } from '@/lib/recentNotes.js';
 import { getDesktopViewLabel } from '@/lib/desktopWorkspace.js';
@@ -50,6 +51,7 @@ function AppContent() {
   const [mobileDestination, setMobileDestination] = useState<MobileDestination>('home');
   const [recentOpenState, setRecentOpenState] = useState<{ accountId: string | null; times: Record<string, number> }>({ accountId: null, times: {} });
   const [recentReturn, setRecentReturn] = useState<{ view: ViewType; selectedNoteId: string | null; mobileDestination: MobileDestination; searchQuery: string } | null>(null);
+  const [settingsReturn, setSettingsReturn] = useState<{ view: ViewType; selectedNoteId: string | null; mobileDestination: MobileDestination; searchQuery: string } | null>(null);
   const draftOwnerRef = useRef(user?.id ?? null);
   const [focusSearchPending, setFocusSearchPending] = useState(false);
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
@@ -223,9 +225,14 @@ function AppContent() {
   }, [selectedNoteId, editorVisible, finishEditorSession]);
 
   const handleViewChange = (v: ViewType) => {
+    if (v.kind === 'settings') {
+      setSettingsReturn((current) => captureSettingsReturnContext({ view, selectedNoteId, mobileDestination, searchQuery }, current));
+    } else if (view.kind === 'settings') {
+      setSettingsReturn(null);
+    }
     setView(v);
     setMobileDestination(getMobileDestinationAfterView(v));
-    setSearchQuery('');
+    if (v.kind !== 'settings') setSearchQuery('');
     if (v.kind === 'settings' || v.kind === 'home' || v.kind === 'recent' || v.kind === 'folder') setSelectedNoteId(null);
   };
 
@@ -330,6 +337,20 @@ function AppContent() {
     setMobileDestination(recentReturn.mobileDestination);
     setSearchQuery(recentReturn.searchQuery);
     setRecentReturn(null);
+  };
+
+  const handleBackFromSettings = () => {
+    const destination = resolveSettingsReturnContext({
+      origin: settingsReturn,
+      notes: data.notes,
+      folders: data.folders,
+      isDesktop,
+    });
+    setSettingsReturn(null);
+    setView(destination.view);
+    setSelectedNoteId(destination.selectedNoteId);
+    setMobileDestination(destination.mobileDestination);
+    setSearchQuery(destination.searchQuery);
   };
 
   // Keyboard shortcuts for common note actions.
@@ -581,7 +602,14 @@ function AppContent() {
           />
         ) : showMobileMore ? (
           <MobileMoreView
-            onNavigate={(destination) => { setView(destination); setMobileDestination(getMobileDestinationAfterView(destination)); setSelectedNoteId(null); }}
+            onNavigate={(destination) => {
+              if (destination.kind === 'settings') {
+                setSettingsReturn((current) => captureSettingsReturnContext({ view, selectedNoteId, mobileDestination, searchQuery }, current));
+              }
+              setView(destination);
+              setMobileDestination(getMobileDestinationAfterView(destination));
+              setSelectedNoteId(null);
+            }}
             onSignOut={signOut}
           />
         ) : showMobileWorkspace ? (
@@ -620,7 +648,7 @@ function AppContent() {
             folders={data.folders}
             onUpdateSettings={data.updateSettings}
             onImport={data.importData}
-            onBack={() => handleViewChange({ kind: 'all' })}
+            onBack={handleBackFromSettings}
           />
           </div>
         ) : showEditor ? (
