@@ -83,7 +83,7 @@ test('editor More opens grouped mobile Recent Notes and back restores editor con
   const editor = await readFile(new URL('../src/components/NoteEditor.tsx', import.meta.url), 'utf8');
   assert.match(editor, /onNavigateRecent=\{\(\) => \{ flushCurrentDraft\(\); onNavigateRecent\(\); \}\}/);
   assert.match(app, /onNavigateRecent=\{handleNavigateRecent\}/);
-  assert.match(app, /setRecentReturn\(\{ view, selectedNoteId, mobileDestination, searchQuery \}\)/);
+  assert.match(app, /setRecentReturn\(\{ view, selectedNoteId, mobileDestination, searchQuery, mobileNoteReturn \}\)/);
   assert.match(app, /const handleSelectNote = \(id: string\) => \{[\s\S]*?recordNoteOpen\(id\);/);
   assert.match(app, /setSelectedNoteId\(recentReturn\.selectedNoteId\)/);
   assert.match(app, /mobileRecentMode=\{!isDesktop && view\.kind === 'recent'\}/);

@@ -23,12 +23,20 @@ import type { Note } from '@/types';
 import { getInitialView, getDashboardNoteDestination } from '@/lib/dashboardData.js';
 import { reconcileDesktopSelection } from '@/lib/desktopSelection.js';
 import { captureSettingsReturnContext, resolveSettingsReturnContext } from '@/lib/settingsNavigation.js';
-import { getMobileDestinationAfterView, getMobileFolderState, getMobileNewNoteState, getMobileSearchState, shouldShowMobileBottomNav } from '@/lib/mobileNavigation.js';
+import { captureMobileNoteOrigin, getMobileDestinationAfterView, getMobileFolderState, getMobileNewNoteState, getMobileNoteOriginLabel, getMobileSearchState, resolveMobileNoteOrigin, shouldShowMobileBottomNav } from '@/lib/mobileNavigation.js';
 import { getRecentNotes, loadRecentOpenTimes, recordRecentOpen } from '@/lib/recentNotes.js';
 import { getDesktopViewLabel } from '@/lib/desktopWorkspace.js';
 import { getAllTags, noteHasTag, searchNotes } from '@/lib/utils';
 import { cleanupExpiredTrashedNotes, isExpiredTrashedNote } from '@/lib/trashRetention.js';
 import { isMeaningfulNoteContent, shouldDiscardNewEmptyDraft } from '@/lib/editorBehavior.js';
+
+type MobileNoteNavigationContext = {
+  view: ViewType;
+  selectedNoteId: string | null;
+  mobileDestination: MobileDestination;
+  searchQuery: string;
+  openedNoteId?: string | null;
+};
 
 function AppContent() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -50,7 +58,8 @@ function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileDestination, setMobileDestination] = useState<MobileDestination>('home');
   const [recentOpenState, setRecentOpenState] = useState<{ accountId: string | null; times: Record<string, number> }>({ accountId: null, times: {} });
-  const [recentReturn, setRecentReturn] = useState<{ view: ViewType; selectedNoteId: string | null; mobileDestination: MobileDestination; searchQuery: string } | null>(null);
+  const [recentReturn, setRecentReturn] = useState<{ view: ViewType; selectedNoteId: string | null; mobileDestination: MobileDestination; searchQuery: string; mobileNoteReturn?: MobileNoteNavigationContext | null } | null>(null);
+  const [mobileNoteReturn, setMobileNoteReturn] = useState<MobileNoteNavigationContext | null>(null);
   const [settingsReturn, setSettingsReturn] = useState<{ view: ViewType; selectedNoteId: string | null; mobileDestination: MobileDestination; searchQuery: string } | null>(null);
   const draftOwnerRef = useRef(user?.id ?? null);
   const [focusSearchPending, setFocusSearchPending] = useState(false);
@@ -301,6 +310,9 @@ function AppContent() {
   };
 
   const handleSelectNote = (id: string) => {
+    if (!isDesktop) {
+      setMobileNoteReturn((current) => captureMobileNoteOrigin({ view, selectedNoteId, mobileDestination, searchQuery }, current, false, id));
+    }
     setMobileNewNoteId(null);
     recordNoteOpen(id);
     setSelectedNoteId(id);
@@ -320,7 +332,7 @@ function AppContent() {
       handleViewChange({ kind: 'recent' });
       return;
     }
-    setRecentReturn({ view, selectedNoteId, mobileDestination, searchQuery });
+    setRecentReturn({ view, selectedNoteId, mobileDestination, searchQuery, mobileNoteReturn });
     setView({ kind: 'recent' });
     setMobileDestination('search');
     setSearchQuery('');
@@ -336,6 +348,7 @@ function AppContent() {
     setSelectedNoteId(recentReturn.selectedNoteId);
     setMobileDestination(recentReturn.mobileDestination);
     setSearchQuery(recentReturn.searchQuery);
+    setMobileNoteReturn(recentReturn.mobileNoteReturn ?? null);
     setRecentReturn(null);
   };
 
@@ -477,6 +490,13 @@ function AppContent() {
     openMobileHome();
   };
   const createMobileNote = () => {
+    if (!isDesktop) {
+      setMobileNoteReturn((current) => captureMobileNoteOrigin(
+        { view, selectedNoteId, mobileDestination, searchQuery },
+        current,
+        editorVisible,
+      ));
+    }
     const note = registerNewDraft(data.addNote(null));
     setMobileNewNoteId(note.id);
     const destination = getMobileNewNoteState(note.id);
@@ -488,6 +508,13 @@ function AppContent() {
     if (view.kind !== 'folder') {
       createMobileNote();
       return;
+    }
+    if (!isDesktop) {
+      setMobileNoteReturn((current) => captureMobileNoteOrigin(
+        { view, selectedNoteId, mobileDestination, searchQuery },
+        current,
+        editorVisible,
+      ));
     }
     const note = registerNewDraft(data.addNote(view.id));
     setMobileNewNoteId(note.id);
@@ -578,7 +605,14 @@ function AppContent() {
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             onSearchSubmit={handleSearchSubmit}
-            onOpenNote={(id) => { recordNoteOpen(id); const destination = getDashboardNoteDestination(id); setView(destination.view); setMobileDestination('search'); setSelectedNoteId(destination.selectedNoteId); }}
+            onOpenNote={(id) => {
+              setMobileNoteReturn((current) => captureMobileNoteOrigin({ view, selectedNoteId, mobileDestination, searchQuery }, current, false, id));
+              recordNoteOpen(id);
+              const destination = getDashboardNoteDestination(id);
+              setView(destination.view);
+              setMobileDestination('home');
+              setSelectedNoteId(destination.selectedNoteId);
+            }}
             onOpenView={(destination) => {
               if (destination.kind === 'all') {
                 setView(destination);
@@ -714,12 +748,26 @@ function AppContent() {
                 onRemoveAttachment={data.removeAttachment}
                 onRenameAttachment={data.renameAttachment}
                 onDuplicate={handleDuplicate}
-                onBack={() => { setMobileNewNoteId(null); setSelectedNoteId(null); }}
+                onBack={() => {
+                  if (isDesktop) {
+                    setMobileNewNoteId(null);
+                    setSelectedNoteId(null);
+                    return;
+                  }
+                  const destination = resolveMobileNoteOrigin({ origin: mobileNoteReturn, notes: data.notes, folders: data.folders });
+                  setMobileNewNoteId(null);
+                  setView(destination.view);
+                  setSelectedNoteId(destination.selectedNoteId);
+                  setMobileDestination(destination.mobileDestination);
+                  setSearchQuery(destination.searchQuery);
+                  setMobileNoteReturn(null);
+                }}
                 onCreateNote={createMobileNote}
                 onNavigateRecent={handleNavigateRecent}
                 desktopPresentation={isDesktop}
                 startInWritingMode={!isDesktop && mobileNewNoteId === selectedNote?.id}
                 breadcrumb={getDesktopViewLabel(view, data.folders)}
+                mobileBackLabel={getMobileNoteOriginLabel(mobileNoteReturn, data.folders)}
                 onToggleToolsPanel={() => setToolsPanelOpen((open) => !open)}
                 toolsPanelOpen={toolsPanelOpen}
                 existingTags={existingTags}

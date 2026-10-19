@@ -136,6 +136,7 @@ interface NoteEditorProps {
   desktopPresentation?: boolean;
   startInWritingMode?: boolean;
   breadcrumb?: string;
+  mobileBackLabel?: string;
   onToggleToolsPanel?: () => void;
   toolsPanelOpen?: boolean;
   existingTags: string[];
@@ -162,6 +163,7 @@ export function NoteEditor({
   desktopPresentation = false,
   startInWritingMode = false,
   breadcrumb = 'Tất cả ghi chú',
+  mobileBackLabel: suppliedMobileBackLabel,
   onToggleToolsPanel,
   toolsPanelOpen = false,
   existingTags,
@@ -1591,9 +1593,9 @@ export function NoteEditor({
 
   const folderName = folders.find((f) => f.id === note.folderId)?.name || null;
   const desktopTags = desktopPresentation ? noteTags : [];
-  const mobileBackLabel = breadcrumb === 'Tất cả ghi chú'
+  const mobileBackLabel = suppliedMobileBackLabel || (breadcrumb === 'Tất cả ghi chú'
     ? breadcrumb
-    : folders.some((folder) => folder.name === breadcrumb) ? breadcrumb : 'Ghi chú';
+    : folders.some((folder) => folder.name === breadcrumb) ? breadcrumb : 'Ghi chú');
 
   return (
     <div className={`${desktopPresentation ? 'h-full' : 'h-[100dvh] tanooki-mobile-editor'} min-h-0 min-w-0 flex flex-col bg-app ${desktopPresentation ? 'tanooki-desktop-editor' : 'is-writing'} ${!desktopPresentation && mobilePaperMode ? 'is-light-paper' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>

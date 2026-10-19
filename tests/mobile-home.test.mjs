@@ -84,7 +84,7 @@ test('Create New uses the existing immediate note-creation flow', async () => {
   const home = await readFile(new URL('../src/components/MobileHome.tsx', import.meta.url), 'utf8');
   const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
   assert.match(home, /onClick=\{onCreateNote\}/);
-  assert.match(app, /const createMobileNote = \(\) => \{\s*const note = registerNewDraft\(data\.addNote\(null\)\);/);
+  assert.match(app, /const createMobileNote = \(\) => \{[\s\S]*?const note = registerNewDraft\(data\.addNote\(null\)\);/);
   assert.match(app, /onCreateNote=\{createMobileNote\}/);
 });
 
