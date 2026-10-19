@@ -23,7 +23,7 @@ import type { Note } from '@/types';
 import { getInitialView, getDashboardNoteDestination } from '@/lib/dashboardData.js';
 import { reconcileDesktopSelection } from '@/lib/desktopSelection.js';
 import { captureSettingsReturnContext, resolveSettingsReturnContext } from '@/lib/settingsNavigation.js';
-import { captureMobileNoteOrigin, getMobileDestinationAfterView, getMobileFolderState, getMobileNewNoteState, getMobileNoteOriginLabel, getMobileSearchState, resolveMobileNoteOrigin, shouldShowMobileBottomNav } from '@/lib/mobileNavigation.js';
+import { captureMobileNoteOrigin, getMobileDestinationAfterView, getMobileFolderState, getMobileNewNoteState, getMobileNoteOriginLabel, getMobileSearchState, noteBelongsToMobileOrigin, resolveMobileNoteOrigin, shouldShowMobileBottomNav } from '@/lib/mobileNavigation.js';
 import { getRecentNotes, loadRecentOpenTimes, recordRecentOpen } from '@/lib/recentNotes.js';
 import { getDesktopViewLabel } from '@/lib/desktopWorkspace.js';
 import { getAllTags, noteHasTag, searchNotes } from '@/lib/utils';
@@ -53,6 +53,7 @@ function AppContent() {
   const ephemeralDraftIds = useRef(new Set<string>());
   const meaningfulDraftIds = useRef(new Set<string>());
   const explicitlyTrashedDraftIds = useRef(new Set<string>());
+  const mobileOriginMembershipRef = useRef<{ noteId: string; belongs: boolean } | null>(null);
   const [mobileNewNoteId, setMobileNewNoteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -192,6 +193,32 @@ function AppContent() {
   const selectedNote = data.notes.find((n) => n.id === selectedNoteId) || null;
   const existingTags = useMemo(() => getAllTags(data.notes).map(({ name }) => name), [data.notes]);
 
+  useEffect(() => {
+    if (!selectedNoteId) {
+      mobileOriginMembershipRef.current = null;
+      return;
+    }
+    if (isDesktop || mobileNoteReturn?.openedNoteId !== selectedNoteId) return;
+    const currentNote = data.notes.find((note) => note.id === selectedNoteId);
+    if (!currentNote) return;
+    const belongsToOrigin = noteBelongsToMobileOrigin(currentNote, mobileNoteReturn);
+    const previousMembership = mobileOriginMembershipRef.current;
+    if (!previousMembership || previousMembership.noteId !== selectedNoteId) {
+      mobileOriginMembershipRef.current = { noteId: selectedNoteId, belongs: belongsToOrigin };
+      return;
+    }
+    mobileOriginMembershipRef.current = { noteId: selectedNoteId, belongs: belongsToOrigin };
+    if (!previousMembership.belongs || belongsToOrigin) return;
+
+    const destination = resolveMobileNoteOrigin({ origin: mobileNoteReturn, notes: data.notes, folders: data.folders });
+    setMobileNewNoteId(null);
+    setSelectedNoteId(null);
+    setView(destination.view);
+    setMobileDestination(destination.mobileDestination);
+    setSearchQuery(destination.searchQuery);
+    setMobileNoteReturn(null);
+  }, [isDesktop, selectedNoteId, mobileNoteReturn, data.notes, data.folders]);
+
   const handleOpenTag = (tag: string) => {
     setView({ kind: 'tag', name: tag });
     setSearchQuery('');
@@ -275,8 +302,18 @@ function AppContent() {
     }
     data.trashNote(id);
     if (selectedNoteId === id) {
-      const remaining = getVisibleNotes().filter((n) => n.id !== id);
-      setSelectedNoteId(remaining[0]?.id || null);
+      if (!isDesktop) {
+        const destination = resolveMobileNoteOrigin({ origin: mobileNoteReturn, notes: data.notes, folders: data.folders });
+        setMobileNewNoteId(null);
+        setSelectedNoteId(null);
+        setView(destination.view);
+        setMobileDestination(destination.mobileDestination);
+        setSearchQuery(destination.searchQuery);
+        setMobileNoteReturn(null);
+      } else {
+        const remaining = getVisibleNotes().filter((n) => n.id !== id);
+        setSelectedNoteId(remaining[0]?.id || null);
+      }
     }
     toast('Note moved to trash', {
       label: 'Undo',
@@ -302,9 +339,14 @@ function AppContent() {
   };
 
   const handleDuplicate = async (id: string) => {
+    const duplicateOrigin = !isDesktop
+      ? (mobileNoteReturn ?? captureMobileNoteOrigin({ view, selectedNoteId: null, mobileDestination, searchQuery }, null, false, id))
+      : null;
     try {
       const copy = await data.duplicateNote(id);
       if (copy) {
+        if (duplicateOrigin) setMobileNoteReturn({ ...duplicateOrigin, openedNoteId: copy.id });
+        setMobileNewNoteId(null);
         setSelectedNoteId(copy.id);
         toast('Note duplicated');
       }

@@ -1,4 +1,4 @@
-import { getNotesInView } from './advancedSearch.js';
+import { buildSearchRecords, filterSearchRecords, getNotesInView } from './advancedSearch.js';
 
 export function getMobileDestinationAfterView(view) {
   if (view.kind === 'home') return 'home';
@@ -28,6 +28,20 @@ export function captureMobileNoteOrigin(current, existing = null, preserveExisti
   return { ...current, openedNoteId };
 }
 
+/** Whether a note still belongs to the exact mobile editor origin. */
+export function noteBelongsToMobileOrigin(note, origin) {
+  if (!note || !origin || ['settings', 'trash'].includes(origin.view?.kind)) return false;
+  if (origin.view.kind === 'home') return !note.trashed && !note.archived;
+  if (!getNotesInView([note], origin.view).length) return false;
+  if (origin.view.kind === 'all' && origin.mobileDestination === 'search' && origin.searchQuery?.trim()) {
+    return filterSearchRecords(buildSearchRecords([note]), {
+      query: origin.searchQuery,
+      archive: 'current',
+    }, origin.view).length > 0;
+  }
+  return true;
+}
+
 /** Restore a mobile editor's origin, falling back when its context disappeared. */
 export function resolveMobileNoteOrigin({ origin, notes = [], folders = [] }) {
   const fallback = { view: { kind: 'home' }, selectedNoteId: null, mobileDestination: 'home', searchQuery: '' };
@@ -35,9 +49,6 @@ export function resolveMobileNoteOrigin({ origin, notes = [], folders = [] }) {
   if (origin.view.kind === 'folder' && !folders.some((folder) => folder.id === origin.view.id)) return fallback;
 
   const inView = getNotesInView(notes, origin.view);
-  if (origin.openedNoteId && ['recent', 'pinned', 'archived', 'tag'].includes(origin.view.kind) &&
-      !inView.some((note) => note.id === origin.openedNoteId)) return fallback;
-
   const selectedNoteId = origin.selectedNoteId && inView.some((note) => note.id === origin.selectedNoteId)
     ? origin.selectedNoteId
     : null;
