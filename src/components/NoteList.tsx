@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, type FormEvent } from 'react';
 import {
   Pin,
   PinOff,
@@ -118,6 +118,8 @@ export function NoteList({
   const [trashSelectionMode, setTrashSelectionMode] = useState(false);
   const [selectedTrashIds, setSelectedTrashIds] = useState<string[]>([]);
   const [workspaceOptionsOpen, setWorkspaceOptionsOpen] = useState(false);
+  const [desktopFolderCreateOpen, setDesktopFolderCreateOpen] = useState(false);
+  const [desktopFolderName, setDesktopFolderName] = useState('');
   const [folderSectionExpanded, setFolderSectionExpanded] = useState(true);
   const [folderAction, setFolderAction] = useState<'menu' | 'rename' | 'add-child'>('menu');
   const [folderActionName, setFolderActionName] = useState('');
@@ -175,7 +177,8 @@ export function NoteList({
   const mobileRecentGroups = useMemo(() => groupMobileRecentNotes(sorted, recentOpenedAt), [sorted, recentOpenedAt]);
   const menuNote = sorted.find((note) => note.id === menuFor) || null;
   const currentFolder = view.kind === 'folder' ? folders.find((folder) => folder.id === view.id) ?? null : null;
-  const currentFolderBreadcrumb = currentFolder ? getFolderAncestorIds(folders, currentFolder.id).map((id) => folders.find((folder) => folder.id === id)?.name).filter(Boolean).join(' / ') : '';
+  const currentFolderAncestorIds = currentFolder ? getFolderAncestorIds(folders, currentFolder.id) : [];
+  const currentFolderBreadcrumb = currentFolderAncestorIds.map((id) => folders.find((folder) => folder.id === id)?.name).filter(Boolean).join(' / ');
   const currentFolderId = view.kind === 'folder' ? view.id : null;
   const allChildFolders = useMemo(() => currentFolder ? getMobileChildFolders(folders, currentFolder.id) : [], [folders, currentFolder]);
   const childFolders = useMemo(() => currentFolder ? getMobileChildFolders(folders, currentFolder.id, searchQuery) : [], [folders, currentFolder, searchQuery]);
@@ -295,6 +298,14 @@ export function NoteList({
     });
   };
 
+  const createDesktopChildFolder = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!currentFolder || !desktopFolderName.trim()) return;
+    onAddFolder?.(desktopFolderName.trim(), currentFolder.id);
+    setDesktopFolderName('');
+    setDesktopFolderCreateOpen(false);
+  };
+
   const handleDelete = async (note: Note) => {
     if (mobileTrashMode && !window.confirm(`Xóa vĩnh viễn ghi chú “${note.title.trim() || 'Chưa có tiêu đề'}”?`)) return;
     try {
@@ -319,7 +330,7 @@ export function NoteList({
 
   return (
     <div className={`${mobileAllNotesMode || mobileRecentMode || mobileTrashMode || mobileWorkspaceMode ? '' : 'h-full'} w-full max-lg:min-w-0 max-lg:max-w-full ${mobileAllNotesMode || mobileRecentMode ? 'tanooki-mobile-all-notes' : mobileTrashMode ? 'tanooki-mobile-trash' : mobileWorkspaceMode ? 'tanooki-mobile-workspace' : 'max-lg:pb-[calc(72px+env(safe-area-inset-bottom))]'} flex flex-col bg-app ${desktopMode ? 'tanooki-desktop-note-list' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
-      {desktopMode && <div className="tanooki-desktop-list-heading px-4 pt-4">{currentFolderBreadcrumb && <p className="tanooki-desktop-folder-breadcrumb">{currentFolderBreadcrumb}</p>}<h2>{contextTitle}</h2><span>{sorted.length} ghi chú</span></div>}
+      {desktopMode && <div className="tanooki-desktop-list-heading px-4 pt-4">{currentFolder && currentFolderAncestorIds.length > 0 && <nav className="tanooki-desktop-folder-breadcrumb" aria-label="Đường dẫn thư mục">{currentFolderAncestorIds.map((id) => { const ancestor = folders.find((folder) => folder.id === id); return ancestor ? <span key={id}><button type="button" onClick={() => onOpenFolder?.(id)}>{ancestor.name}</button><span aria-hidden="true"> / </span></span> : null; })}<strong>{currentFolder.name}</strong></nav>}<h2>{contextTitle}</h2><span>{sorted.length} ghi chú</span></div>}
       {mobileTrashMode && <header className="tanooki-mobile-trash-header">
         <div className="tanooki-mobile-trash-navigation">
           <button type="button" onClick={onBackToHome} aria-label="Quay lại Thư mục"><ChevronLeft size={22} aria-hidden="true" /><span>Thư mục</span></button>
@@ -454,6 +465,12 @@ export function NoteList({
 
       {/* Notes list */}
       <div ref={notesScrollRef} className={`flex-1 min-h-0 overflow-y-auto ${mobileAllNotesMode || mobileRecentMode ? 'tanooki-mobile-all-notes-scroll' : mobileTrashMode ? 'tanooki-mobile-trash-scroll' : mobileWorkspaceMode ? 'tanooki-mobile-workspace-scroll' : 'px-2'}`}>
+        {desktopMode && currentFolder && <section className="tanooki-desktop-folder-children" aria-labelledby="tanooki-desktop-folder-children-heading">
+          <div className="tanooki-desktop-folder-section-heading"><h3 id="tanooki-desktop-folder-children-heading">Thư mục</h3><button type="button" onClick={() => setDesktopFolderCreateOpen(true)}><Plus size={15} aria-hidden="true" />Thư mục mới</button></div>
+          {desktopFolderCreateOpen && <form className="tanooki-desktop-folder-create" onSubmit={createDesktopChildFolder}><input autoFocus value={desktopFolderName} onChange={(event) => setDesktopFolderName(event.target.value)} placeholder={`Thư mục con trong ${currentFolder.name}`} aria-label={`Tên thư mục con trong ${currentFolder.name}`} /><button type="submit" disabled={!desktopFolderName.trim()}>Tạo</button><button type="button" onClick={() => { setDesktopFolderCreateOpen(false); setDesktopFolderName(''); }}>Hủy</button></form>}
+          {childFolders.length > 0 ? <div className="tanooki-desktop-folder-children-card">{childFolders.map((folder) => <button key={folder.id} type="button" className="tanooki-desktop-folder-child-row" onClick={() => onOpenFolder?.(folder.id)}><FolderIcon size={18} aria-hidden="true" /><strong>{folder.name}</strong><span>{notes.filter((note) => note.folderId === folder.id && !note.trashed && !note.archived).length}</span><ChevronRight size={17} aria-hidden="true" /></button>)}</div> : allChildFolders.length > 0 && searchQuery.trim() ? <p className="tanooki-desktop-folder-no-match">Không tìm thấy thư mục con phù hợp.</p> : null}
+        </section>}
+        {desktopMode && currentFolder && sorted.length > 0 && <h3 className="tanooki-desktop-folder-notes-heading">Ghi chú</h3>}
         {mobileSearchMode && !normalizeSearchText(searchQuery) ? <section className="px-4 pb-8 pt-3" aria-label="Tìm kiếm gần đây">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Tìm kiếm gần đây</h2>
@@ -472,9 +489,10 @@ export function NoteList({
             Ghi chú trong thùng rác sẽ bị xóa vĩnh viễn sau 7 ngày.
           </p>
         )}
-        {mobileSearchMode && !normalizeSearchText(searchQuery) ? null : sorted.length === 0 && !(mobileWorkspaceMode && view.kind === 'folder' && childFolders.length > 0) ? (
+        {mobileSearchMode && !normalizeSearchText(searchQuery) ? null : sorted.length === 0 && !(mobileWorkspaceMode && view.kind === 'folder' && childFolders.length > 0) && !(desktopMode && view.kind === 'folder' && allChildFolders.length > 0) ? (
           (mobileSearchMode && normalizeSearchText(searchQuery)) || (hasSearchOrFilters && filterSource.length > 0)
             ? mobileSearchMode ? <div className="px-4 py-8 text-center"><p className="font-medium" style={{ color: 'var(--text-secondary)' }}>Không tìm thấy ghi chú</p>{hasAdvancedFilters && <button type="button" onClick={clearSearchAndFilters} className="mt-2 text-sm font-medium" style={{ color: 'var(--accent)' }}>Xóa bộ lọc</button>}</div> : <FilteredEmptyState onClear={clearSearchAndFilters} />
+            : desktopMode && view.kind === 'folder' ? <div className="tanooki-desktop-folder-empty"><FolderIcon size={28} aria-hidden="true" /><strong>Thư mục trống</strong><span>Tạo ghi chú hoặc thư mục con để bắt đầu.</span></div>
             : mobileTrashMode ? <div className="tanooki-mobile-trash-empty">Không có ghi chú đã xóa</div> : mobileWorkspaceMode && view.kind === 'archived' ? <div className="tanooki-mobile-workspace-empty">Không có ghi chú đã lưu trữ</div> : mobileWorkspaceMode && view.kind === 'folder' ? <div className="tanooki-mobile-workspace-empty">{searchQuery ? 'Không tìm thấy nội dung phù hợp' : 'Thư mục này chưa có ghi chú'}</div> : <EmptyState view={view} />
         ) : (
           mobileTrashMode ? <div className="tanooki-mobile-trash-card">

@@ -1004,7 +1004,34 @@ input[data-global-search]:focus-visible {
 @layer components {
   .tanooki-desktop-note-list { background: var(--bg); color: var(--text); }
   .tanooki-desktop-list-heading { padding: 5px 2px 16px; }
-  .tanooki-desktop-folder-breadcrumb { overflow: hidden; margin-bottom: 3px; color: var(--text-tertiary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+  .tanooki-desktop-folder-breadcrumb { display: flex; min-width: 0; align-items: center; overflow: hidden; margin-bottom: 3px; color: var(--text-tertiary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+  .tanooki-desktop-folder-breadcrumb > span { display: inline-flex; min-width: 0; flex: none; align-items: center; gap: 6px; }
+  .tanooki-desktop-folder-breadcrumb button { max-width: 92px; overflow: hidden; text-overflow: ellipsis; }
+  .tanooki-desktop-folder-breadcrumb button:hover { color: var(--accent); }
+  .tanooki-desktop-folder-breadcrumb strong { min-width: 0; overflow: hidden; color: var(--text-secondary); font-weight: 600; text-overflow: ellipsis; }
+  .tanooki-desktop-folder-children { padding: 8px 12px 10px; }
+  .tanooki-desktop-folder-section-heading { display: flex; min-height: 34px; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
+  .tanooki-desktop-folder-section-heading h3, .tanooki-desktop-folder-notes-heading { color: var(--text-secondary); font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+  .tanooki-desktop-folder-section-heading button { display: inline-flex; min-height: 30px; flex: none; align-items: center; gap: 4px; border-radius: 8px; padding: 0 8px; color: var(--accent); font-size: 11px; font-weight: 600; }
+  .tanooki-desktop-folder-section-heading button:hover { background: var(--accent-light); }
+  .tanooki-desktop-folder-children-card { overflow: hidden; border: 1px solid color-mix(in srgb, var(--border) 75%, transparent); border-radius: 13px; background: var(--bg-secondary); }
+  .tanooki-desktop-folder-child-row { display: flex; width: 100%; min-width: 0; min-height: 43px; align-items: center; gap: 9px; padding: 6px 10px; text-align: left; }
+  .tanooki-desktop-folder-child-row + .tanooki-desktop-folder-child-row { border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+  .tanooki-desktop-folder-child-row > svg:first-child { flex: none; color: var(--tanooki-ochre); }
+  .tanooki-desktop-folder-child-row > strong { min-width: 0; flex: 1; overflow: hidden; color: var(--text); font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .tanooki-desktop-folder-child-row > span { color: var(--text-tertiary); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .tanooki-desktop-folder-child-row > svg:last-child { flex: none; color: var(--text-tertiary); }
+  .tanooki-desktop-folder-child-row:hover { background: color-mix(in srgb, var(--accent-light) 50%, transparent); }
+  .tanooki-desktop-folder-create { display: flex; min-width: 0; gap: 5px; margin-bottom: 7px; }
+  .tanooki-desktop-folder-create input { min-width: 0; flex: 1; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 5px 8px; color: var(--text); font-size: 12px; }
+  .tanooki-desktop-folder-create button { border-radius: 7px; padding: 0 7px; color: var(--accent); font-size: 11px; font-weight: 600; }
+  .tanooki-desktop-folder-create button:disabled { opacity: .45; }
+  .tanooki-desktop-folder-no-match { padding: 9px 3px; color: var(--text-tertiary); font-size: 12px; }
+  .tanooki-desktop-folder-notes-heading { margin: 9px 14px 2px; }
+  .tanooki-desktop-folder-empty { display: flex; min-height: 150px; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 20px; color: var(--text-tertiary); text-align: center; }
+  .tanooki-desktop-folder-empty > svg { color: var(--tanooki-ochre); }
+  .tanooki-desktop-folder-empty > strong { color: var(--text); font-size: 13px; }
+  .tanooki-desktop-folder-empty > span { font-size: 12px; }
   .tanooki-desktop-list-heading h2 { overflow: hidden; color: var(--text); font-size: 19px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
   .tanooki-desktop-list-heading > span { display: block; margin-top: 3px; color: var(--text-tertiary); font-size: 12px; }
   .tanooki-desktop-note-list .tanooki-desktop-note-row.is-selected { box-shadow: inset 3px 0 0 var(--tanooki-red); }

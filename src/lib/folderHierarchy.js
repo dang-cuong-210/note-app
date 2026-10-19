@@ -29,10 +29,6 @@ export function getFolderHierarchy(folders) {
   return result;
 }
 
-export function getVisibleFolderHierarchy(folders, expandedFolderIds) {
-  return getFolderHierarchy(folders).filter(({ folder }) => getFolderAncestorIds(folders, folder.id).every((ancestorId) => expandedFolderIds.has(ancestorId)));
-}
-
 export function getFolderOptionLabel(folder, depth = 0) {
   return `${depth ? `${'\u00a0\u00a0'.repeat(depth)}└ ` : ''}${folder.name}`;
 }

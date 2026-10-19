@@ -222,7 +222,7 @@ function AppContent() {
     setView(v);
     setMobileDestination(getMobileDestinationAfterView(v));
     setSearchQuery('');
-    if (v.kind === 'settings' || v.kind === 'home' || v.kind === 'recent') setSelectedNoteId(null);
+    if (v.kind === 'settings' || v.kind === 'home' || v.kind === 'recent' || v.kind === 'folder') setSelectedNoteId(null);
   };
 
   const handleSearchSubmit = (query: string) => {
@@ -632,6 +632,8 @@ function AppContent() {
                 notes={data.notes}
                 folders={data.folders}
                 view={view}
+                onOpenFolder={(id) => handleViewChange({ kind: 'folder', id })}
+                onAddFolder={data.addFolder}
                             onOpenSidebar={() => setSidebarOpen(true)}
                 settings={data.settings}
                 selectedNoteId={selectedNoteId}

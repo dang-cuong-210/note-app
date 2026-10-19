@@ -1,7 +1,6 @@
 import type { Folder } from '@/types';
 
 export function getFolderHierarchy(folders: Folder[]): Array<{ folder: Folder; depth: number }>;
-export function getVisibleFolderHierarchy(folders: Folder[], expandedFolderIds: Set<string>): Array<{ folder: Folder; depth: number }>;
 export function getFolderOptionLabel(folder: Folder, depth?: number): string;
 export function getFolderDisplayPath(folders: Folder[], folderId: string): string;
 export function getFolderAncestorIds(folders: Folder[], folderId: string): string[];

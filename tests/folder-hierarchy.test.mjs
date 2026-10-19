@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { getDirectFolderNoteCount } from '../src/lib/dashboardData.js';
-import { getFolderAncestorIds, getFolderDisplayPath, getFolderHierarchy, getFolderOptionLabel, getVisibleFolderHierarchy, removeFolderAndPromoteChildren } from '../src/lib/folderHierarchy.js';
+import { getFolderAncestorIds, getFolderDisplayPath, getFolderHierarchy, getFolderOptionLabel, removeFolderAndPromoteChildren } from '../src/lib/folderHierarchy.js';
 import { getMobileHomeFolderCount } from '../src/lib/mobileHome.js';
 
 const folders = [
@@ -24,18 +24,38 @@ test('folder hierarchy renders roots before children and retains each depth and 
   assert.deepEqual(getFolderAncestorIds(folders, 'deep'), ['personal', 'diary']);
 });
 
-test('expandable tree hides collapsed descendants and expands nested levels independently', () => {
-  assert.deepEqual(getVisibleFolderHierarchy(folders, new Set()).map(({ folder }) => folder.id), ['root-work', 'personal']);
-  assert.deepEqual(getVisibleFolderHierarchy(folders, new Set(['root-work'])).map(({ folder }) => folder.id), ['root-work', 'project-a', 'project-b', 'personal']);
-  assert.deepEqual(getVisibleFolderHierarchy(folders, new Set(['personal', 'diary'])).map(({ folder }) => folder.id), ['root-work', 'personal', 'diary', 'deep']);
-  const ancestorsOfDeepSelection = getFolderAncestorIds(folders, 'deep');
-  assert.deepEqual(getVisibleFolderHierarchy(folders, new Set(ancestorsOfDeepSelection)).map(({ folder }) => folder.id), ['root-work', 'personal', 'diary', 'deep']);
+test('desktop sidebar lists only root folders without tree disclosure or indentation', async () => {
+  const desktop = await readFile(new URL('../src/components/DesktopSidebar.tsx', import.meta.url), 'utf8');
+  assert.match(desktop, /getFolderHierarchy\(folders\)\.filter\(\(\{ depth \}\) => depth === 0\)/);
+  assert.doesNotMatch(desktop, /expandedFolderIds|getVisibleFolderHierarchy|ChevronRight/);
+  assert.doesNotMatch(desktop, /beginCreateFolder\(folder\.id\)/);
+  assert.match(desktop, /onClick=\{\(\) => onViewChange\(\{ kind: 'folder', id: folder\.id \}\)\}/);
 });
 
-test('desktop disclosure only toggles expansion while folder rows select the folder', async () => {
-  const desktop = await readFile(new URL('../src/components/DesktopSidebar.tsx', import.meta.url), 'utf8');
-  assert.match(desktop, /aria-expanded=\{expanded\} onClick=\{\(\) => setExpandedFolderIds\(/);
-  assert.match(desktop, /onClick=\{\(\) => onViewChange\(\{ kind: 'folder', id: folder\.id \}\)\}/);
+test('folder workspace shows direct children only and drills into child folder IDs', async () => {
+  const { getMobileChildFolders } = await import('../src/lib/mobileFolderArchive.js');
+  const workspace = await readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8');
+  assert.deepEqual(getMobileChildFolders(folders, 'root-work').map(({ id }) => id), ['project-a', 'project-b']);
+  assert.deepEqual(getMobileChildFolders(folders, 'project-a').map(({ id }) => id), []);
+  assert.deepEqual(getMobileChildFolders(folders, 'diary').map(({ id }) => id), ['deep']);
+  assert.match(workspace, /desktopMode && currentFolder && <section className="tanooki-desktop-folder-children"/);
+  assert.match(workspace, /onClick=\{\(\) => onOpenFolder\?\.\(folder\.id\)\}/);
+});
+
+test('desktop breadcrumbs navigate to ancestors and child creation uses the open parent', async () => {
+  const [workspace, app] = await Promise.all([
+    readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
+  ]);
+  assert.match(workspace, /aria-label="Đường dẫn thư mục"[\s\S]*?onOpenFolder\?\.\(id\)/);
+  assert.match(workspace, /onAddFolder\?\.\(desktopFolderName\.trim\(\), currentFolder\.id\)/);
+  assert.match(app, /onOpenFolder=\{\(id\) => handleViewChange\(\{ kind: 'folder', id \}\)\}/);
+});
+
+test('a folder with children is not treated as empty, while an actually empty folder gets its own state', async () => {
+  const workspace = await readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8');
+  assert.match(workspace, /!\(desktopMode && view\.kind === 'folder' && allChildFolders\.length > 0\)/);
+  assert.match(workspace, /Thư mục trống[\s\S]*?Tạo ghi chú hoặc thư mục con để bắt đầu/);
 });
 
 test('deleting a parent promotes its children without deleting them or their descendants', () => {
@@ -66,9 +86,9 @@ test('desktop and mobile folder screens use the same hierarchy and open existing
     readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
   ]);
-  assert.match(desktop, /getVisibleFolderHierarchy\(folders, expandedFolderIds\)/);
+  assert.match(desktop, /getFolderHierarchy\(folders\)\.filter\(\(\{ depth \}\) => depth === 0\)/);
   assert.match(desktop, /isActive\(\{ kind: 'folder', id: folder\.id \}\)/);
-  assert.match(desktop, /onAddFolder\(folderName\.trim\(\), folderCreateParentId\)/);
+  assert.match(desktop, /onAddFolder\(folderName\.trim\(\), null\)/);
   assert.match(home, /folderHierarchy\.filter\(\(\{ depth \}\) => depth === 0\)/);
   assert.match(noteList, /currentFolderBreadcrumb/);
   assert.match(noteList, /getMobileChildFolders\(folders, currentFolder\.id, searchQuery\)/);
@@ -86,8 +106,8 @@ test('root and child create, rename, delete, and note moves reuse the same curre
     readFile(new URL('../src/components/DesktopEditorToolsPanel.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/hooks/useAppData.ts', import.meta.url), 'utf8'),
   ]);
-  assert.match(desktop, /beginCreateFolder\(null\)/);
-  assert.match(desktop, /beginCreateFolder\(folder\.id\)/);
+  assert.match(desktop, /aria-label="Thêm thư mục gốc"/);
+  assert.match(noteList, /desktopFolderName\.trim\(\), currentFolder\.id/);
   assert.match(desktop, /beginRename\(folder\)/);
   assert.match(noteList, /onRenameFolder\?\.\(currentFolder\.id, folderActionName\.trim\(\)\)/);
   assert.match(noteList, /onDeleteFolder\?\.\(currentFolder\.id\)/);

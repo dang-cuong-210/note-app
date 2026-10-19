@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, ChevronRight, Clock3, FileText, Folder as FolderIcon, LogOut, MoreHorizontal, Pin, Plus, Search, Settings as SettingsIcon, Tag as TagIcon, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Archive, Clock3, FileText, Folder as FolderIcon, LogOut, MoreHorizontal, Pin, Plus, Search, Settings as SettingsIcon, Tag as TagIcon, Trash2 } from 'lucide-react';
 import { TanookiMark } from '@/components/TanookiBrand';
 import type { Folder, Note } from '@/types';
 import type { ViewType } from '@/lib/navigation';
 import { getAllTags } from '@/lib/utils';
 import { getDirectFolderNoteCount } from '@/lib/dashboardData.js';
-import { getFolderAncestorIds, getVisibleFolderHierarchy } from '@/lib/folderHierarchy.js';
+import { getFolderHierarchy } from '@/lib/folderHierarchy.js';
 
 interface DesktopSidebarProps {
   notes: Note[];
@@ -37,16 +37,12 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
   const [folderInputOpen, setFolderInputOpen] = useState(false);
   const [folderName, setFolderName] = useState('');
   const [folderMenuFor, setFolderMenuFor] = useState<string | null>(null);
-  const [folderCreateParentId, setFolderCreateParentId] = useState<string | null>(null);
-  const expandableFolderIds = useMemo(() => folders.filter((folder) => folders.some((child) => child.parentId === folder.id)).map((folder) => folder.id), [folders]);
-  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(() => new Set(expandableFolderIds));
   const [editingFolder, setEditingFolder] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const folderMenuRef = useRef<HTMLDivElement>(null);
   const folderTriggerRef = useRef<HTMLButtonElement>(null);
   const renameCommitted = useRef(false);
   const folderCreateCommitted = useRef(false);
-  const knownExpandableFolderIds = useRef(new Set(expandableFolderIds));
   const activeNotes = notes.filter((note) => !note.trashed);
   const tags = getAllTags(activeNotes);
   const count = {
@@ -67,44 +63,23 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
   }, [folderMenuFor]);
 
-  useEffect(() => {
-    const nextExpandable = new Set(expandableFolderIds);
-    const newlyExpandable = [...nextExpandable].filter((id) => !knownExpandableFolderIds.current.has(id));
-    knownExpandableFolderIds.current = nextExpandable;
-    if (newlyExpandable.length) setExpandedFolderIds((current) => new Set([...current, ...newlyExpandable]));
-  }, [expandableFolderIds]);
-
-  useEffect(() => {
-    if (currentView.kind !== 'folder') return;
-    const ancestors = getFolderAncestorIds(folders, currentView.id);
-    if (!ancestors.length) return;
-    setExpandedFolderIds((current) => {
-      if (ancestors.every((id) => current.has(id))) return current;
-      return new Set([...current, ...ancestors]);
-    });
-  }, [currentView, folders]);
-
   const isActive = (view: ViewType) => JSON.stringify(view) === JSON.stringify(currentView);
   const submitFolder = () => {
     if (folderCreateCommitted.current) return;
     if (!folderName.trim()) {
       setFolderInputOpen(false);
-      setFolderCreateParentId(null);
       return;
     }
     folderCreateCommitted.current = true;
-    onAddFolder(folderName.trim(), folderCreateParentId);
+    onAddFolder(folderName.trim(), null);
     setFolderName('');
     setFolderInputOpen(false);
-    setFolderCreateParentId(null);
   };
-  const beginCreateFolder = (parentId: string | null) => {
+  const beginCreateFolder = () => {
     folderCreateCommitted.current = false;
     setFolderName('');
-    setFolderCreateParentId(parentId);
     setFolderInputOpen(true);
     setFolderMenuFor(null);
-    if (parentId) setExpandedFolderIds((current) => new Set([...current, parentId]));
   };
   const beginRename = (folder: Folder) => {
     renameCommitted.current = false;
@@ -147,28 +122,21 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
       <div className="mt-6">
         <div className="mb-2 flex items-center justify-between px-2">
           <h2 className="text-[11px] font-semibold uppercase tracking-wider text-tertiary">Thư mục</h2>
-          <button type="button" aria-label="Thêm thư mục" title="Thêm thư mục gốc" onClick={() => beginCreateFolder(null)} className="rounded p-1 hover-bg"><Plus size={16} /></button>
+          <button type="button" aria-label="Thêm thư mục gốc" title="Thêm thư mục gốc" onClick={beginCreateFolder} className="rounded p-1 hover-bg"><Plus size={16} /></button>
         </div>
-        {folderInputOpen && folderCreateParentId === null && <input autoFocus value={folderName} onChange={(event) => setFolderName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submitFolder(); if (event.key === 'Escape') { folderCreateCommitted.current = true; setFolderInputOpen(false); setFolderName(''); } }} onBlur={submitFolder} placeholder="Tên thư mục gốc" aria-label="Tên thư mục mới" className="mb-1 w-full rounded-lg border bg-transparent px-2 py-2 text-sm outline-none focus-visible:ring-2" style={{ borderColor: 'var(--border)' }} />}
-        {getVisibleFolderHierarchy(folders, expandedFolderIds).map(({ folder, depth }, index) => {
-          const hasChildren = folders.some((child) => child.parentId === folder.id);
-          const expanded = expandedFolderIds.has(folder.id);
-          return <div key={folder.id} className="group relative mb-0.5" style={{ marginLeft: depth ? `${depth * 20}px` : undefined }}>
+        {folderInputOpen && <input autoFocus value={folderName} onChange={(event) => setFolderName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submitFolder(); if (event.key === 'Escape') { folderCreateCommitted.current = true; setFolderInputOpen(false); setFolderName(''); } }} onBlur={submitFolder} placeholder="Tên thư mục gốc" aria-label="Tên thư mục mới" className="mb-1 w-full rounded-lg border bg-transparent px-2 py-2 text-sm outline-none focus-visible:ring-2" style={{ borderColor: 'var(--border)' }} />}
+        {getFolderHierarchy(folders).filter(({ depth }) => depth === 0).map(({ folder }, index) => <div key={folder.id} className="group relative mb-0.5">
             {editingFolder === folder.id ? <input autoFocus value={editName} onChange={(event) => setEditName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') commitRename(folder); if (event.key === 'Escape') { renameCommitted.current = true; setEditingFolder(null); } }} onBlur={() => commitRename(folder)} aria-label={`Đổi tên ${folder.name}`} className="w-full rounded-lg border bg-transparent px-2 py-2 text-sm outline-none focus-visible:ring-2" style={{ borderColor: 'var(--border)' }} /> : <div className="flex min-w-0 items-center">
-              {hasChildren ? <button type="button" aria-label={`${expanded ? 'Thu gọn' : 'Mở rộng'} thư mục ${folder.name}`} aria-expanded={expanded} onClick={() => setExpandedFolderIds((current) => { const next = new Set(current); if (next.has(folder.id)) next.delete(folder.id); else next.add(folder.id); return next; })} className="grid h-8 w-6 shrink-0 place-items-center rounded text-tertiary hover-bg"><ChevronRight size={15} aria-hidden="true" className={expanded ? 'rotate-90 transition-transform' : 'transition-transform'} /></button> : <span className="w-6 shrink-0" aria-hidden="true" />}
               <button type="button" onClick={() => onViewChange({ kind: 'folder', id: folder.id })} aria-current={isActive({ kind: 'folder', id: folder.id }) ? 'page' : undefined} className={`tanooki-desktop-nav-item min-w-0 flex-1 pr-9 ${isActive({ kind: 'folder', id: folder.id }) ? 'is-active' : ''}`}>
                 <FolderIcon size={17} aria-hidden="true" style={{ color: ['var(--tanooki-red)', 'var(--tanooki-orange)', 'var(--tanooki-ochre)', 'var(--tanooki-brown)'][index % 4] }} /><span className="flex-1 truncate">{folder.name}</span><span className="text-xs text-tertiary">{getDirectFolderNoteCount(activeNotes, folder.id)}</span>
               </button>
               <button ref={folderMenuFor === folder.id ? folderTriggerRef : undefined} type="button" aria-label={`Tùy chọn thư mục ${folder.name}`} aria-expanded={folderMenuFor === folder.id} onClick={() => setFolderMenuFor(folderMenuFor === folder.id ? null : folder.id)} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover-bg"><MoreHorizontal size={16} /></button>
               {folderMenuFor === folder.id && <div ref={folderMenuRef} role="menu" className="absolute right-0 top-9 z-30 w-40 rounded-xl border p-1 shadow-lg" style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}>
-                <button type="button" role="menuitem" onClick={() => beginCreateFolder(folder.id)} className="w-full rounded-lg px-3 py-2 text-left text-sm hover-bg">Thêm thư mục con</button>
                 <button type="button" role="menuitem" onClick={() => beginRename(folder)} className="w-full rounded-lg px-3 py-2 text-left text-sm hover-bg">Đổi tên</button>
                 <button type="button" role="menuitem" onClick={() => { setFolderMenuFor(null); if (window.confirm(`Xóa thư mục “${folder.name}”? Ghi chú trực tiếp sẽ được chuyển về Tất cả ghi chú; thư mục con sẽ được chuyển lên cấp cha.`)) onDeleteFolder(folder.id); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-danger hover-bg">Xóa thư mục</button>
-              </div>}
             </div>}
-            {folderInputOpen && folderCreateParentId === folder.id && <input autoFocus value={folderName} onChange={(event) => setFolderName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submitFolder(); if (event.key === 'Escape') { folderCreateCommitted.current = true; setFolderInputOpen(false); setFolderName(''); setFolderCreateParentId(null); } }} onBlur={submitFolder} placeholder={`Thư mục con trong ${folder.name}`} aria-label={`Tên thư mục con trong ${folder.name}`} className="my-1 w-full rounded-lg border bg-transparent px-2 py-2 text-sm outline-none focus-visible:ring-2" style={{ borderColor: 'var(--border)' }} />}
-          </div>;
-        })}
+          </div>}
+        </div>)}
         {!folders.length && !folderInputOpen && <p className="px-2 py-1 text-xs text-tertiary">Chưa có thư mục</p>}
       </div>
 
