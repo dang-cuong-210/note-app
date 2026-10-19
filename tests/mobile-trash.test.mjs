@@ -9,6 +9,7 @@ const retention = await readFile(new URL('../src/lib/trashRetention.js', import.
 
 test('mobile Recently Deleted uses a dedicated responsive screen and returns to Home', () => {
   assert.match(app, /mobileTrashMode=\{!isDesktop && view\.kind === 'trash'\}/);
+  assert.match(app, /const showEditor = view\.kind !== 'settings' && view\.kind !== 'trash'/);
   assert.match(app, /onBackToHome=\{openMobileHome\}/);
   assert.match(app, /mobileDestination !== 'all' && view\.kind !== 'trash'/);
   assert.match(noteList, /mobileTrashMode && <header className="tanooki-mobile-trash-header"/);
@@ -37,6 +38,35 @@ test('mobile trash rows keep title, deletion timestamp, preview, More actions an
   assert.match(noteList, /onRestore=\{onRestore\}/);
   assert.match(noteList, /onPermanentDelete=\{\(\) => \{ void handleDelete\(menuNote\); \}\}/);
   assert.match(noteList, /confirmPermanentTrashDelete\(currentNote, \{[\s\S]*?isMobile: mobileTrashMode/);
+});
+
+test('mobile Trash normal rows are non-interactive and cannot change note selection', () => {
+  const trashRows = noteList.match(/mobileTrashMode \? <div className="tanooki-mobile-trash-card">([\s\S]*?)<\/div> : mobileWorkspaceMode/)[1];
+  assert.match(trashRows, /trashSelectionMode\s*\? <button[^>]*className="tanooki-mobile-trash-row-main" onClick=\{\(\) => toggleTrashSelection\(note\.id\)\}>\{rowContent\}<\/button>\s*: <div className="tanooki-mobile-trash-row-main">\{rowContent\}<\/div>/);
+  assert.doesNotMatch(trashRows, /onSelectNote\(note\.id\)/);
+  assert.match(trashRows, /className="tanooki-mobile-trash-more"[^>]*onClick=\{\(\) => \{ setMenuFor\(note\.id\)/);
+});
+
+test('mobile Trash edit mode toggles row selection and exposes selected state', () => {
+  const trashRows = noteList.match(/mobileTrashMode \? <div className="tanooki-mobile-trash-card">([\s\S]*?)<\/div> : mobileWorkspaceMode/)[1];
+  assert.match(noteList, /setTrashSelectionMode\(\(current\) => !current\); setSelectedTrashIds\(\[\]\)/);
+  assert.match(trashRows, /const selected = selectedTrashIds\.includes\(note\.id\)/);
+  assert.match(trashRows, /tanooki-mobile-trash-row\$\{selected \? ' is-selected' : ''\}/);
+  assert.match(trashRows, /className="tanooki-mobile-trash-check"[^>]*aria-pressed=\{selected\}[^>]*onClick=\{\(\) => toggleTrashSelection\(note\.id\)\}/);
+  assert.match(trashRows, /onClick=\{\(\) => toggleTrashSelection\(note\.id\)\}/);
+  assert.match(noteList, /if \(!mobileTrashMode\) \{\s*setTrashSelectionMode\(false\);\s*setSelectedTrashIds\(\[\]\);/);
+});
+
+test('mobile Trash selection control has a 44px target while preserving its visual indicator', () => {
+  assert.match(css, /\.tanooki-mobile-trash-check \{[^}]*width: 44px; min-width: 44px/);
+  assert.match(css, /\.tanooki-mobile-trash-check > span \{[^}]*width: 21px; height: 21px/);
+});
+
+test('desktop Trash row selection, restore and permanent-delete behavior remain unchanged', () => {
+  assert.match(noteList, /<button\s+onClick=\{\(\) => onSelectNote\(note\.id\)\}[\s\S]*?className=\{`tanooki-desktop-note-row/);
+  assert.match(noteList, /<MenuItem icon=\{<RotateCcw size=\{15\} \/>\} label="Khôi phục" onClick=\{\(\) => \{ onRestore\(note\.id\); setMenuFor\(null\); \}\} \/>/);
+  assert.match(noteList, /label="Xóa vĩnh viễn" danger onClick=\{\(\) => \{ handleDelete\(note\); setMenuFor\(null\); \}\}/);
+  assert.match(noteList, /confirmPermanentTrashDelete\(currentNote, \{[\s\S]*?permanentDelete: onPermanentDelete/);
 });
 
 test('mobile trash edit mode supports multi-select, restore and confirmed permanent deletion', () => {

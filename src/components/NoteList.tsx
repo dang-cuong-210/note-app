@@ -509,13 +509,16 @@ export function NoteList({
               const fn = folderName(note.folderId);
               const preview = record?.bodyText ? record.bodyText.slice(0, 120) : 'Chưa có nội dung';
               const selected = selectedTrashIds.includes(note.id);
+              const rowContent = <>
+                <strong>{note.title.trim() || 'Chưa có tiêu đề'}</strong>
+                <span>{noteTime(note.trashedAt || note.updatedAt)}<span aria-hidden="true"> · </span><span className="tanooki-mobile-trash-preview">{preview}</span></span>
+                {fn && <span className="tanooki-mobile-trash-folder"><FolderIcon size={13} aria-hidden="true" /><span>{fn}</span></span>}
+              </>;
               return <div className={`tanooki-mobile-trash-row${selected ? ' is-selected' : ''}`} key={note.id}>
                 {trashSelectionMode && <button type="button" className="tanooki-mobile-trash-check" aria-label={`${selected ? 'Bỏ chọn' : 'Chọn'} ${note.title.trim() || 'Chưa có tiêu đề'}`} aria-pressed={selected} onClick={() => toggleTrashSelection(note.id)}><span /></button>}
-                <button type="button" className="tanooki-mobile-trash-row-main" onClick={() => trashSelectionMode ? toggleTrashSelection(note.id) : onSelectNote(note.id)}>
-                  <strong>{note.title.trim() || 'Chưa có tiêu đề'}</strong>
-                  <span>{noteTime(note.trashedAt || note.updatedAt)}<span aria-hidden="true"> · </span><span className="tanooki-mobile-trash-preview">{preview}</span></span>
-                  {fn && <span className="tanooki-mobile-trash-folder"><FolderIcon size={13} aria-hidden="true" /><span>{fn}</span></span>}
-                </button>
+                {trashSelectionMode
+                  ? <button type="button" className="tanooki-mobile-trash-row-main" onClick={() => toggleTrashSelection(note.id)}>{rowContent}</button>
+                  : <div className="tanooki-mobile-trash-row-main">{rowContent}</div>}
                 <button type="button" className="tanooki-mobile-trash-more" aria-label={`Thao tác: ${note.title.trim() || 'Chưa có tiêu đề'}`} onClick={() => { setMenuFor(note.id); setMoveFor(null); }}><MoreHorizontal size={20} aria-hidden="true" /></button>
               </div>;
             })}
