@@ -1151,7 +1151,7 @@ export function useAppData(userId: string | null) {
       setNotes((prev) =>
         prev.map((n) => {
           if (n.id !== id) return n;
-          const updated = { ...n, trashed: true, trashedAt: Date.now(), pinned: false };
+          const updated = { ...n, trashed: true, trashedAt: Date.now() };
           saveNote(updated);
           return updated;
         })
