@@ -36,7 +36,7 @@ test('mobile trash rows keep title, deletion timestamp, preview, More actions an
   assert.match(noteList, /MobileTrashActionsSheet note=\{menuNote\}/);
   assert.match(noteList, /onRestore=\{onRestore\}/);
   assert.match(noteList, /onPermanentDelete=\{\(\) => \{ void handleDelete\(menuNote\); \}\}/);
-  assert.match(noteList, /if \(mobileTrashMode && !window\.confirm\(/);
+  assert.match(noteList, /confirmPermanentTrashDelete\(currentNote, \{[\s\S]*?isMobile: mobileTrashMode/);
 });
 
 test('mobile trash edit mode supports multi-select, restore and confirmed permanent deletion', () => {

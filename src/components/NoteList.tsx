@@ -25,6 +25,7 @@ import { sortNotes, formatTime } from '@/lib/utils';
 import { buildSearchRecords, filterSearchRecords, getNotesInView, getSearchSnippet, highlightSegments, normalizeSearchText, rankSearchRecords, sortSearchNotes } from '@/lib/advancedSearch.js';
 import { useToast } from '@/contexts/ToastContext';
 import { MobileBottomSheet, MobileNoteActionsSheet, MobileTrashActionsSheet } from '@/components/MobileEditorSheets';
+import { confirmPermanentTrashDelete } from '@/lib/trashActions.js';
 import { formatMobileAllNoteDate, groupMobileAllNotes } from '@/lib/mobileAllNotes.js';
 import { getEffectiveRecentTime, getRecentNotes, groupMobileRecentNotes } from '@/lib/recentNotes.js';
 import { getMobileChildFolders, getMobileFolderSummary } from '@/lib/mobileFolderArchive.js';
@@ -307,9 +308,16 @@ export function NoteList({
   };
 
   const handleDelete = async (note: Note) => {
-    if (mobileTrashMode && !window.confirm(`Xóa vĩnh viễn ghi chú “${note.title.trim() || 'Chưa có tiêu đề'}”?`)) return;
+    const currentNote = view.kind === 'trash'
+      ? sorted.find((candidate) => candidate.id === note.id && candidate.trashed)
+      : undefined;
+    if (!currentNote) return;
     try {
-      await onPermanentDelete(note.id);
+      await confirmPermanentTrashDelete(currentNote, {
+        isMobile: mobileTrashMode,
+        confirm: (message) => window.confirm(message),
+        permanentDelete: onPermanentDelete,
+      });
     } catch {
       // The parent reports the error and the note remains visible.
     }
