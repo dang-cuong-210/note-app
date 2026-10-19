@@ -29,6 +29,10 @@ export function getFolderHierarchy(folders) {
   return result;
 }
 
+export function getVisibleFolderHierarchy(folders, expandedFolderIds) {
+  return getFolderHierarchy(folders).filter(({ folder }) => getFolderAncestorIds(folders, folder.id).every((ancestorId) => expandedFolderIds.has(ancestorId)));
+}
+
 export function getFolderOptionLabel(folder, depth = 0) {
   return `${depth ? `${'\u00a0\u00a0'.repeat(depth)}└ ` : ''}${folder.name}`;
 }
@@ -44,6 +48,19 @@ export function getFolderDisplayPath(folders, folderId) {
     folder = folder.parentId ? byId.get(folder.parentId) : null;
   }
   return names.join(' › ');
+}
+
+export function getFolderAncestorIds(folders, folderId) {
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  const ancestors = [];
+  const visited = new Set([folderId]);
+  let folder = byId.get(folderId);
+  while (folder?.parentId && byId.has(folder.parentId) && !visited.has(folder.parentId)) {
+    visited.add(folder.parentId);
+    ancestors.unshift(folder.parentId);
+    folder = byId.get(folder.parentId);
+  }
+  return ancestors;
 }
 
 export function removeFolderAndPromoteChildren(folders, folderId) {

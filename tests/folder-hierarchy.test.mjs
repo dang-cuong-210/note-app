@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { getDirectFolderNoteCount } from '../src/lib/dashboardData.js';
-import { getFolderDisplayPath, getFolderHierarchy, getFolderOptionLabel, removeFolderAndPromoteChildren } from '../src/lib/folderHierarchy.js';
+import { getFolderAncestorIds, getFolderDisplayPath, getFolderHierarchy, getFolderOptionLabel, getVisibleFolderHierarchy, removeFolderAndPromoteChildren } from '../src/lib/folderHierarchy.js';
 import { getMobileHomeFolderCount } from '../src/lib/mobileHome.js';
 
 const folders = [
@@ -21,6 +21,21 @@ test('folder hierarchy renders roots before children and retains each depth and 
   ]);
   assert.equal(getFolderOptionLabel(folders[2], 1), '\u00a0\u00a0└ Dự án A');
   assert.equal(getFolderDisplayPath(folders, 'deep'), 'Cá nhân › Nhật ký › Ghi chú con');
+  assert.deepEqual(getFolderAncestorIds(folders, 'deep'), ['personal', 'diary']);
+});
+
+test('expandable tree hides collapsed descendants and expands nested levels independently', () => {
+  assert.deepEqual(getVisibleFolderHierarchy(folders, new Set()).map(({ folder }) => folder.id), ['root-work', 'personal']);
+  assert.deepEqual(getVisibleFolderHierarchy(folders, new Set(['root-work'])).map(({ folder }) => folder.id), ['root-work', 'project-a', 'project-b', 'personal']);
+  assert.deepEqual(getVisibleFolderHierarchy(folders, new Set(['personal', 'diary'])).map(({ folder }) => folder.id), ['root-work', 'personal', 'diary', 'deep']);
+  const ancestorsOfDeepSelection = getFolderAncestorIds(folders, 'deep');
+  assert.deepEqual(getVisibleFolderHierarchy(folders, new Set(ancestorsOfDeepSelection)).map(({ folder }) => folder.id), ['root-work', 'personal', 'diary', 'deep']);
+});
+
+test('desktop disclosure only toggles expansion while folder rows select the folder', async () => {
+  const desktop = await readFile(new URL('../src/components/DesktopSidebar.tsx', import.meta.url), 'utf8');
+  assert.match(desktop, /aria-expanded=\{expanded\} onClick=\{\(\) => setExpandedFolderIds\(/);
+  assert.match(desktop, /onClick=\{\(\) => onViewChange\(\{ kind: 'folder', id: folder\.id \}\)\}/);
 });
 
 test('deleting a parent promotes its children without deleting them or their descendants', () => {
@@ -51,11 +66,11 @@ test('desktop and mobile folder screens use the same hierarchy and open existing
     readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
   ]);
-  assert.match(desktop, /getFolderHierarchy\(folders\)/);
+  assert.match(desktop, /getVisibleFolderHierarchy\(folders, expandedFolderIds\)/);
   assert.match(desktop, /isActive\(\{ kind: 'folder', id: folder\.id \}\)/);
   assert.match(desktop, /onAddFolder\(folderName\.trim\(\), folderCreateParentId\)/);
-  assert.match(home, /folderHierarchy\.map\(\(\{ folder, depth \}\)/);
-  assert.match(home, /getFolderHierarchy\(folders\)/);
+  assert.match(home, /folderHierarchy\.filter\(\(\{ depth \}\) => depth === 0\)/);
+  assert.match(noteList, /currentFolderBreadcrumb/);
   assert.match(noteList, /getMobileChildFolders\(folders, currentFolder\.id, searchQuery\)/);
   assert.match(noteList, /onAddFolder\?\.\(folderActionName\.trim\(\), currentFolder\.id\)/);
   assert.match(app, /handleBackFromMobileFolder/);

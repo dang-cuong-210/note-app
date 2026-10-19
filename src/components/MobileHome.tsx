@@ -60,7 +60,7 @@ export function MobileHome({ notes, folders, searchQuery, onSearchChange, onSear
         <section className="tanooki-mobile-home-section" aria-labelledby="tanooki-mobile-home-folders">
           <h1 id="tanooki-mobile-home-folders">Thư mục</h1>
           {folders.length > 0 ? <div className="tanooki-mobile-home-grouped-card">
-            {folderHierarchy.map(({ folder, depth }) => <FolderRow key={folder.id} folder={folder} depth={depth} count={getMobileHomeFolderCount(notes, folder.id)} onClick={() => onOpenFolder(folder.id)} />)}
+            {folderHierarchy.filter(({ depth }) => depth === 0).map(({ folder }) => <FolderRow key={folder.id} folder={folder} count={getMobileHomeFolderCount(notes, folder.id)} onClick={() => onOpenFolder(folder.id)} />)}
           </div> : <p className="tanooki-mobile-home-empty-folders">Chưa có thư mục nào.</p>}
         </section>
 
@@ -106,10 +106,10 @@ export function MobileFoldersView({ folders, notes, onOpenFolder, onAddFolder }:
   const folderHierarchy = useMemo(() => getFolderHierarchy(folders), [folders]);
   return <div className="tanooki-mobile-page">
     <header className="tanooki-mobile-page-heading"><div><h1>Thư mục</h1><p>Ghi chú được sắp xếp theo chủ đề.</p></div><button type="button" aria-label="Tạo thư mục" onClick={() => setCreateOpen(true)}><Plus size={20} /></button></header>
-    {folderHierarchy.length ? <div className="tanooki-mobile-folder-list">
-      {folderHierarchy.map(({ folder, depth }, index) => {
+      {folderHierarchy.some(({ depth }) => depth === 0) ? <div className="tanooki-mobile-folder-list">
+      {folderHierarchy.filter(({ depth }) => depth === 0).map(({ folder }, index) => {
         const count = notes.filter((note) => note.folderId === folder.id && !note.trashed && !note.archived).length;
-        return <button type="button" key={folder.id} style={{ marginLeft: depth ? `${depth * 16}px` : undefined, width: depth ? `calc(100% - ${depth * 16}px)` : undefined }} onClick={() => onOpenFolder(folder.id)} aria-label={depth ? `${folder.name}, thư mục con` : folder.name}>
+        return <button type="button" key={folder.id} onClick={() => onOpenFolder(folder.id)} aria-label={folder.name}>
           <span className={`tanooki-mobile-folder-icon tone-${index % 4}`}><Folder /></span>
           <span><strong>{folder.name}</strong><small>{count} ghi chú</small></span>
           <ChevronRight size={17} aria-hidden="true" />

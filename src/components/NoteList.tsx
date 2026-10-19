@@ -28,7 +28,7 @@ import { MobileBottomSheet, MobileNoteActionsSheet, MobileTrashActionsSheet } fr
 import { formatMobileAllNoteDate, groupMobileAllNotes } from '@/lib/mobileAllNotes.js';
 import { getEffectiveRecentTime, getRecentNotes, groupMobileRecentNotes } from '@/lib/recentNotes.js';
 import { getMobileChildFolders, getMobileFolderSummary } from '@/lib/mobileFolderArchive.js';
-import { getFolderHierarchy, getFolderOptionLabel } from '@/lib/folderHierarchy.js';
+import { getFolderAncestorIds, getFolderHierarchy, getFolderOptionLabel } from '@/lib/folderHierarchy.js';
 import { clearRecentSearches, loadRecentSearches, recordRecentSearch, removeRecentSearch } from '@/lib/recentSearches.js';
 
 interface NoteListProps {
@@ -175,6 +175,7 @@ export function NoteList({
   const mobileRecentGroups = useMemo(() => groupMobileRecentNotes(sorted, recentOpenedAt), [sorted, recentOpenedAt]);
   const menuNote = sorted.find((note) => note.id === menuFor) || null;
   const currentFolder = view.kind === 'folder' ? folders.find((folder) => folder.id === view.id) ?? null : null;
+  const currentFolderBreadcrumb = currentFolder ? getFolderAncestorIds(folders, currentFolder.id).map((id) => folders.find((folder) => folder.id === id)?.name).filter(Boolean).join(' / ') : '';
   const currentFolderId = view.kind === 'folder' ? view.id : null;
   const allChildFolders = useMemo(() => currentFolder ? getMobileChildFolders(folders, currentFolder.id) : [], [folders, currentFolder]);
   const childFolders = useMemo(() => currentFolder ? getMobileChildFolders(folders, currentFolder.id, searchQuery) : [], [folders, currentFolder, searchQuery]);
@@ -318,7 +319,7 @@ export function NoteList({
 
   return (
     <div className={`${mobileAllNotesMode || mobileRecentMode || mobileTrashMode || mobileWorkspaceMode ? '' : 'h-full'} w-full max-lg:min-w-0 max-lg:max-w-full ${mobileAllNotesMode || mobileRecentMode ? 'tanooki-mobile-all-notes' : mobileTrashMode ? 'tanooki-mobile-trash' : mobileWorkspaceMode ? 'tanooki-mobile-workspace' : 'max-lg:pb-[calc(72px+env(safe-area-inset-bottom))]'} flex flex-col bg-app ${desktopMode ? 'tanooki-desktop-note-list' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
-      {desktopMode && <div className="tanooki-desktop-list-heading px-4 pt-4"><h2>{contextTitle}</h2><span>{sorted.length} ghi chú</span></div>}
+      {desktopMode && <div className="tanooki-desktop-list-heading px-4 pt-4">{currentFolderBreadcrumb && <p className="tanooki-desktop-folder-breadcrumb">{currentFolderBreadcrumb}</p>}<h2>{contextTitle}</h2><span>{sorted.length} ghi chú</span></div>}
       {mobileTrashMode && <header className="tanooki-mobile-trash-header">
         <div className="tanooki-mobile-trash-navigation">
           <button type="button" onClick={onBackToHome} aria-label="Quay lại Thư mục"><ChevronLeft size={22} aria-hidden="true" /><span>Thư mục</span></button>
@@ -364,6 +365,7 @@ export function NoteList({
             {view.kind === 'folder' ? <button type="button" onClick={() => { setFolderAction('menu'); setWorkspaceOptionsOpen(true); }} aria-label="Tùy chọn thư mục"><MoreHorizontal size={22} aria-hidden="true" /></button> : <button type="button" onClick={() => setMobileControlsOpen(true)} aria-label="Tùy chọn ghi chú"><MoreHorizontal size={22} aria-hidden="true" /></button>}
           </div>
         </div>
+        {currentFolderBreadcrumb && <p className="tanooki-mobile-workspace-breadcrumb" aria-label={`Đường dẫn thư mục: ${currentFolderBreadcrumb}`}>{currentFolderBreadcrumb}</p>}
         <h1>{view.kind === 'folder' ? currentFolder?.name || 'Thư mục' : 'Lưu trữ'}</h1>
         <label className="tanooki-mobile-workspace-search"><Search size={21} aria-hidden="true" /><input data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} placeholder="Tìm kiếm ghi chú, thư mục..." aria-label="Tìm kiếm ghi chú, thư mục" />{searchQuery && <button type="button" onClick={() => onSearchChange('')} aria-label="Xóa nội dung tìm kiếm"><X size={17} aria-hidden="true" /></button>}</label>
       </header>}

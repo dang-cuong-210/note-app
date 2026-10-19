@@ -36,11 +36,14 @@ test('All Notes count excludes archived and trashed notes, matching the existing
   assert.deepEqual(counts, { active: 1, archived: 1, trashed: 1 });
 });
 
-test('folder rows render in parent-first hierarchy order without mutating folder records', async () => {
+test('mobile Home and Folders overview show roots only while preserving stored hierarchy order', async () => {
   const home = await readFile(new URL('../src/components/MobileHome.tsx', import.meta.url), 'utf8');
-  assert.match(home, /folderHierarchy\.map\(\(\{ folder, depth \}\) => <FolderRow/);
+  assert.match(home, /folderHierarchy\.filter\(\(\{ depth \}\) => depth === 0\)\.map\(\(\{ folder \}\) => <FolderRow/);
   assert.deepEqual(folders.map(({ id }) => id), ['f1', 'f2']);
-  assert.deepEqual(getFolderHierarchy(folders).map(({ folder }) => folder.id), ['f1', 'f2']);
+  const nestedFolders = [...folders, { id: 'f3', name: 'Con', parentId: 'f1', createdAt: 3 }];
+  const hierarchy = getFolderHierarchy(nestedFolders);
+  assert.deepEqual(hierarchy.map(({ folder }) => folder.id), ['f1', 'f3', 'f2']);
+  assert.deepEqual(hierarchy.filter(({ depth }) => depth === 0).map(({ folder }) => folder.id), ['f1', 'f2']);
 });
 
 test('folder note counts include direct active notes only', () => {
