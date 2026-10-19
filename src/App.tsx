@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { CloudOff } from 'lucide-react';
 import { useAppData } from '@/hooks/useAppData';
 import { ToastProvider } from '@/components/ToastProvider';
@@ -20,7 +20,8 @@ import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ViewType } from '@/lib/navigation';
 import type { Note } from '@/types';
-import { getInitialView, getDashboardNoteDestination, shouldAutoSelectNote } from '@/lib/dashboardData.js';
+import { getInitialView, getDashboardNoteDestination } from '@/lib/dashboardData.js';
+import { reconcileDesktopSelection } from '@/lib/desktopSelection.js';
 import { getMobileDestinationAfterView, getMobileFolderState, getMobileNewNoteState, getMobileSearchState, shouldShowMobileBottomNav } from '@/lib/mobileNavigation.js';
 import { getRecentNotes, loadRecentOpenTimes, recordRecentOpen } from '@/lib/recentNotes.js';
 import { getDesktopViewLabel } from '@/lib/desktopWorkspace.js';
@@ -53,7 +54,10 @@ function AppContent() {
   const [focusSearchPending, setFocusSearchPending] = useState(false);
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
   const { toast } = useToast();
-  const recentOpenedAt = recentOpenState.accountId === user?.id ? recentOpenState.times : {};
+  const recentOpenedAt = useMemo(
+    () => recentOpenState.accountId === user?.id ? recentOpenState.times : {},
+    [recentOpenState.accountId, recentOpenState.times, user?.id]
+  );
 
   useEffect(() => {
     if (draftOwnerRef.current === (user?.id ?? null)) return;
@@ -144,20 +148,7 @@ function AppContent() {
   }, [user?.id, accountDataLoaded, online, permanentDelete]);
 
 
-  // Select first note when view changes (desktop only)
-  useEffect(() => {
-    if (!data.loaded) return;
-    if (isDesktop) {
-      if (shouldAutoSelectNote(view)) {
-        const visibleNotes = getVisibleNotes();
-        if (visibleNotes.length > 0 && !visibleNotes.find((n) => n.id === selectedNoteId)) {
-          setSelectedNoteId(visibleNotes[0].id);
-        }
-      }
-    }
-  }, [view, data.loaded, isDesktop]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function getVisibleNotes() {
+  const getVisibleNotes = useCallback(() => {
     const visible = data.notes.filter((n) => {
       switch (view.kind) {
         case 'all': return !n.trashed && !n.archived;
@@ -172,7 +163,20 @@ function AppContent() {
     });
     const queryFiltered = searchQuery ? searchNotes(visible, searchQuery) : visible;
     return view.kind === 'recent' ? getRecentNotes(queryFiltered, recentOpenedAt) : queryFiltered;
-  }
+  }, [data.notes, view, searchQuery, recentOpenedAt]);
+
+  // Keep desktop selection inside the active note-list view, including when
+  // note actions change membership (pin, archive, folder, or tag).
+  useLayoutEffect(() => {
+    if (!data.loaded || !isDesktop || view.kind === 'home' || view.kind === 'settings') return;
+    const nextSelectedNoteId = reconcileDesktopSelection({
+      notes: data.notes,
+      view,
+      selectedNoteId,
+      candidateNotes: getVisibleNotes(),
+    });
+    if (nextSelectedNoteId !== selectedNoteId) setSelectedNoteId(nextSelectedNoteId);
+  }, [view, data.loaded, data.notes, isDesktop, selectedNoteId, getVisibleNotes]);
 
   const selectedNote = data.notes.find((n) => n.id === selectedNoteId) || null;
   const existingTags = useMemo(() => getAllTags(data.notes).map(({ name }) => name), [data.notes]);
