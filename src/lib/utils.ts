@@ -1,6 +1,8 @@
 import type { Note, Folder, Settings, TagInfo } from '@/types';
 import { normalizeSearchText, stripHtmlToText } from '@/lib/advancedSearch.js';
 import { extractTagsFromContent } from '@/lib/tagUtils.js';
+import { exportJsonBackup, parseJsonBackup } from '@/lib/jsonBackup.js';
+import type { JsonBackup } from '@/lib/jsonBackup.js';
 
 export function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
@@ -110,18 +112,12 @@ export function applyFontSize(size: Settings['fontSize']) {
 
 /** Export all data as JSON. */
 export function exportData(notes: Note[], folders: Folder[], settings: Settings): string {
-  return JSON.stringify({ version: 1, notes, folders, settings }, null, 2);
+  return exportJsonBackup(notes, folders, settings);
 }
 
 /** Parse imported JSON. */
-export function parseImport(json: string): {
-  notes?: Note[];
-  folders?: Folder[];
-  settings?: Settings;
-} {
-  const data = JSON.parse(json);
-  if (!data || typeof data !== 'object') throw new Error('Invalid file');
-  return data;
+export function parseImport(json: string): JsonBackup {
+  return parseJsonBackup(json);
 }
 
 /** Search notes by query in title and content. */

@@ -8,6 +8,7 @@ import { copyNoteImage, deleteAllNoteImages, signNoteImage } from '@/lib/images'
 import { createAttachmentSync, mapAttachment, type AttachmentRow } from '@/lib/attachmentSync';
 import { createFolderSync, mapRemoteFolder, type FolderRecord } from '@/lib/folderSync';
 import { canDiscardUnsentDraftOffline } from '@/lib/editorBehavior.js';
+import { mergeJsonBackupData } from '@/lib/jsonBackup.js';
 import { removeFolderAndPromoteChildren } from '@/lib/folderHierarchy.js';
 import {
   uploadAttachment,
@@ -1404,29 +1405,70 @@ export function useAppData(userId: string | null) {
 
   // ===== Import/Export =====
   const importData = useCallback(
-    (data: { notes?: Note[]; folders?: Folder[]; settings?: Settings }) => {
-      if (data.folders) {
-        setFolders(data.folders);
-        data.folders.forEach((f) => {
-          saveFolder(f);
-        });
+    async (data: { notes: Note[]; folders: Folder[]; settings?: Partial<Settings> }) => {
+      if (!userId || activeAccountId.current !== userId) throw new Error('Không thể nhập dữ liệu khi tài khoản chưa sẵn sàng.');
+
+      const currentNotes = notesRef.current;
+      const merged = mergeJsonBackupData(data, currentNotes, folders);
+      const importedIds = new Set(data.notes.map((note) => note.id));
+      const noteDrafts = merged.notes.filter((note) => importedIds.has(note.id)).map((note) => {
+        const existing = currentNotes.find((current) => current.id === note.id);
+        confirmedRevisions.current.set(note.id, existing
+          ? confirmedRevisions.current.get(note.id) ?? existing.revision ?? -1
+          : -1);
+        return { ...note, syncPending: true };
+      });
+
+      // Persist the whole validated note batch locally before publishing it. The
+      // normal saveNote path below then queues each row through existing CAS sync.
+      await localDb.putNotes(userId, noteDrafts);
+      for (const note of noteDrafts) {
+        saveNote(note);
       }
-      if (data.notes) {
-        setNotes(data.notes);
-        if (userId) void localDb.putNotes(userId, data.notes);
-        data.notes.forEach((n) => {
-          if (!confirmedRevisions.current.has(n.id)) confirmedRevisions.current.set(n.id, -1);
-          saveNote(n);
-        });
+      const mergedNotes = merged.notes.map((note) => importedIds.has(note.id)
+        ? noteDrafts.find((draft) => draft.id === note.id) ?? note
+        : note);
+      notesRef.current = mergedNotes;
+      setNotes(mergedNotes);
+
+      let foldersAdded = merged.foldersAdded;
+      let foldersUpdated = merged.foldersUpdated;
+      let failed = 0;
+      const session = folderSync.current;
+      for (const incoming of data.folders) {
+        const existing = folders.find((folder) => folder.id === incoming.id);
+        const folder = merged.folders.find((current) => current.id === incoming.id)!;
+        if (!session || session.accountId !== userId) {
+          failed += 1;
+          if (existing) foldersUpdated -= 1;
+          else foldersAdded -= 1;
+          continue;
+        }
+        try {
+          await session.save(folder);
+          if (navigator.onLine) void session.flush();
+        } catch {
+          failed += 1;
+          if (existing) foldersUpdated -= 1;
+          else foldersAdded -= 1;
+        }
       }
-      if (data.settings) {
-        setSettings(data.settings);
-        applyTheme(data.settings.theme);
-        applyFontSize(data.settings.fontSize);
-        localDb.saveSettings(data.settings);
+
+      if (data.settings && Object.keys(data.settings).length) {
+        const next = { ...settings, ...data.settings };
+        try {
+          await localDb.saveSettings(next);
+          setSettings(next);
+          if (data.settings.theme) applyTheme(data.settings.theme);
+          if (data.settings.fontSize) applyFontSize(data.settings.fontSize);
+        } catch {
+          failed += 1;
+        }
       }
+
+      return { notesAdded: merged.notesAdded, notesUpdated: merged.notesUpdated, foldersAdded, foldersUpdated, failed };
     },
-    [saveNote, saveFolder, userId]
+    [saveNote, userId, folders, settings]
   );
 
   const flushAll = useCallback(async () => {

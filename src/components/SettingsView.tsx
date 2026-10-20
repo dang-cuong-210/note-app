@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import type { Settings, Note, Folder } from '@/types';
 import { exportData, parseImport } from '@/lib/utils';
+import { summarizeJsonImport } from '@/lib/jsonBackup.js';
+import type { JsonBackup } from '@/lib/jsonBackup.js';
 import { useToast } from '@/contexts/ToastContext';
 
 interface SettingsViewProps {
@@ -16,7 +18,7 @@ interface SettingsViewProps {
   notes: Note[];
   folders: Folder[];
   onUpdateSettings: (updates: Partial<Settings>) => void;
-  onImport: (data: { notes?: Note[]; folders?: Folder[]; settings?: Settings }) => void;
+  onImport: (data: JsonBackup) => Promise<{ notesAdded: number; notesUpdated: number; foldersAdded: number; foldersUpdated: number; failed: number }>;
   onBack: () => void;
 }
 
@@ -37,25 +39,41 @@ export function SettingsView({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `noted-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `tanooki-data-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast('Đã xuất ghi chú');
+    toast('Đã xuất dữ liệu JSON');
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const data = parseImport(reader.result as string);
-        onImport(data);
-        toast('Đã nhập ghi chú thành công');
-      } catch {
-        toast('Không thể nhập tệp — định dạng không hợp lệ');
+        const summary = summarizeJsonImport(data, notes, folders);
+        const lines = [
+          `${summary.notesToAdd} ghi chú mới`,
+          `${summary.notesToUpdate} ghi chú sẽ được cập nhật`,
+          `${summary.foldersToAdd} thư mục mới`,
+          `${summary.foldersToUpdate} thư mục sẽ được cập nhật`,
+          ...(summary.applySettings ? ['Cài đặt trên thiết bị này sẽ được áp dụng'] : []),
+          '',
+          'Tệp đính kèm, ảnh và video không được nhập từ tệp JSON này.',
+        ];
+        if (!window.confirm(`Nhập dữ liệu này?\n\n${lines.join('\n')}`)) return;
+        const result = await onImport(data);
+        const changed = result.notesAdded + result.notesUpdated + result.foldersAdded + result.foldersUpdated;
+        toast(result.failed
+          ? `Đã nhập một phần; ${result.failed} mục chưa thể lưu. Các ghi chú đã được đưa vào hàng đợi đồng bộ.`
+          : changed ? `Đã nhập ${result.notesAdded} ghi chú mới, cập nhật ${result.notesUpdated}; ${result.foldersAdded} thư mục mới, cập nhật ${result.foldersUpdated}. Dữ liệu đang được đồng bộ.`
+            : summary.applySettings ? 'Đã áp dụng cài đặt trên thiết bị này.' : 'Không có ghi chú hoặc thư mục mới để nhập');
+      } catch (error) {
+        toast(error instanceof Error ? error.message : 'Không thể nhập tệp JSON này.');
       }
     };
+    reader.onerror = () => toast('Không thể đọc tệp JSON này.');
     reader.readAsText(file);
     e.target.value = '';
   };
@@ -144,7 +162,7 @@ export function SettingsView({
           </Section>
 
           {/* Data */}
-          <Section title="Sao lưu và dữ liệu">
+          <Section title="Dữ liệu JSON">
             <button
               onClick={handleExport}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-secondary hover-bg text-app text-sm transition-colors text-left"
@@ -152,8 +170,8 @@ export function SettingsView({
             >
               <Download size={18} style={{ color: 'var(--accent)' }} />
               <div className="flex-1">
-                <div className="font-medium">Xuất ghi chú</div>
-                <div className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>Tải toàn bộ ghi chú dưới dạng JSON</div>
+                <div className="font-medium">Xuất dữ liệu JSON</div>
+                <div className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>Gồm ghi chú, thư mục và cài đặt trên thiết bị.</div>
               </div>
             </button>
 
@@ -164,10 +182,13 @@ export function SettingsView({
             >
               <Upload size={18} style={{ color: 'var(--accent)' }} />
               <div className="flex-1">
-                <div className="font-medium">Nhập ghi chú</div>
-                <div className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>Khôi phục từ tệp sao lưu</div>
+                <div className="font-medium">Nhập dữ liệu JSON</div>
+                <div className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>Gộp dữ liệu; ghi chú vắng mặt sẽ được giữ lại.</div>
               </div>
             </button>
+            <p className="px-1 text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>
+              Không bao gồm tệp đính kèm, ảnh hoặc video. Nội dung có thể còn tham chiếu đến tệp chỉ có trên tài khoản.
+            </p>
             <input
               ref={fileRef}
               type="file"
