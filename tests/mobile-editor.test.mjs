@@ -114,12 +114,38 @@ test('mobile editor toolbar has exactly four primary actions and preserves the e
   assert.match(editor, /ref=\{mobileAttachmentInputRef\}[\s\S]*?type="file"[\s\S]*?onChange=\{handleFileSelect\}/);
 });
 
-test('mobile More menu opens/closes as an accessible sheet and unsupported tools report a safe placeholder', () => {
+test('mobile More menu removes unsupported placeholders and preserves working actions', () => {
   assert.match(editor, /onClick=\{\(\) => setMobileSheet\('actions'\)\} aria-label="Tùy chọn ghi chú"/);
   assert.match(editor, /<MobileEditorMoreSheet[\s\S]*?open=\{mobileSheet === 'actions'\} onClose=\{\(\) => setMobileSheet\(null\)\}/);
-  assert.match(editor, /onPlaceholder=\{\(\) => toast\('Sẽ hỗ trợ sau'\)\}/);
-  for (const label of ['Bản quét', 'Khóa', 'Tìm trong ghi chú', 'Kết quả toán học', 'Ghi chú gần đây', 'Đường kẻ &amp; lưới', 'Chế độ xem tệp đính kèm', 'Sử dụng nền sáng màu']) assert.ok(sheets.includes(label));
+  for (const label of ['Bản quét', 'Khóa', 'Kết quả toán học', 'Đường kẻ &amp; lưới']) assert.ok(!sheets.includes(label), `${label} should not be offered`);
+  assert.doesNotMatch(editor + sheets, /onPlaceholder|Sẽ hỗ trợ sau/);
+  for (const label of ['Ghim', 'Tìm trong ghi chú', 'Di chuyển ghi chú', 'Ghi chú gần đây', 'Chế độ xem tệp đính kèm', 'Sử dụng nền sáng màu', 'Lưu trữ', 'Tạo bản sao', 'Xóa']) assert.ok(sheets.includes(label));
+  assert.match(sheets, /onTogglePin\(note\.id\)/);
+  assert.match(sheets, /onArchive\(note\.id, !note\.archived\)/);
+  assert.match(sheets, /onMove\(note\.id, event\.target\.value \|\| null\)/);
+  assert.match(sheets, /onDuplicate\(note\.id\)/);
+  assert.match(sheets, /onTrash\(note\.id\)/);
+  assert.match(editor, /tanooki-desktop-editor[\s\S]*?desktopPresentation && menuOpen/);
+  assert.match(editor, /label="Chuyển vào thùng rác"/);
+});
+
+test('mobile note Share remains wired and its unsupported-device fallback is accurate', () => {
+  assert.match(editor, /onClick=\{\(\) => \{ void handleShareNote\(\); \}\} aria-label="Chia sẻ ghi chú"/);
   assert.match(editor, /navigator\.share/);
+  assert.match(editor, /navigator\.clipboard\?\.writeText/);
+  assert.match(editor, /Thiết bị này không hỗ trợ chia sẻ trực tiếp\./);
+  assert.doesNotMatch(editor, /Chia sẻ sẽ được hỗ trợ sau/);
+});
+
+test('desktop note menu retains its existing pin, archive, folder move and trash actions', () => {
+  const desktopMenu = editor.match(/\{desktopPresentation && menuOpen && \([\s\S]*?\n            \)\}/)?.[0];
+  assert.ok(desktopMenu);
+  for (const label of ['Ghim', 'Bỏ ghim', 'Lưu trữ', 'Bỏ lưu trữ', 'Chuyển đến...', 'Chuyển vào thùng rác']) assert.ok(desktopMenu.includes(label));
+  assert.doesNotMatch(desktopMenu, /Bản quét|Kết quả toán học|Đường kẻ &amp; lưới/);
+});
+
+test('mobile More menu remains an accessible bottom sheet', () => {
+  assert.match(sheets, /title="Tùy chọn ghi chú" onClose=\{onClose\} labelledBy="mobile-note-actions"/);
   assert.match(editor, /execCommand\('undo'\)/);
   assert.match(editor, /execCommand\('redo'\)/);
   assert.match(editor, /is-light-paper/);

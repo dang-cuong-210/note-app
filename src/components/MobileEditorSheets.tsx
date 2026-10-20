@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Archive, ArchiveRestore, Calculator, CalendarDays, Clock3, Copy, File, FileText, Folder, Grid2X2, Hash, Image, LockKeyhole, MoreHorizontal, Paperclip, Pin, ScanLine, Search, Share2, Sun, Trash2, Video, X, Edit3 } from 'lucide-react';
+import { Archive, ArchiveRestore, CalendarDays, Clock3, Copy, File, FileText, Folder, Hash, Image, MoreHorizontal, Paperclip, Pin, Search, Share2, Sun, Trash2, Video, X, Edit3 } from 'lucide-react';
 import type { Attachment, Folder as NoteFolder, Note } from '@/types';
 import { getFolderHierarchy, getFolderOptionLabel } from '@/lib/folderHierarchy.js';
 import { getDesktopNoteProperties } from '@/lib/desktopWorkspace.js';
@@ -161,29 +161,22 @@ interface MobileEditorMoreSheetProps {
   onDuplicate: (id: string) => void;
   onTrash: (id: string) => void;
   onFind: () => void;
-  onPlaceholder: () => void;
   onNavigateRecent: () => void;
   onTogglePaper: () => void;
   onShowAttachments: () => void;
   paperMode: boolean;
 }
 
-export function MobileEditorMoreSheet({ note, folders, open, onClose, onTogglePin, onArchive, onMove, onDuplicate, onTrash, onFind, onPlaceholder, onNavigateRecent, onTogglePaper, onShowAttachments, paperMode }: MobileEditorMoreSheetProps) {
+export function MobileEditorMoreSheet({ note, folders, open, onClose, onTogglePin, onArchive, onMove, onDuplicate, onTrash, onFind, onNavigateRecent, onTogglePaper, onShowAttachments, paperMode }: MobileEditorMoreSheetProps) {
   const run = (action: () => void) => { onClose(); action(); };
   const [moving, setMoving] = useState(false);
   useEffect(() => { if (!open) setMoving(false); }, [open]);
   return <MobileBottomSheet open={open} title="Tùy chọn ghi chú" onClose={onClose} labelledBy="mobile-note-actions">
-    <div className="tanooki-mobile-note-menu-quick">
-      <button type="button" onClick={onPlaceholder}><ScanLine size={20} /><span>Bản quét</span></button>
-      <button type="button" onClick={() => run(() => onTogglePin(note.id))}>{note.pinned ? <Pin size={20} fill="currentColor" /> : <Pin size={20} />}<span>{note.pinned ? 'Bỏ ghim' : 'Ghim'}</span></button>
-      <button type="button" onClick={onPlaceholder}><LockKeyhole size={20} /><span>Khóa</span></button>
-    </div>
     <div className="tanooki-mobile-note-menu-list">
+      <button type="button" onClick={() => run(() => onTogglePin(note.id))}>{note.pinned ? <Pin size={19} fill="currentColor" /> : <Pin size={19} />}<span>{note.pinned ? 'Bỏ ghim' : 'Ghim'}</span></button>
       <button type="button" onClick={() => run(onFind)}><Search size={19} /><span>Tìm trong ghi chú</span></button>
       {moving ? <label className="tanooki-mobile-note-menu-move"><Folder size={19} /><span>Di chuyển ghi chú</span><select aria-label="Di chuyển ghi chú" value={note.folderId || ''} onChange={(event) => run(() => onMove(note.id, event.target.value || null))}><option value="">Không có thư mục</option>{getFolderHierarchy(folders).map(({ folder, depth }) => <option key={folder.id} value={folder.id}>{getFolderOptionLabel(folder, depth)}</option>)}</select></label> : <button type="button" onClick={() => setMoving(true)}><Folder size={19} /><span>Di chuyển ghi chú</span></button>}
-      <button type="button" onClick={onPlaceholder}><Calculator size={19} /><span>Kết quả toán học</span></button>
       <button type="button" onClick={() => run(onNavigateRecent)}><Clock3 size={19} /><span>Ghi chú gần đây</span></button>
-      <button type="button" onClick={onPlaceholder}><Grid2X2 size={19} /><span>Đường kẻ &amp; lưới</span></button>
       <button type="button" onClick={() => run(onShowAttachments)}><Paperclip size={19} /><span>Chế độ xem tệp đính kèm</span></button>
       <button type="button" onClick={onTogglePaper}><Sun size={19} /><span>{paperMode ? 'Dùng nền theo giao diện' : 'Sử dụng nền sáng màu'}</span></button>
       <div className="tanooki-mobile-note-menu-divider" />

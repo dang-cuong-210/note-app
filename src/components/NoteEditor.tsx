@@ -1565,7 +1565,7 @@ export function NoteEditor({
       else if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(`${shareData.title}\n\n${shareData.text}`);
         toast('Đã sao chép nội dung ghi chú');
-      } else toast('Chia sẻ sẽ được hỗ trợ sau');
+      } else toast('Thiết bị này không hỗ trợ chia sẻ trực tiếp.');
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') toast('Không thể chia sẻ ghi chú');
     }
@@ -2090,7 +2090,7 @@ export function NoteEditor({
         }} onFormat={handleMobileFormat} />
         <MobileEditorToolsSheet note={note} folders={folders} attachments={attachments} tags={noteTags} existingTags={existingTags} onAddTag={addNoteTag} onRemoveTag={removeNoteTag} onOpenTag={onOpenTag} open={mobileSheet === 'tools'} onClose={() => setMobileSheet(null)} />
         <MobileAttachmentBrowserSheet open={mobileSheet === 'attachment-browser'} onClose={() => setMobileSheet(null)} attachments={attachments} images={mobileInlineImages} onOpen={(attachment) => void handleOpenAttachment(attachment)} onRename={renameAttachment} onShare={(attachment) => void handleShareAttachment(attachment)} onDelete={(attachment) => void handleDeleteAttachment(attachment)} onOpenImage={(image) => { setImageViewer(image.src); setViewerScale(1); }} onShareImage={(image) => void handleShareInlineImage(image)} onDeleteImage={(image) => handleRemoveImage(image.src)} />
-        <MobileEditorMoreSheet note={note} folders={folders} open={mobileSheet === 'actions'} onClose={() => setMobileSheet(null)} onTogglePin={onTogglePin} onArchive={onArchive} onMove={onMove} onDuplicate={onDuplicate} onTrash={onTrash} onFind={openMobileFind} onPlaceholder={() => toast('Sẽ hỗ trợ sau')} onNavigateRecent={() => { flushCurrentDraft(); onNavigateRecent(); }} onTogglePaper={() => { setMobileSheet(null); setMobilePaperMode((value) => !value); }} onShowAttachments={handleShowAttachments} paperMode={mobilePaperMode} />
+        <MobileEditorMoreSheet note={note} folders={folders} open={mobileSheet === 'actions'} onClose={() => setMobileSheet(null)} onTogglePin={onTogglePin} onArchive={onArchive} onMove={onMove} onDuplicate={onDuplicate} onTrash={onTrash} onFind={openMobileFind} onNavigateRecent={() => { flushCurrentDraft(); onNavigateRecent(); }} onTogglePaper={() => { setMobileSheet(null); setMobilePaperMode((value) => !value); }} onShowAttachments={handleShowAttachments} paperMode={mobilePaperMode} />
       </>}
 
       {!desktopPresentation && drawingOpen && <MobileDrawingMarkup
