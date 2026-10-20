@@ -1224,18 +1224,20 @@ input[data-global-search]:focus-visible {
   .tanooki-mobile-attachment-icon { display: grid; width: 42px; height: 42px; place-items: center; overflow: hidden; border-radius: 9px; background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
   .tanooki-mobile-attachment-icon img { width: 100%; height: 100%; object-fit: cover; }
   .tanooki-mobile-sheet-actions > button.is-danger { color: var(--danger); }
-  .tanooki-mobile-note-menu-quick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; border-bottom: 1px solid var(--border); padding: 2px 0 12px; }
-  .tanooki-mobile-note-menu-quick > button { display: flex; min-width: 0; min-height: 76px; flex-direction: column; align-items: center; justify-content: center; gap: 7px; border-radius: 12px; background: var(--bg-secondary); color: var(--text); font-size: 12px; }
+  .tanooki-mobile-note-menu-layer { position: fixed; z-index: 115; inset: 0; }
+  .tanooki-mobile-note-menu-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; background: transparent; }
+  .tanooki-mobile-note-menu-popover { position: absolute; top: calc(env(safe-area-inset-top) + 62px); right: 8px; display: flex; width: min(320px, calc(100vw - 20px)); max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 82px); flex-direction: column; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: 19px; background: var(--bg); padding: 10px 12px 8px; color: var(--text); box-shadow: 0 12px 34px rgb(0 0 0 / 28%); }
+  .tanooki-mobile-note-menu-quick { display: flex; flex: none; gap: 7px; border-bottom: 1px solid var(--border); padding: 0 0 10px; }
+  .tanooki-mobile-note-menu-quick > button { display: flex; width: 82px; min-height: 70px; flex: none; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border-radius: 12px; background: var(--bg-secondary); color: var(--text); font-size: 12px; }
   .tanooki-mobile-note-menu-quick svg { color: var(--accent); }
-  .tanooki-mobile-note-menu-list { display: flex; flex-direction: column; padding-top: 6px; }
-  .tanooki-mobile-note-menu-list > button, .tanooki-mobile-note-menu-move { display: flex; min-height: 49px; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); padding: 8px 5px; color: var(--text); font-size: 14px; text-align: left; }
+  .tanooki-mobile-note-menu-list { display: flex; flex-direction: column; padding-top: 3px; }
+  .tanooki-mobile-note-menu-list > button, .tanooki-mobile-note-menu-move { display: flex; min-height: 46px; width: 100%; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent); padding: 8px 5px; color: var(--text); font-size: 14px; text-align: left; }
   .tanooki-mobile-note-menu-list > button > svg, .tanooki-mobile-note-menu-move > svg { flex: none; color: var(--text-secondary); }
-  .tanooki-mobile-note-menu-list > button > span { min-width: 0; flex: 1; }
+  .tanooki-mobile-note-menu-list > button > span, .tanooki-mobile-note-menu-move > span { min-width: 0; flex: 1; }
   .tanooki-mobile-note-menu-list > button.is-danger { color: var(--danger); }
   .tanooki-mobile-note-menu-list > button.is-danger > svg { color: var(--danger); }
-  .tanooki-mobile-note-menu-divider { height: 6px; border-bottom: 1px solid var(--border); }
+  .tanooki-mobile-note-menu-divider { height: 5px; flex: none; border-bottom: 1px solid var(--border); }
   .tanooki-mobile-note-menu-move { flex-wrap: wrap; }
-  .tanooki-mobile-note-menu-move > span { flex: 1; }
   .tanooki-mobile-note-menu-move > select { width: 100%; min-height: 42px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-secondary); padding: 7px 10px; color: var(--text); font: inherit; }
   .tanooki-mobile-sheet-select { display: block; }
   .tanooki-mobile-sheet-select > span { min-height: 40px; }

@@ -150,7 +150,7 @@ export function MobileEditorToolsSheet({ note, folders, attachments, open, onClo
   </MobileBottomSheet>;
 }
 
-interface MobileEditorMoreSheetProps {
+interface MobileEditorMorePopoverProps {
   note: Note;
   folders: NoteFolder[];
   open: boolean;
@@ -167,24 +167,61 @@ interface MobileEditorMoreSheetProps {
   paperMode: boolean;
 }
 
-export function MobileEditorMoreSheet({ note, folders, open, onClose, onTogglePin, onArchive, onMove, onDuplicate, onTrash, onFind, onNavigateRecent, onTogglePaper, onShowAttachments, paperMode }: MobileEditorMoreSheetProps) {
+export function MobileEditorMorePopover({ note, folders, open, onClose, onTogglePin, onArchive, onMove, onDuplicate, onTrash, onFind, onNavigateRecent, onTogglePaper, onShowAttachments, paperMode }: MobileEditorMorePopoverProps) {
   const run = (action: () => void) => { onClose(); action(); };
   const [moving, setMoving] = useState(false);
   useEffect(() => { if (!open) setMoving(false); }, [open]);
-  return <MobileBottomSheet open={open} title="Tùy chọn ghi chú" onClose={onClose} labelledBy="mobile-note-actions">
-    <div className="tanooki-mobile-note-menu-list">
-      <button type="button" onClick={() => run(() => onTogglePin(note.id))}>{note.pinned ? <Pin size={19} fill="currentColor" /> : <Pin size={19} />}<span>{note.pinned ? 'Bỏ ghim' : 'Ghim'}</span></button>
-      <button type="button" onClick={() => run(onFind)}><Search size={19} /><span>Tìm trong ghi chú</span></button>
-      {moving ? <label className="tanooki-mobile-note-menu-move"><Folder size={19} /><span>Di chuyển ghi chú</span><select aria-label="Di chuyển ghi chú" value={note.folderId || ''} onChange={(event) => run(() => onMove(note.id, event.target.value || null))}><option value="">Không có thư mục</option>{getFolderHierarchy(folders).map(({ folder, depth }) => <option key={folder.id} value={folder.id}>{getFolderOptionLabel(folder, depth)}</option>)}</select></label> : <button type="button" onClick={() => setMoving(true)}><Folder size={19} /><span>Di chuyển ghi chú</span></button>}
-      <button type="button" onClick={() => run(onNavigateRecent)}><Clock3 size={19} /><span>Ghi chú gần đây</span></button>
-      <button type="button" onClick={() => run(onShowAttachments)}><Paperclip size={19} /><span>Chế độ xem tệp đính kèm</span></button>
-      <button type="button" onClick={onTogglePaper}><Sun size={19} /><span>{paperMode ? 'Dùng nền theo giao diện' : 'Sử dụng nền sáng màu'}</span></button>
-      <div className="tanooki-mobile-note-menu-divider" />
-      <button type="button" onClick={() => run(() => onArchive(note.id, !note.archived))}>{note.archived ? <ArchiveRestore size={19} /> : <Archive size={19} />}<span>{note.archived ? 'Bỏ lưu trữ' : 'Lưu trữ'}</span></button>
-      <button type="button" onClick={() => run(() => onDuplicate(note.id))}><Copy size={19} /><span>Tạo bản sao</span></button>
-      <button type="button" className="is-danger" onClick={() => run(() => onTrash(note.id))}><Trash2 size={19} /><span>Xóa</span></button>
+  const popoverRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = window.requestAnimationFrame(() => popoverRef.current?.querySelector<HTMLElement>('button:not(:disabled), select:not(:disabled)')?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = popoverRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), select:not(:disabled)');
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener('keydown', handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, [open]);
+  if (!open) return null;
+  return <div className="tanooki-mobile-note-menu-layer" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <button type="button" className="tanooki-mobile-note-menu-backdrop" tabIndex={-1} aria-label="Đóng tùy chọn ghi chú" onClick={onClose} />
+    <section ref={popoverRef} id="tanooki-mobile-editor-more-popover" className="tanooki-mobile-note-menu-popover" role="dialog" aria-modal="true" aria-label="Tùy chọn ghi chú" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+    <div className="tanooki-mobile-note-menu-quick">
+      <button type="button" onClick={() => run(() => onTogglePin(note.id))} aria-label={note.pinned ? 'Bỏ ghim ghi chú' : 'Ghim ghi chú'}>
+        {note.pinned ? <Pin size={20} fill="currentColor" /> : <Pin size={20} />}
+        <span>{note.pinned ? 'Bỏ ghim' : 'Ghim'}</span>
+      </button>
     </div>
-  </MobileBottomSheet>;
+    <div className="tanooki-mobile-note-menu-list">
+      <button type="button" onClick={() => run(onFind)}><span>Tìm trong ghi chú</span><Search size={19} /></button>
+      {moving ? <label className="tanooki-mobile-note-menu-move"><span>Di chuyển ghi chú</span><Folder size={19} /><select aria-label="Di chuyển ghi chú" value={note.folderId || ''} onChange={(event) => run(() => onMove(note.id, event.target.value || null))}><option value="">Không có thư mục</option>{getFolderHierarchy(folders).map(({ folder, depth }) => <option key={folder.id} value={folder.id}>{getFolderOptionLabel(folder, depth)}</option>)}</select></label> : <button type="button" onClick={() => setMoving(true)}><span>Di chuyển ghi chú</span><Folder size={19} /></button>}
+      <button type="button" onClick={() => run(onNavigateRecent)}><span>Ghi chú gần đây</span><Clock3 size={19} /></button>
+      <button type="button" onClick={() => run(onShowAttachments)}><span>Chế độ xem tệp đính kèm</span><Paperclip size={19} /></button>
+      <button type="button" onClick={onTogglePaper}><span>{paperMode ? 'Dùng nền theo giao diện' : 'Sử dụng nền sáng màu'}</span><Sun size={19} /></button>
+      <div className="tanooki-mobile-note-menu-divider" />
+      <button type="button" onClick={() => run(() => onArchive(note.id, !note.archived))}><span>{note.archived ? 'Bỏ lưu trữ' : 'Lưu trữ'}</span>{note.archived ? <ArchiveRestore size={19} /> : <Archive size={19} />}</button>
+      <button type="button" onClick={() => run(() => onDuplicate(note.id))}><span>Tạo bản sao</span><Copy size={19} /></button>
+      <button type="button" className="is-danger" onClick={() => run(() => onTrash(note.id))}><span>Xóa</span><Trash2 size={19} /></button>
+    </div>
+    </section>
+  </div>;
 }
 
 interface MobileNoteActionsSheetProps {

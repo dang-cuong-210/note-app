@@ -33,7 +33,7 @@ test('note-scoped attachment browser includes inline images and saved files with
   assert.match(sheets, /onOpen\(attachment\)/);
   assert.match(editor, /onDeleteImage=\{\(image\) => handleRemoveImage\(image\.src\)\}/);
   assert.match(editor, /onShowAttachments=\{handleShowAttachments\}/);
-  assert.match(sheets, /onClick=\{\(\) => run\(onShowAttachments\)\}[^>]*><Paperclip/);
+  assert.match(sheets, /<button type="button" onClick=\{\(\) => run\(onShowAttachments\)\}><span>Chế độ xem tệp đính kèm<\/span><Paperclip/);
 });
 
 test('attachment sharing prefers native file sharing and falls back to a browser download/open', () => {

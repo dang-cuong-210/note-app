@@ -42,7 +42,7 @@ import { isAcceptedImageType, uploadNoteImage, deleteNoteImage } from '@/lib/ima
 import { formatFileSize, getFileIcon, refreshAttachmentUrl } from '@/lib/attachments';
 import { extractTags } from '@/lib/utils';
 import { addTagToContent, readManagedTags, removeTagFromContent, writeManagedTags } from '@/lib/tagUtils.js';
-import { MobileAttachmentBrowserSheet, MobileEditorMoreSheet, MobileEditorToolsSheet, type MobileInlineImage } from '@/components/MobileEditorSheets';
+import { MobileAttachmentBrowserSheet, MobileEditorMorePopover, MobileEditorToolsSheet, type MobileInlineImage } from '@/components/MobileEditorSheets';
 import { MobileFormattingSheet } from '@/components/MobileFormattingSheet';
 import { NoteTagManager } from '@/components/NoteTagManager';
 import { MOBILE_FORMATTING_GROUPS, setChecklistItemChecked } from '@/lib/mobileFormatting.js';
@@ -1717,7 +1717,7 @@ export function NoteEditor({
           <button type="button" className="tanooki-mobile-editor-icon" onClick={() => { editorRef.current?.focus(); document.execCommand('undo'); commitEditor(); }} aria-label="Hoàn tác" title="Hoàn tác"><Undo2 size={19} /></button>
           <button type="button" className="tanooki-mobile-editor-icon" onClick={() => { editorRef.current?.focus(); document.execCommand('redo'); commitEditor(); }} aria-label="Làm lại" title="Làm lại"><Redo2 size={19} /></button>
           <button type="button" className="tanooki-mobile-editor-icon" onClick={() => { void handleShareNote(); }} aria-label="Chia sẻ ghi chú" title="Chia sẻ"><Share2 size={19} /></button>
-          <button type="button" className="tanooki-mobile-editor-icon" onClick={() => setMobileSheet('actions')} aria-label="Tùy chọn ghi chú" title="Tùy chọn"><MoreHorizontal size={21} /></button>
+          <button type="button" className="tanooki-mobile-editor-icon" onClick={() => setMobileSheet('actions')} aria-label="Tùy chọn ghi chú" aria-haspopup="dialog" aria-controls="tanooki-mobile-editor-more-popover" aria-expanded={mobileSheet === 'actions'} title="Tùy chọn"><MoreHorizontal size={21} /></button>
         </div>
       </header>}
 
@@ -2090,7 +2090,7 @@ export function NoteEditor({
         }} onFormat={handleMobileFormat} />
         <MobileEditorToolsSheet note={note} folders={folders} attachments={attachments} tags={noteTags} existingTags={existingTags} onAddTag={addNoteTag} onRemoveTag={removeNoteTag} onOpenTag={onOpenTag} open={mobileSheet === 'tools'} onClose={() => setMobileSheet(null)} />
         <MobileAttachmentBrowserSheet open={mobileSheet === 'attachment-browser'} onClose={() => setMobileSheet(null)} attachments={attachments} images={mobileInlineImages} onOpen={(attachment) => void handleOpenAttachment(attachment)} onRename={renameAttachment} onShare={(attachment) => void handleShareAttachment(attachment)} onDelete={(attachment) => void handleDeleteAttachment(attachment)} onOpenImage={(image) => { setImageViewer(image.src); setViewerScale(1); }} onShareImage={(image) => void handleShareInlineImage(image)} onDeleteImage={(image) => handleRemoveImage(image.src)} />
-        <MobileEditorMoreSheet note={note} folders={folders} open={mobileSheet === 'actions'} onClose={() => setMobileSheet(null)} onTogglePin={onTogglePin} onArchive={onArchive} onMove={onMove} onDuplicate={onDuplicate} onTrash={onTrash} onFind={openMobileFind} onNavigateRecent={() => { flushCurrentDraft(); onNavigateRecent(); }} onTogglePaper={() => { setMobileSheet(null); setMobilePaperMode((value) => !value); }} onShowAttachments={handleShowAttachments} paperMode={mobilePaperMode} />
+        <MobileEditorMorePopover note={note} folders={folders} open={mobileSheet === 'actions'} onClose={() => setMobileSheet(null)} onTogglePin={onTogglePin} onArchive={onArchive} onMove={onMove} onDuplicate={onDuplicate} onTrash={onTrash} onFind={openMobileFind} onNavigateRecent={() => { flushCurrentDraft(); onNavigateRecent(); }} onTogglePaper={() => { setMobileSheet(null); setMobilePaperMode((value) => !value); }} onShowAttachments={handleShowAttachments} paperMode={mobilePaperMode} />
       </>}
 
       {!desktopPresentation && drawingOpen && <MobileDrawingMarkup

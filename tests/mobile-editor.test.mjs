@@ -82,7 +82,7 @@ test('same-note reopen after a null note prop rehydrates editor DOM without rewr
 test('mobile tools retain note metadata and tag management while the paperclip opens the native picker', () => {
   assert.doesNotMatch(editor, /MobileAttachmentMenuSheet|attachment-menu/);
   assert.match(editor, /onClick=\{\(\) => mobileAttachmentInputRef\.current\?\.click\(\)\} aria-label="Đính kèm"/);
-  const tools = sheets.match(/interface MobileEditorToolsSheetProps[\s\S]*?interface MobileEditorMoreSheetProps/)?.[0] || '';
+  const tools = sheets.match(/interface MobileEditorToolsSheetProps[\s\S]*?interface MobileEditorMorePopoverProps/)?.[0] || '';
   assert.match(tools, /title="Công cụ"/);
   assert.match(tools, /<NoteTagManager mobile/);
   assert.doesNotMatch(tools, /Thêm hình ảnh|Đính kèm tệp/);
@@ -95,9 +95,9 @@ test('mobile note-list action sheet retains its existing pin, move, archive, dup
   for (const label of ['Ghim', 'Lưu trữ', 'Chuyển thư mục', 'Tạo bản sao', 'Chuyển vào thùng rác']) assert.ok(sheets.includes(label));
 });
 
-test('mobile editor More sheet reuses pin, move, archive, duplicate and delete actions', () => {
-  assert.match(editor, /<MobileEditorMoreSheet[\s\S]*?onTogglePin=\{onTogglePin\}[\s\S]*?onArchive=\{onArchive\}[\s\S]*?onMove=\{onMove\}[\s\S]*?onDuplicate=\{onDuplicate\}[\s\S]*?onTrash=\{onTrash\}/);
-  assert.match(sheets, /export function MobileEditorMoreSheet/);
+test('mobile editor More popover reuses pin, move, archive, duplicate and delete actions', () => {
+  assert.match(editor, /<MobileEditorMorePopover[\s\S]*?onTogglePin=\{onTogglePin\}[\s\S]*?onArchive=\{onArchive\}[\s\S]*?onMove=\{onMove\}[\s\S]*?onDuplicate=\{onDuplicate\}[\s\S]*?onTrash=\{onTrash\}/);
+  assert.match(sheets, /export function MobileEditorMorePopover/);
   assert.match(sheets, /onTogglePin\(note\.id\)/);
   assert.match(sheets, /onMove\(note\.id, event\.target\.value \|\| null\)/);
   assert.match(sheets, /onTrash\(note\.id\)/);
@@ -115,8 +115,8 @@ test('mobile editor toolbar has exactly four primary actions and preserves the e
 });
 
 test('mobile More menu removes unsupported placeholders and preserves working actions', () => {
-  assert.match(editor, /onClick=\{\(\) => setMobileSheet\('actions'\)\} aria-label="Tùy chọn ghi chú"/);
-  assert.match(editor, /<MobileEditorMoreSheet[\s\S]*?open=\{mobileSheet === 'actions'\} onClose=\{\(\) => setMobileSheet\(null\)\}/);
+  assert.match(editor, /onClick=\{\(\) => setMobileSheet\('actions'\)\} aria-label="Tùy chọn ghi chú" aria-haspopup="dialog"/);
+  assert.match(editor, /<MobileEditorMorePopover[\s\S]*?open=\{mobileSheet === 'actions'\} onClose=\{\(\) => setMobileSheet\(null\)\}/);
   for (const label of ['Bản quét', 'Khóa', 'Kết quả toán học', 'Đường kẻ &amp; lưới']) assert.ok(!sheets.includes(label), `${label} should not be offered`);
   assert.doesNotMatch(editor + sheets, /onPlaceholder|Sẽ hỗ trợ sau/);
   for (const label of ['Ghim', 'Tìm trong ghi chú', 'Di chuyển ghi chú', 'Ghi chú gần đây', 'Chế độ xem tệp đính kèm', 'Sử dụng nền sáng màu', 'Lưu trữ', 'Tạo bản sao', 'Xóa']) assert.ok(sheets.includes(label));
@@ -144,8 +144,28 @@ test('desktop note menu retains its existing pin, archive, folder move and trash
   assert.doesNotMatch(desktopMenu, /Bản quét|Kết quả toán học|Đường kẻ &amp; lưới/);
 });
 
-test('mobile More menu remains an accessible bottom sheet', () => {
-  assert.match(sheets, /title="Tùy chọn ghi chú" onClose=\{onClose\} labelledBy="mobile-note-actions"/);
+test('mobile More opens an anchored popover, closes outside or on Escape, and has no sheet chrome', () => {
+  assert.match(editor, /aria-controls="tanooki-mobile-editor-more-popover" aria-expanded=\{mobileSheet === 'actions'\}/);
+  assert.match(sheets, /className="tanooki-mobile-note-menu-layer"[\s\S]*?onPointerDown=\{\(event\) => \{ if \(event\.target === event\.currentTarget\) onClose\(\); \}\}/);
+  assert.match(sheets, /className="tanooki-mobile-note-menu-backdrop"[\s\S]*?onClick=\{onClose\}/);
+  assert.match(sheets, /event\.key === 'Escape'[\s\S]*?onCloseRef\.current\(\)/);
+  assert.match(sheets, /role="dialog" aria-modal="true" aria-label="Tùy chọn ghi chú"/);
+  const popover = sheets.match(/export function MobileEditorMorePopover[\s\S]*?interface MobileNoteActionsSheetProps/)?.[0] || '';
+  assert.doesNotMatch(popover, /MobileBottomSheet|tanooki-mobile-sheet-handle|Tùy chọn ghi chú<\/h2>|Đóng bảng/);
+  assert.match(popover, /tanooki-mobile-note-menu-quick[\s\S]*?Ghim/);
+  assert.match(popover, /<span>Tìm trong ghi chú<\/span><Search/);
+  assert.match(popover, /<span>Di chuyển ghi chú<\/span><Folder/);
+  assert.match(popover, /<span>Ghi chú gần đây<\/span><Clock3/);
+  assert.match(popover, /<span>Chế độ xem tệp đính kèm<\/span><Paperclip/);
+  assert.match(popover, /<span>\{paperMode \? 'Dùng nền theo giao diện' : 'Sử dụng nền sáng màu'\}<\/span><Sun/);
+  assert.match(popover, /<span>\{note\.archived \? 'Bỏ lưu trữ' : 'Lưu trữ'\}<\/span>/);
+  assert.match(popover, /<span>Tạo bản sao<\/span><Copy/);
+  assert.match(popover, /className="is-danger" onClick=\{\(\) => run\(\(\) => onTrash\(note\.id\)\)\}><span>Xóa<\/span><Trash2/);
+  assert.match(popover, /run\(\(\) => onTogglePin\(note\.id\)\)/);
+  assert.match(popover, /run\(\(\) => onArchive\(note\.id, !note\.archived\)\)/);
+  assert.match(popover, /run\(\(\) => onDuplicate\(note\.id\)\)/);
+  assert.match(popover, /onTogglePaper\}/);
+  assert.match(css, /\.tanooki-mobile-note-menu-popover \{ position: absolute; top: calc\(env\(safe-area-inset-top\) \+ 62px\); right: 8px;[\s\S]*?max-height: calc\(100dvh/);
   assert.match(editor, /execCommand\('undo'\)/);
   assert.match(editor, /execCommand\('redo'\)/);
   assert.match(editor, /is-light-paper/);
