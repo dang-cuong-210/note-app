@@ -346,7 +346,7 @@ export function NoteList({
         </div>
         <h1>Đã xóa gần đây</h1>
         <label className="tanooki-mobile-trash-search"><Search size={21} aria-hidden="true" /><input data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} placeholder="Tìm kiếm ghi chú..." aria-label="Tìm kiếm ghi chú đã xóa" /></label>
-        <p className="tanooki-mobile-trash-retention">Các ghi chú đã xóa sẽ được lưu trong 7 ngày. Sau thời gian đó, các ghi chú sẽ bị xóa vĩnh viễn và không thể khôi phục.</p>
+        <p className="tanooki-mobile-trash-retention">Ghi chú đã xóa có thể được khôi phục trong 7 ngày.</p>
         {trashSelectionMode && <div className="tanooki-mobile-trash-bulk" aria-label="Thao tác ghi chú đã chọn">
           <span>{selectedTrashIds.length} đã chọn</span>
           <button type="button" disabled={!selectedTrashIds.length} onClick={() => { selectedTrashIds.forEach(onRestore); setSelectedTrashIds([]); setTrashSelectionMode(false); }}>Khôi phục</button>
@@ -494,7 +494,7 @@ export function NoteList({
         </section> : mobileSearchMode && normalizeSearchText(searchQuery) ? <p className="px-4 pb-1 pt-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>{sorted.length} ghi chú</p> : null}
         {view.kind === 'trash' && !mobileTrashMode && (
           <p className="px-3 py-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-            Ghi chú trong thùng rác sẽ bị xóa vĩnh viễn sau 7 ngày.
+            Ghi chú đã xóa có thể được khôi phục trong 7 ngày.
           </p>
         )}
         {mobileSearchMode && !normalizeSearchText(searchQuery) ? null : sorted.length === 0 && !(mobileWorkspaceMode && view.kind === 'folder' && childFolders.length > 0) && !(desktopMode && view.kind === 'folder' && allChildFolders.length > 0) ? (

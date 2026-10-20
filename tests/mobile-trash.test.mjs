@@ -16,7 +16,7 @@ test('mobile Recently Deleted uses a dedicated responsive screen and returns to 
   assert.match(noteList, /onClick=\{onBackToHome\} aria-label="Quay lại Thư mục"/);
   assert.match(noteList, /<h1>Đã xóa gần đây<\/h1>/);
   assert.match(noteList, /placeholder="Tìm kiếm ghi chú\.\.\."/);
-  assert.match(noteList, /Các ghi chú đã xóa sẽ được lưu trong 7 ngày/);
+  assert.match(noteList, /Ghi chú đã xóa có thể được khôi phục trong 7 ngày/);
 });
 
 test('mobile trash screen retains the seven-day retention policy and scopes search to current trash view', () => {
