@@ -103,3 +103,8 @@ test('Settings renders separate responsive Back controls wired to the same origi
   assert.match(desktop, /<span>Quay lại<\/span>/);
   assert.match(desktop, /aria-label="Quay lại"/);
 });
+
+test('Settings renders the temporary PWA update marker', async () => {
+  const settings = await readFile(new URL('../src/components/SettingsView.tsx', import.meta.url), 'utf8');
+  assert.match(settings, /Build: RC-PWA-TEST-2/);
+});
