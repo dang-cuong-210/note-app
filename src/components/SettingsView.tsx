@@ -217,9 +217,6 @@ export function SettingsView({
             <p className="text-xs text-tertiary mt-1" style={{ color: 'var(--text-tertiary)' }}>
               Được đồng bộ giữa các thiết bị qua bộ nhớ đám mây
             </p>
-            <p className="mt-2 text-[10px] uppercase tracking-wide text-tertiary" style={{ color: 'var(--text-tertiary)' }}>
-              Build: RC-PWA-TEST-2
-            </p>
           </div>
         </div>
       </div>
