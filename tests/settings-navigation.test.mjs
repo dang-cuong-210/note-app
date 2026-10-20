@@ -85,3 +85,21 @@ test('App captures Settings entry context and restores it from Settings Back', a
   assert.match(app, /onBack=\{handleBackFromSettings\}/);
   assert.match(app, /resolveSettingsReturnContext\(\{\s*origin: settingsReturn/);
 });
+
+test('Settings renders separate responsive Back controls wired to the same origin restore callback', async () => {
+  const settings = await readFile(new URL('../src/components/SettingsView.tsx', import.meta.url), 'utf8');
+  const header = settings.match(/\{\/\* Top bar \*\/\}([\s\S]*?)\{\/\* Settings content \*\/\}/)?.[1];
+  assert.ok(header, 'Settings header should be present');
+  const backButtons = [...header.matchAll(/<button([\s\S]*?)>([\s\S]*?)<\/button>/g)];
+  assert.equal(backButtons.length, 2, 'exactly one mobile and one desktop Back control should be defined');
+
+  const [mobile, desktop] = backButtons.map(([, attributes, content]) => `${attributes}${content}`);
+  assert.match(mobile, /lg:hidden/);
+  assert.match(mobile, /onClick=\{onBack\}/);
+  assert.match(mobile, /aria-label="Quay lại"/);
+  assert.match(desktop, /hidden lg:inline-flex/);
+  assert.match(desktop, /onClick=\{onBack\}/);
+  assert.match(desktop, /focus-visible:ring-2/);
+  assert.match(desktop, /<span>Quay lại<\/span>/);
+  assert.match(desktop, /aria-label="Quay lại"/);
+});

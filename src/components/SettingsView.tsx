@@ -83,12 +83,23 @@ export function SettingsView({
       {/* Top bar */}
       <div className="flex items-center gap-1 px-3 py-3 border-b border-app" style={{ borderColor: 'var(--border)' }}>
         <button
+          type="button"
           onClick={onBack}
           className="lg:hidden p-2 rounded-lg hover-bg text-secondary -ml-1"
           style={{ color: 'var(--text-secondary)' }}
           aria-label="Quay lại"
         >
           <ArrowLeft size={20} />
+        </button>
+        <button
+          type="button"
+          onClick={onBack}
+          className="hidden lg:inline-flex min-h-10 items-center gap-1 rounded-lg px-2 text-sm font-medium hover-bg focus-visible:ring-2 focus-visible:ring-offset-2"
+          style={{ color: 'var(--accent)' }}
+          aria-label="Quay lại"
+        >
+          <ArrowLeft size={18} aria-hidden="true" />
+          <span>Quay lại</span>
         </button>
         <h2 className="text-lg font-bold text-app px-2" style={{ color: 'var(--text)' }}>Cài đặt</h2>
       </div>
