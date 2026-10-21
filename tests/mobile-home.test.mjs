@@ -21,6 +21,14 @@ test('new mobile Home renders the branded search and folder landing structure', 
   assert.match(home, /Đã xóa gần đây/);
 });
 
+test('mobile Home brand is an accessible reload button with a subtle pressed state', async () => {
+  const home = await readFile(new URL('../src/components/MobileHome.tsx', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+  assert.match(home, /<button type="button" className="tanooki-mobile-home-brand" onClick=\{\(\) => window\.location\.reload\(\)\} aria-label="Tải lại Tanooki"[^>]*><TanookiMark \/><span>Tanooki<\/span><\/button>/);
+  assert.match(css, /\.tanooki-mobile-home-brand \{[^}]*cursor: pointer/);
+  assert.match(css, /\.tanooki-mobile-home-brand:active \{[^}]*transform: scale\(/);
+});
+
 test('mobile Home keeps header and actions outside its only scrollable content region', async () => {
   const home = await readFile(new URL('../src/components/MobileHome.tsx', import.meta.url), 'utf8');
   const headerAt = home.indexOf('<header className="tanooki-mobile-home-header">');

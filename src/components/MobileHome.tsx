@@ -46,7 +46,7 @@ export function MobileHome({ notes, folders, searchQuery, onSearchChange, onSear
 
   return <div className="tanooki-mobile-home" {...longPressHandlers}>
     <header className="tanooki-mobile-home-header">
-      <div className="tanooki-mobile-home-brand"><TanookiMark /><span>Tanooki</span></div>
+      <button type="button" className="tanooki-mobile-home-brand" onClick={() => window.location.reload()} aria-label="Tải lại Tanooki" title="Tải lại Tanooki"><TanookiMark /><span>Tanooki</span></button>
       <label className="tanooki-mobile-home-search">
         <Search size={22} aria-hidden="true" />
         <input data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} placeholder="Tìm kiếm ghi chú, thư mục..." aria-label="Tìm kiếm ghi chú, thư mục" />
