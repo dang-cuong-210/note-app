@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Folder } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { MobileContextTarget } from '@/components/useMobileLongPress';
 
@@ -11,7 +12,8 @@ export function MobileContextPopover({ target, children, onClose, labelledBy }: 
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ left: number; top: number; previewHeight: number; menuMaxHeight: number } | null>(null);
 
   useEffect(() => {
     if (!target) return;
@@ -55,24 +57,39 @@ export function MobileContextPopover({ target, children, onClose, labelledBy }: 
   }, [target]);
 
   useLayoutEffect(() => {
-    if (!target || !menuRef.current) return;
+    if (!target || !menuRef.current || !previewRef.current) return;
     const rect = target.rect;
     const updatePosition = () => {
-      if (!menuRef.current) return;
-      const menu = menuRef.current.getBoundingClientRect();
+      if (!menuRef.current || !previewRef.current) return;
       const viewportWidth = document.documentElement.clientWidth;
       const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const viewportTop = window.visualViewport?.offsetTop ?? 0;
       const safeTop = Number.parseFloat(window.getComputedStyle(layerRef.current!).paddingTop) || 0;
       const safeBottom = Number.parseFloat(window.getComputedStyle(layerRef.current!).paddingBottom) || 0;
       const margin = 12;
-      const left = Math.max(margin, Math.min(rect.left, viewportWidth - menu.width - margin));
-      const minTop = safeTop + margin;
-      const maxTop = Math.max(minTop, viewportHeight - safeBottom - menu.height - margin);
-      const below = rect.bottom + 10;
-      const preferred = below + menu.height <= viewportHeight - safeBottom - margin
-        ? below
-        : rect.top - menu.height - 10;
-      setPosition({ left, top: Math.max(minTop, Math.min(preferred, maxTop)) });
+      const minTop = viewportTop + safeTop + margin;
+      const maxBottom = viewportTop + viewportHeight - safeBottom - margin;
+      const availableHeight = Math.max(220, maxBottom - minTop);
+      const width = Math.min(420, viewportWidth * 0.88);
+      const gap = 14;
+      const previewMin = target.kind === 'note' ? 164 : 62;
+      const preferredPreview = target.kind === 'note'
+        ? Math.min(420, Math.max(220, availableHeight * 0.44))
+        : previewRef.current.getBoundingClientRect().height;
+      const menu = menuRef.current;
+      const naturalMenuHeight = menu.scrollHeight;
+      let menuMaxHeight = Math.max(100, availableHeight - previewMin - gap);
+      let menuHeight = Math.min(naturalMenuHeight, menuMaxHeight);
+      let previewHeight = Math.min(preferredPreview, Math.max(previewMin, availableHeight - menuHeight - gap));
+      menuMaxHeight = Math.max(100, availableHeight - previewHeight - gap);
+      menuHeight = Math.min(naturalMenuHeight, menuMaxHeight);
+      if (previewHeight + menuHeight + gap > availableHeight) {
+        previewHeight = Math.max(previewMin, availableHeight - menuHeight - gap);
+      }
+      const groupHeight = previewHeight + Math.min(menuHeight, availableHeight - previewHeight - gap) + gap;
+      const preferredTop = rect.top + rect.height / 2 - groupHeight / 2;
+      const top = Math.max(minTop, Math.min(preferredTop, maxBottom - groupHeight));
+      setPosition({ left: (viewportWidth - width) / 2, top, previewHeight, menuMaxHeight });
     };
     updatePosition();
     const observer = new ResizeObserver(updatePosition);
@@ -94,11 +111,13 @@ export function MobileContextPopover({ target, children, onClose, labelledBy }: 
     onContextMenuCapture={(event) => { event.preventDefault(); event.stopPropagation(); }}
   >
     <button type="button" className="tanooki-mobile-context-backdrop" aria-label="Đóng menu thao tác" onClick={onClose} />
-    <div className="tanooki-mobile-context-highlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} aria-hidden="true">
-      <strong>{target.title}</strong>{target.detail && <span>{target.detail}</span>}
-    </div>
-    <div ref={menuRef} id={labelledBy} className="tanooki-mobile-context-menu" role="menu" aria-label={`Thao tác ${target.kind === 'note' ? 'ghi chú' : 'thư mục'}`} style={position ? { left: position.left, top: position.top, visibility: 'visible' } : { left: Math.max(14, rect.left), top: rect.bottom + 10, visibility: 'hidden' }} onPointerDown={(event) => event.stopPropagation()}>
-      {children}
+    <div className={`tanooki-mobile-context-group${target.kind === 'folder' ? ' is-folder' : ' is-note'}${position ? ' is-open' : ''}`} style={position ? { left: position.left, top: position.top } : { left: 12, top: 12, visibility: 'hidden' }}>
+      <div ref={previewRef} className={`tanooki-mobile-context-highlight${target.kind === 'folder' ? ' is-folder' : ' is-note'}`} style={position && target.kind === 'note' ? { height: position.previewHeight } : undefined}>
+        {target.kind === 'folder' ? <><Folder size={24} aria-hidden="true" /><strong>{target.title}</strong><span>{target.detail}</span></> : <><strong>{target.title}</strong><div className="tanooki-mobile-context-preview-body">{target.preview || target.detail || 'Chưa có nội dung'}</div></>}
+      </div>
+      <div ref={menuRef} id={labelledBy} className="tanooki-mobile-context-menu" role="menu" aria-label={`Thao tác ${target.kind === 'note' ? 'ghi chú' : 'thư mục'}`} style={position ? { maxHeight: position.menuMaxHeight } : { maxHeight: '60dvh' }} onPointerDown={(event) => event.stopPropagation()}>
+        {children}
+      </div>
     </div>
   </div>, document.body);
 }

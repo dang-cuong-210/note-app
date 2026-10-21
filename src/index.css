@@ -683,11 +683,18 @@
 }
 .tanooki-mobile-context-layer { position: fixed; z-index: 130; inset: 0; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); pointer-events: none; -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none; }
 .tanooki-mobile-context-layer * { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none; }
-.tanooki-mobile-context-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: rgb(15 13 12 / 48%); backdrop-filter: blur(3px); pointer-events: auto; }
-.tanooki-mobile-context-highlight { position: fixed; z-index: 1; display: flex; flex-direction: column; justify-content: center; gap: 5px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border)); border-radius: 16px; background: var(--bg-secondary); padding: 13px 16px; color: var(--text); box-shadow: 0 12px 36px rgb(0 0 0 / 28%); transform: scale(1.015); pointer-events: none; }
-.tanooki-mobile-context-highlight > strong { overflow: hidden; font-size: 16px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.tanooki-mobile-context-highlight > span { display: -webkit-box; overflow: hidden; color: var(--text-secondary); font-size: 13px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.tanooki-mobile-context-menu { position: fixed; z-index: 2; display: flex; width: min(300px, calc(100vw - 28px)); max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 32px); flex-direction: column; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-secondary); padding: 5px; color: var(--text); box-shadow: 0 14px 42px rgb(0 0 0 / 30%); pointer-events: auto; }
+.tanooki-mobile-context-group { position: fixed; z-index: 1; display: flex; width: min(420px, 88vw); flex-direction: column; align-items: center; gap: 14px; pointer-events: none; opacity: 0; transition: opacity 160ms ease, transform 160ms ease; transform: scale(.97); }
+.tanooki-mobile-context-group.is-open { visibility: visible !important; opacity: 1; transform: scale(1); }
+.tanooki-mobile-context-backdrop { position: absolute; z-index: 0; inset: 0; width: 100%; height: 100%; border: 0; background: rgb(15 13 12 / 48%); backdrop-filter: blur(2px); pointer-events: auto; }
+.tanooki-mobile-context-highlight { position: relative; z-index: 1; display: flex; width: 100%; flex-direction: column; gap: 18px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--text) 12%, var(--border)); border-radius: 20px; background: color-mix(in srgb, var(--bg-secondary) 94%, white); padding: 22px; color: var(--text); box-shadow: 0 18px 42px rgb(0 0 0 / 32%); pointer-events: none; }
+.tanooki-mobile-context-highlight.is-note { min-height: 164px; }
+.tanooki-mobile-context-highlight.is-folder { min-height: 62px; flex-direction: row; align-items: center; gap: 14px; padding: 16px 20px; }
+.tanooki-mobile-context-highlight.is-folder > svg { flex: none; color: var(--accent); }
+.tanooki-mobile-context-highlight > strong { min-width: 0; flex: none; overflow: hidden; font-size: 23px; font-weight: 700; line-height: 1.25; text-overflow: ellipsis; }
+.tanooki-mobile-context-highlight.is-folder > strong { flex: 1; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
+.tanooki-mobile-context-highlight > span { flex: none; color: var(--text-secondary); font-size: 14px; }
+.tanooki-mobile-context-preview-body { min-height: 0; flex: 1; overflow: hidden; color: var(--text-secondary); font-size: 16px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tanooki-mobile-context-menu { position: relative; z-index: 2; display: flex; width: min(360px, 100%); max-height: 60dvh; flex-direction: column; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-secondary); padding: 5px; color: var(--text); box-shadow: 0 14px 42px rgb(0 0 0 / 30%); pointer-events: auto; }
 .tanooki-mobile-context-menu > button { display: flex; min-height: 46px; flex: none; align-items: center; gap: 12px; border-radius: 10px; padding: 0 12px; text-align: left; color: var(--text); font-size: 14px; }
 .tanooki-mobile-context-menu > button > svg { flex: none; color: var(--text-secondary); }
 .tanooki-mobile-context-menu > button > span { min-width: 0; flex: 1; }
@@ -697,6 +704,7 @@
 .tanooki-mobile-context-submenu { display: flex; max-height: 180px; flex-direction: column; overflow-y: auto; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 4px 0; }
 .tanooki-mobile-context-submenu > button { min-height: 42px; flex: none; overflow: hidden; padding: 0 15px 0 42px; color: var(--text-secondary); font-size: 13px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 @media (min-width: 1024px) { .tanooki-mobile-context-layer { display: none; } }
+@media (prefers-reduced-motion: reduce) { .tanooki-mobile-context-group { transition: none; } }
 /* Keep keyboard outlines even where existing utilities specify outline-none. */
 .tanooki-auth :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 

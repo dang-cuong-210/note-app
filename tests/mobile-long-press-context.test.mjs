@@ -72,10 +72,40 @@ test('context overlay dismisses by outside tap or Escape and stays viewport cons
   const css = await read('../src/index.css');
   assert.match(component, /event\.key === 'Escape'/);
   assert.match(component, /aria-label="Đóng menu thao tác" onClick=\{onClose\}/);
-  assert.match(component, /below \+ menu\.height <= viewportHeight/);
-  assert.match(css, /max-height: calc\(100dvh - env\(safe-area-inset-top\) - env\(safe-area-inset-bottom\) - 32px\)/);
-  assert.match(css, /backdrop-filter: blur\(3px\)/);
+  assert.match(component, /availableHeight = Math\.max\(220, maxBottom - minTop\)/);
+  assert.match(component, /const groupHeight = previewHeight[\s\S]*?maxBottom - groupHeight/);
+  assert.match(css, /max-height: 60dvh/);
+  assert.match(css, /backdrop-filter: blur\(2px\)/);
   assert.match(component, /visibility: 'hidden'/);
+});
+
+test('note context uses a dedicated readable preview with a multi-line body excerpt', async () => {
+  const component = await read('../src/components/MobileContextPopover.tsx');
+  const list = await read('../src/components/NoteList.tsx');
+  const search = await read('../src/components/LiveSearchResults.tsx');
+  const css = await read('../src/index.css');
+  assert.match(component, /tanooki-mobile-context-preview-body/);
+  assert.match(component, /target\.preview \|\| target\.detail/);
+  assert.match(list, /data-mobile-context-preview=\{!selectionMode \? contextPreview\.slice\(0, 1600\)/);
+  assert.match(search, /data-mobile-context-preview=\{record\?\.bodyText\.slice\(0, 1600\)/);
+  assert.match(css, /\.tanooki-mobile-context-highlight\.is-note \{ min-height: 164px; \}/);
+  assert.match(component, /height: position\.previewHeight/);
+  assert.match(css, /\.tanooki-mobile-context-preview-body \{[^}]*overflow: hidden;[^}]*white-space: pre-wrap/);
+  assert.match(css, /\.tanooki-mobile-context-group \{[^}]*width: min\(420px, 88vw\)/);
+  assert.doesNotMatch(component, /contentEditable|contenteditable/);
+});
+
+test('folder context preview displays a full name and count separately from its action menu', async () => {
+  const component = await read('../src/components/MobileContextPopover.tsx');
+  const css = await read('../src/index.css');
+  const home = await read('../src/components/MobileHome.tsx');
+  const list = await read('../src/components/NoteList.tsx');
+  assert.match(component, /target\.kind === 'folder'[\s\S]*?<Folder size=\{24\}/);
+  assert.match(component, /<strong>\{target\.title\}<\/strong><span>\{target\.detail\}<\/span>/);
+  assert.match(home, /data-mobile-context-detail=\{`\$\{count\} ghi chú`\}/);
+  assert.match(list, /data-mobile-context-detail=\{`\$\{count\} ghi chú`\}/);
+  assert.match(component, /tanooki-mobile-context-group[\s\S]*?tanooki-mobile-context-highlight[\s\S]*?tanooki-mobile-context-menu/);
+  assert.match(css, /\.tanooki-mobile-context-highlight\.is-folder > strong \{[^}]*overflow-wrap: anywhere;[^}]*white-space: normal/);
 });
 
 test('context menu locks only its originating scroll container and restores its prior inline styles', async () => {

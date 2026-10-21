@@ -18,6 +18,7 @@ export interface MobileContextTarget {
   id: string;
   title: string;
   detail?: string;
+  preview?: string;
   rect: DOMRect;
   scrollElement: HTMLElement | null;
 }
@@ -69,6 +70,7 @@ export function useMobileLongPress(onOpen: (target: MobileContextTarget) => void
         id,
         title: element.dataset.mobileContextTitle || '',
         detail: element.dataset.mobileContextDetail || undefined,
+        preview: element.dataset.mobileContextPreview || undefined,
         rect: element.getBoundingClientRect(),
         scrollElement: scrollElement === document.body ? null : scrollElement,
       };

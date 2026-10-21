@@ -606,7 +606,7 @@ export function NoteList({
                 <span>{noteTime(note.trashedAt || note.updatedAt)}<span aria-hidden="true"> · </span><span className="tanooki-mobile-trash-preview">{preview}</span></span>
                 {fn && <span className="tanooki-mobile-trash-folder"><FolderIcon size={13} aria-hidden="true" /><span>{fn}</span></span>}
               </>;
-              return <div className={`tanooki-mobile-trash-row${selected ? ' is-selected' : ''}`} key={note.id} data-mobile-context-kind={!trashSelectionMode ? 'note' : undefined} data-mobile-context-id={!trashSelectionMode ? note.id : undefined} data-mobile-context-title={!trashSelectionMode ? note.title.trim() || 'Chưa có tiêu đề' : undefined} data-mobile-context-detail={!trashSelectionMode ? preview : undefined}>
+              return <div className={`tanooki-mobile-trash-row${selected ? ' is-selected' : ''}`} key={note.id} data-mobile-context-kind={!trashSelectionMode ? 'note' : undefined} data-mobile-context-id={!trashSelectionMode ? note.id : undefined} data-mobile-context-title={!trashSelectionMode ? note.title.trim() || 'Chưa có tiêu đề' : undefined} data-mobile-context-detail={!trashSelectionMode ? preview : undefined} data-mobile-context-preview={!trashSelectionMode ? record?.bodyText.slice(0, 1600) || '' : undefined}>
                 {trashSelectionMode && <button type="button" className="tanooki-mobile-trash-check" aria-label={`${selected ? 'Bỏ chọn' : 'Chọn'} ${note.title.trim() || 'Chưa có tiêu đề'}`} aria-pressed={selected} onClick={() => toggleTrashSelection(note.id)}><span /></button>}
                 {trashSelectionMode
                   ? <button type="button" className="tanooki-mobile-trash-row-main" onClick={() => toggleTrashSelection(note.id)}>{rowContent}</button>
@@ -631,7 +631,7 @@ export function NoteList({
                   const fn = folderName(note.folderId);
                   const bodyMatched = Boolean(normalizeSearchText(searchQuery) && record?.bodyNormalized.includes(normalizeSearchText(searchQuery)));
                   const preview = record?.bodyText ? bodyMatched ? getSearchSnippet(record.bodyText, searchQuery) : record.bodyText.length > 120 ? `${record.bodyText.slice(0, 120)}…` : record.bodyText : 'Chưa có nội dung';
-                  return <MobileAllNoteRow key={note.id} note={note} selected={note.id === selectedNoteId} date={formatMobileAllNoteDate(note.updatedAt)} preview={preview} query={searchQuery} folderName={fn} onOpen={() => onSelectNote(note.id)} onMore={() => { setMenuFor(note.id); setMoveFor(null); }} />;
+                  return <MobileAllNoteRow key={note.id} note={note} selected={note.id === selectedNoteId} date={formatMobileAllNoteDate(note.updatedAt)} preview={preview} contextPreview={record?.bodyText || ''} query={searchQuery} folderName={fn} onOpen={() => onSelectNote(note.id)} onMore={() => { setMenuFor(note.id); setMoveFor(null); }} />;
                 })}
               </div></section>)}
             </div>}
@@ -650,6 +650,7 @@ export function NoteList({
                     key={note.id}
                     note={note}
                     preview={preview}
+                    contextPreview={record?.bodyText || ''}
                     date={formatMobileAllNoteDate(note.updatedAt)}
                     folderName={fn}
                     selected={selectedAllNoteIds.includes(note.id)}
@@ -663,6 +664,7 @@ export function NoteList({
                     selected={mobileAllNotesSelectionMode ? selectedAllNoteIds.includes(note.id) : note.id === selectedNoteId}
                     date={formatMobileAllNoteDate(mobileRecentMode ? getEffectiveRecentTime(note, recentOpenedAt) : note.updatedAt)}
                     preview={preview}
+                    contextPreview={record?.bodyText || ''}
                     query={searchQuery}
                     folderName={fn}
                     selectionMode={mobileAllNotesMode && mobileAllNotesSelectionMode}
@@ -697,6 +699,7 @@ export function NoteList({
                     data-mobile-context-id={mobileMode ? note.id : undefined}
                     data-mobile-context-title={mobileMode ? (note.title.trim() || 'Chưa có tiêu đề') : undefined}
                     data-mobile-context-detail={mobileMode ? preview : undefined}
+                    data-mobile-context-preview={mobileMode ? record?.bodyText.slice(0, 1600) || '' : undefined}
                     style={selected || menuFor === note.id ? { backgroundColor: desktopMode && selected ? 'var(--selection)' : 'var(--accent-light)' } : undefined}
                   >
                     <div className="flex items-start justify-between gap-2 mb-0.5">
@@ -965,6 +968,7 @@ function MobileAllNoteRow({
   selected,
   date,
   preview,
+  contextPreview,
   query,
   folderName,
   onOpen,
@@ -976,6 +980,7 @@ function MobileAllNoteRow({
   selected: boolean;
   date: string;
   preview: string;
+  contextPreview: string;
   query: string;
   folderName: string | null;
   onOpen: () => void;
@@ -983,7 +988,7 @@ function MobileAllNoteRow({
   selectionMode?: boolean;
   onToggleSelection?: () => void;
 }) {
-  return <article className={`tanooki-mobile-all-notes-row${selected ? ' is-selected' : ''}`} data-mobile-context-kind={!selectionMode ? 'note' : undefined} data-mobile-context-id={!selectionMode ? note.id : undefined} data-mobile-context-title={!selectionMode ? note.title.trim() || 'Chưa có tiêu đề' : undefined} data-mobile-context-detail={!selectionMode ? preview : undefined}>
+  return <article className={`tanooki-mobile-all-notes-row${selected ? ' is-selected' : ''}`} data-mobile-context-kind={!selectionMode ? 'note' : undefined} data-mobile-context-id={!selectionMode ? note.id : undefined} data-mobile-context-title={!selectionMode ? note.title.trim() || 'Chưa có tiêu đề' : undefined} data-mobile-context-detail={!selectionMode ? preview : undefined} data-mobile-context-preview={!selectionMode ? contextPreview.slice(0, 1600) : undefined}>
     {selectionMode && <button type="button" className="tanooki-mobile-all-notes-check" onClick={onToggleSelection} aria-label={`${selected ? 'Bỏ chọn' : 'Chọn'} ${note.title.trim() || 'Chưa có tiêu đề'}`} aria-pressed={selected}><span>{selected && <Check size={14} aria-hidden="true" />}</span></button>}
     <button type="button" className="tanooki-mobile-all-notes-row-main" onClick={onOpen}>
       <strong>{note.title.trim() ? <HighlightedText text={note.title} query={query} /> : 'Chưa có tiêu đề'}</strong>
@@ -994,9 +999,10 @@ function MobileAllNoteRow({
   </article>;
 }
 
-function MobileAllNoteGalleryCard({ note, preview, date, folderName, selected, selectionMode, onOpen, onMore }: {
+function MobileAllNoteGalleryCard({ note, preview, contextPreview, date, folderName, selected, selectionMode, onOpen, onMore }: {
   note: Note;
   preview: string;
+  contextPreview: string;
   date: string;
   folderName: string | null;
   selected: boolean;
@@ -1004,7 +1010,7 @@ function MobileAllNoteGalleryCard({ note, preview, date, folderName, selected, s
   onOpen: () => void;
   onMore: () => void;
 }) {
-  return <article className={`tanooki-mobile-all-notes-gallery-card${selected ? ' is-selected' : ''}`} data-mobile-context-kind={!selectionMode ? 'note' : undefined} data-mobile-context-id={!selectionMode ? note.id : undefined} data-mobile-context-title={!selectionMode ? note.title.trim() || 'Chưa có tiêu đề' : undefined} data-mobile-context-detail={!selectionMode ? preview : undefined}>
+  return <article className={`tanooki-mobile-all-notes-gallery-card${selected ? ' is-selected' : ''}`} data-mobile-context-kind={!selectionMode ? 'note' : undefined} data-mobile-context-id={!selectionMode ? note.id : undefined} data-mobile-context-title={!selectionMode ? note.title.trim() || 'Chưa có tiêu đề' : undefined} data-mobile-context-detail={!selectionMode ? preview : undefined} data-mobile-context-preview={!selectionMode ? contextPreview.slice(0, 1600) : undefined}>
     {selectionMode && <button type="button" className="tanooki-mobile-all-notes-gallery-check" aria-label={`${selected ? 'Bỏ chọn' : 'Chọn'} ${note.title.trim() || 'Chưa có tiêu đề'}`} aria-pressed={selected} onClick={onOpen}><span>{selected && <Check size={14} aria-hidden="true" />}</span></button>}
     <button type="button" className="tanooki-mobile-all-notes-gallery-main" onClick={onOpen}>
       <strong>{note.title.trim() || 'Chưa có tiêu đề'}</strong>
