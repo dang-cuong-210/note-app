@@ -506,23 +506,32 @@ export function NoteEditor({
     return node;
   };
 
-  // Remember a real editing selection before opening the native file picker.
-  const rememberCaret = () => {
+  // Keep the last real editor selection so controls outside contentEditable can restore it.
+  const rememberCaret = useCallback(() => {
+    const editor = editorRef.current;
     const selection = window.getSelection();
-    if (!selection || !selection.rangeCount || !editorRef.current?.contains(selection.anchorNode)) return;
+    if (!editor || !selection || !selection.rangeCount || !editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) return;
     const range = selection.getRangeAt(0);
-    if (!range.startContainer.parentElement?.closest(attachmentSelector)) lastCaretRange.current = range.cloneRange();
-  };
+    if (!range.startContainer.isConnected || !range.endContainer.isConnected) return;
+    const startElement = range.startContainer instanceof Element ? range.startContainer : range.startContainer.parentElement;
+    const endElement = range.endContainer instanceof Element ? range.endContainer : range.endContainer.parentElement;
+    if (startElement?.closest(attachmentSelector) || endElement?.closest(attachmentSelector)) return;
+    lastCaretRange.current = range.cloneRange();
+  }, []);
 
   const restoreEditorSelection = (focusEditor = true) => {
     const editor = editorRef.current;
     if (!editor) return null;
-    if (focusEditor) editor.focus();
     const range = lastCaretRange.current?.cloneRange();
-    if (range && editor.contains(range.startContainer) && editor.contains(range.endContainer)) {
+    if (range && range.startContainer.isConnected && range.endContainer.isConnected && editor.contains(range.startContainer) && editor.contains(range.endContainer)) {
+      if (focusEditor) {
+        try { editor.focus({ preventScroll: true }); }
+        catch { editor.focus(); }
+      }
       const selection = window.getSelection();
       selection?.removeAllRanges();
       selection?.addRange(range);
+      lastCaretRange.current = range.cloneRange();
       return range;
     }
     return null;
@@ -538,6 +547,7 @@ export function NoteEditor({
   };
 
   const refreshActiveFormatting = () => {
+    const editor = editorRef.current;
     const element = getSelectionElement();
     if (!element) { setActiveFormatting([]); return; }
     const active = new Set<string>();
@@ -545,8 +555,15 @@ export function NoteEditor({
       bold: 'bold', italic: 'italic', underline: 'underline', strikeThrough: 'strikeThrough',
       insertUnorderedList: 'insertUnorderedList', insertOrderedList: 'insertOrderedList',
     };
-    const selectionNode = window.getSelection()?.anchorNode;
-    if (selectionNode && editorRef.current?.contains(selectionNode)) {
+    const selection = window.getSelection();
+    const liveRange = selection?.rangeCount && editor?.contains(selection.anchorNode) ? selection.getRangeAt(0) : null;
+    const savedRange = lastCaretRange.current;
+    const range = liveRange ?? (savedRange && editor?.contains(savedRange.startContainer) && editor.contains(savedRange.endContainer) ? savedRange : null);
+    if (range && selection && !liveRange) {
+      selection.removeAllRanges();
+      selection.addRange(range.cloneRange());
+    }
+    if (range) {
       for (const [id, command] of Object.entries(stateCommands)) {
         try { if (document.queryCommandState(command)) active.add(id); } catch { /* unsupported command state */ }
       }
@@ -569,11 +586,14 @@ export function NoteEditor({
   };
 
   useEffect(() => {
-    if (mobileSheet !== 'formatting') return;
-    refreshActiveFormatting();
-    document.addEventListener('selectionchange', refreshActiveFormatting);
-    return () => document.removeEventListener('selectionchange', refreshActiveFormatting);
-  }, [mobileSheet]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (desktopPresentation) return;
+    const handleSelectionChange = () => {
+      rememberCaret();
+      if (mobileSheet === 'formatting') refreshActiveFormatting();
+    };
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+  }, [desktopPresentation, mobileSheet, note?.id, rememberCaret]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const makeChecklistToggle = (checked: boolean) => {
     const button = document.createElement('button');
@@ -669,7 +689,10 @@ export function NoteEditor({
     if (!action) return;
     const editor = editorRef.current;
     if (!editor) return;
-    if (!restoreEditorSelection()) focusBodyAtEnd();
+    if (!restoreEditorSelection()) {
+      rememberCaret();
+      if (!restoreEditorSelection()) focusBodyAtEnd();
+    }
     if (action.command === 'checklist') {
       if (!applyChecklist()) { toast('Không thể chèn checklist tại vị trí này'); return; }
     } else {
@@ -681,8 +704,6 @@ export function NoteEditor({
     commitEditor();
     rememberCaret();
     refreshActiveFormatting();
-    setMobileSheet(null);
-    window.requestAnimationFrame(() => { restoreEditorSelection(); refreshActiveFormatting(); });
   };
 
   const handleChecklistEnter: React.KeyboardEventHandler<HTMLDivElement> = (event) => {

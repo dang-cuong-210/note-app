@@ -22,11 +22,37 @@ test('mobile formatting commands map to browser rich-text commands and preserve 
   assert.match(editor, /onPointerDown=\{rememberCaret\} onClick=\{\(\) => \{ rememberCaret\(\); refreshActiveFormatting\(\); setMobileSheet\('formatting'\); \}\}/);
   assert.match(editor, /restoreEditorSelection\(\)/);
   assert.match(editor, /queryCommandState\(command\)/);
+  const commands = Object.fromEntries(MOBILE_FORMATTING_GROUPS.flatMap((group) => group.actions.map(({ id, command }) => [id, command])));
+  assert.deepEqual(commands, {
+    bold: 'bold', italic: 'italic', underline: 'underline', strikeThrough: 'strikeThrough',
+    heading1: 'formatBlock', heading2: 'formatBlock', heading3: 'formatBlock',
+    insertUnorderedList: 'insertUnorderedList', insertOrderedList: 'insertOrderedList', checklist: 'checklist',
+    quote: 'formatBlock', code: 'formatBlock',
+  });
+  assert.match(editor, /commitEditor\(\);\s*rememberCaret\(\);\s*refreshActiveFormatting\(\);/);
+  assert.doesNotMatch(editor.match(/const handleMobileFormat = \(actionId: string\) => \{[\s\S]*?\n  \};/)?.[0] ?? '', /setMobileSheet\(null\)/);
   for (const [id, value] of [['heading1', '<h1>'], ['heading2', '<h2>'], ['heading3', '<h3>']]) {
     const action = MOBILE_FORMATTING_GROUPS.flatMap((group) => group.actions).find((item) => item.id === id);
     assert.equal(action.command, 'formatBlock');
     assert.equal(action.value, value);
   }
+});
+
+test('mobile formatting saves editor-owned connected ranges and tracks selection changes while the sheet is open', () => {
+  assert.match(editor, /!editor\.contains\(selection\.anchorNode\) \|\| !editor\.contains\(selection\.focusNode\)/);
+  assert.match(editor, /range\.startContainer\.isConnected && range\.endContainer\.isConnected/);
+  assert.match(editor, /lastCaretRange\.current = range\.cloneRange\(\)/);
+  assert.match(editor, /document\.addEventListener\('selectionchange', handleSelectionChange\)/);
+  assert.match(editor, /if \(mobileSheet === 'formatting'\) refreshActiveFormatting\(\)/);
+  assert.match(editor, /editor\.focus\(\{ preventScroll: true \}\)/);
+});
+
+test('formatting active states derive from the selected inline marks and containing block/list', () => {
+  for (const selector of ['b,strong', 'i,em', 'u', 's,strike,del', 'ol', 'ul', 'h1', 'h2', 'h3', 'blockquote', 'pre']) {
+    assert.ok(editor.includes(`element.closest('${selector}')`), `missing active-state lookup for ${selector}`);
+  }
+  assert.match(editor, /if \(isChecklist\) active\.add\('checklist'\)/);
+  assert.match(sheet, /aria-pressed=\{active\.has\(action\.id\)\}/);
 });
 
 test('checklist state is accessible, toggles on its list item, and survives editor save and hydration', () => {
