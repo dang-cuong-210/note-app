@@ -104,10 +104,12 @@ test('mobile editor More popover reuses pin, move, archive, duplicate and delete
   for (const label of ['Ghim', 'Lưu trữ', 'Di chuyển ghi chú', 'Tạo bản sao', 'Xóa']) assert.ok(sheets.includes(label));
 });
 
-test('mobile editor toolbar has exactly four primary actions and preserves the existing note creation and attachment flows', () => {
+test('mobile editor keeps its four primary actions and adds Checklist only in keyboard mode', () => {
   const toolbar = editor.match(/<nav className="tanooki-mobile-editor-bottom-bar"[\s\S]*?<\/nav>/)?.[0];
   assert.ok(toolbar);
-  assert.equal((toolbar.match(/<button type="button"/g) || []).length, 4);
+  assert.equal((toolbar.match(/<button type="button"/g) || []).length, 5);
+  assert.match(toolbar, /mobileKeyboardOpen && <button[\s\S]*?handleMobileFormat\('checklist'\)/);
+  for (const label of ['Định dạng (Aa)', 'Đính kèm', 'Vẽ và đánh dấu', 'Tạo ghi chú mới']) assert.ok(toolbar.includes(label));
   assert.match(toolbar, /onClick=\{\(\) => mobileAttachmentInputRef\.current\?\.click\(\)\}/);
   assert.match(toolbar, /onClick=\{onCreateNote\}/);
   assert.match(app, /onCreateNote=\{createMobileNote\}/);

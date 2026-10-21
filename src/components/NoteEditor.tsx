@@ -179,6 +179,7 @@ export function NoteEditor({
   const [mobileSheet, setMobileSheet] = useState<'tools' | 'actions' | 'formatting' | 'attachment-browser' | null>(null);
   const [mobileInlineImages, setMobileInlineImages] = useState<MobileInlineImage[]>([]);
   const [activeFormatting, setActiveFormatting] = useState<string[]>([]);
+  const [mobileKeyboardOpen, setMobileKeyboardOpen] = useState(false);
   const [mobileFindOpen, setMobileFindOpen] = useState(false);
   const [mobileFindQuery, setMobileFindQuery] = useState('');
   const [mobileFindIndex, setMobileFindIndex] = useState(-1);
@@ -594,6 +595,38 @@ export function NoteEditor({
     document.addEventListener('selectionchange', handleSelectionChange);
     return () => document.removeEventListener('selectionchange', handleSelectionChange);
   }, [desktopPresentation, mobileSheet, note?.id, rememberCaret]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (desktopPresentation) return;
+    const viewport = window.visualViewport;
+    let focusFrame = 0;
+    const isEditorFocused = () => {
+      const active = document.activeElement;
+      return active === editorRef.current || Boolean(active?.classList.contains('tanooki-mobile-editor-document-title'));
+    };
+    const updateKeyboardState = () => {
+      const obscuredHeight = window.innerHeight - (viewport?.height ?? window.innerHeight) - (viewport?.offsetTop ?? 0);
+      setMobileKeyboardOpen(isEditorFocused() && obscuredHeight > 120);
+    };
+    const handleFocusChange = () => {
+      cancelAnimationFrame(focusFrame);
+      focusFrame = requestAnimationFrame(updateKeyboardState);
+    };
+    updateKeyboardState();
+    viewport?.addEventListener('resize', updateKeyboardState);
+    viewport?.addEventListener('scroll', updateKeyboardState);
+    window.addEventListener('resize', updateKeyboardState);
+    document.addEventListener('focusin', handleFocusChange);
+    document.addEventListener('focusout', handleFocusChange);
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      viewport?.removeEventListener('resize', updateKeyboardState);
+      viewport?.removeEventListener('scroll', updateKeyboardState);
+      window.removeEventListener('resize', updateKeyboardState);
+      document.removeEventListener('focusin', handleFocusChange);
+      document.removeEventListener('focusout', handleFocusChange);
+    };
+  }, [desktopPresentation, note?.id]);
 
   const makeChecklistToggle = (checked: boolean) => {
     const button = document.createElement('button');
@@ -1619,7 +1652,7 @@ export function NoteEditor({
     : folders.some((folder) => folder.name === breadcrumb) ? breadcrumb : 'Ghi chú');
 
   return (
-    <div className={`${desktopPresentation ? 'h-full' : 'h-[100dvh] tanooki-mobile-editor'} min-h-0 min-w-0 flex flex-col bg-app ${desktopPresentation ? 'tanooki-desktop-editor' : 'is-writing'} ${!desktopPresentation && mobilePaperMode ? 'is-light-paper' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
+    <div className={`${desktopPresentation ? 'h-full' : 'h-[100dvh] tanooki-mobile-editor'} min-h-0 min-w-0 flex flex-col bg-app ${desktopPresentation ? 'tanooki-desktop-editor' : `is-writing ${mobileKeyboardOpen ? 'is-keyboard-open' : ''}`} ${!desktopPresentation && mobilePaperMode ? 'is-light-paper' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
       {/* Toolbar */}
       <div
         className={`${desktopPresentation ? 'flex items-center justify-between gap-3 px-3 py-2 border-b flex-shrink-0 tanooki-editor-topbar' : 'hidden'}`}
@@ -2097,18 +2130,19 @@ export function NoteEditor({
       </div>
 
       {!desktopPresentation && uploading && <div className="tanooki-mobile-upload-status" role="status" aria-live="polite"><Loader2 size={15} className="animate-spin" />Đang tải {uploadsInProgress} tệp lên…</div>}
+      {!desktopPresentation && <MobileFormattingSheet open={mobileSheet === 'formatting'} activeActions={activeFormatting} onClose={() => {
+        setMobileSheet(null);
+        window.requestAnimationFrame(() => restoreEditorSelection());
+      }} onFormat={handleMobileFormat} />}
       {!desktopPresentation && <nav className="tanooki-mobile-editor-bottom-bar" aria-label="Công cụ ghi chú">
-        <button type="button" onPointerDown={rememberCaret} onClick={() => { rememberCaret(); refreshActiveFormatting(); setMobileSheet('formatting'); }} aria-label="Định dạng và checklist" title="Định dạng và checklist"><ListChecks size={25} /></button>
-        <button type="button" onPointerDown={rememberCaret} onClick={() => mobileAttachmentInputRef.current?.click()} aria-label="Đính kèm" title="Đính kèm"><Paperclip size={25} /></button>
-        <button type="button" onPointerDown={rememberCaret} onClick={() => { rememberCaret(); setDrawingOpen(true); }} aria-label="Vẽ và đánh dấu" title="Vẽ và đánh dấu"><PenTool size={25} /></button>
-        <button type="button" onClick={onCreateNote} aria-label="Tạo ghi chú mới" title="Tạo ghi chú mới"><SquarePen size={25} /></button>
+        <button type="button" onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => { rememberCaret(); refreshActiveFormatting(); setMobileSheet((current) => current === 'formatting' ? null : 'formatting'); }} aria-label="Định dạng (Aa)" aria-pressed={mobileSheet === 'formatting'} title="Định dạng"><span className="tanooki-mobile-format-aa">Aa</span></button>
+        {mobileKeyboardOpen && <button type="button" onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => handleMobileFormat('checklist')} aria-label="Checklist" aria-pressed={activeFormatting.includes('checklist')} title="Checklist"><ListChecks size={23} /></button>}
+        <button type="button" onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => mobileAttachmentInputRef.current?.click()} aria-label="Đính kèm" title="Đính kèm"><Paperclip size={25} /></button>
+        <button type="button" onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => { rememberCaret(); setDrawingOpen(true); }} aria-label="Vẽ và đánh dấu" title="Vẽ và đánh dấu"><PenTool size={25} /></button>
+        <button type="button" onPointerDown={(event) => event.preventDefault()} onClick={onCreateNote} aria-label="Tạo ghi chú mới" title="Tạo ghi chú mới"><SquarePen size={25} /></button>
       </nav>}
 
       {!desktopPresentation && <>
-        <MobileFormattingSheet open={mobileSheet === 'formatting'} activeActions={activeFormatting} onClose={() => {
-          setMobileSheet(null);
-          window.requestAnimationFrame(() => restoreEditorSelection());
-        }} onFormat={handleMobileFormat} />
         <MobileEditorToolsSheet note={note} folders={folders} attachments={attachments} tags={noteTags} existingTags={existingTags} onAddTag={addNoteTag} onRemoveTag={removeNoteTag} onOpenTag={onOpenTag} open={mobileSheet === 'tools'} onClose={() => setMobileSheet(null)} />
         <MobileAttachmentBrowserSheet open={mobileSheet === 'attachment-browser'} onClose={() => setMobileSheet(null)} attachments={attachments} images={mobileInlineImages} onOpen={(attachment) => void handleOpenAttachment(attachment)} onRename={renameAttachment} onShare={(attachment) => void handleShareAttachment(attachment)} onDelete={(attachment) => void handleDeleteAttachment(attachment)} onOpenImage={(image) => { setImageViewer(image.src); setViewerScale(1); }} onShareImage={(image) => void handleShareInlineImage(image)} onDeleteImage={(image) => handleRemoveImage(image.src)} />
         <MobileEditorMorePopover note={note} folders={folders} open={mobileSheet === 'actions'} onClose={() => setMobileSheet(null)} onTogglePin={onTogglePin} onArchive={onArchive} onMove={onMove} onDuplicate={onDuplicate} onTrash={onTrash} onFind={openMobileFind} onNavigateRecent={() => { flushCurrentDraft(); onNavigateRecent(); }} onTogglePaper={() => { setMobileSheet(null); setMobilePaperMode((value) => !value); }} onShowAttachments={handleShowAttachments} paperMode={mobilePaperMode} />

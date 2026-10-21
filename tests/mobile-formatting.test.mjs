@@ -7,19 +7,22 @@ const editor = await readFile(new URL('../src/components/NoteEditor.tsx', import
 const sheet = await readFile(new URL('../src/components/MobileFormattingSheet.tsx', import.meta.url), 'utf8');
 const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
 
-test('formatting sheet offers the complete focused action set in four groups', () => {
+test('compact formatting toolbar offers the complete focused action set with accessible active states', () => {
   assert.deepEqual(MOBILE_FORMATTING_GROUPS.map((group) => group.label), ['Văn bản', 'Tiêu đề', 'Danh sách', 'Khối']);
   assert.deepEqual(MOBILE_FORMATTING_GROUPS.flatMap((group) => group.actions.map(({ id }) => id)), [
     'bold', 'italic', 'underline', 'strikeThrough', 'heading1', 'heading2', 'heading3',
     'insertUnorderedList', 'insertOrderedList', 'checklist', 'quote', 'code',
   ]);
-  assert.match(sheet, /<MobileBottomSheet open=\{open\} title="Định dạng"/);
+  assert.match(sheet, /role="toolbar" aria-label="Định dạng văn bản"/);
+  assert.doesNotMatch(sheet, /MobileBottomSheet|Tùy chọn ghi chú/);
   assert.match(sheet, /aria-pressed=\{active\.has\(action\.id\)\}/);
+  assert.match(sheet, /Thu gọn định dạng/);
 });
 
 test('mobile formatting commands map to browser rich-text commands and preserve selection across the sheet', () => {
   assert.match(editor, /document\.execCommand\(action\.command, false, action\.value\)/);
-  assert.match(editor, /onPointerDown=\{rememberCaret\} onClick=\{\(\) => \{ rememberCaret\(\); refreshActiveFormatting\(\); setMobileSheet\('formatting'\); \}\}/);
+  assert.match(editor, /setMobileSheet\(\(current\) => current === 'formatting' \? null : 'formatting'\)/);
+  assert.match(editor, /aria-label="Định dạng \(Aa\)"/);
   assert.match(editor, /restoreEditorSelection\(\)/);
   assert.match(editor, /queryCommandState\(command\)/);
   const commands = Object.fromEntries(MOBILE_FORMATTING_GROUPS.flatMap((group) => group.actions.map(({ id, command }) => [id, command])));
@@ -45,6 +48,17 @@ test('mobile formatting saves editor-owned connected ranges and tracks selection
   assert.match(editor, /document\.addEventListener\('selectionchange', handleSelectionChange\)/);
   assert.match(editor, /if \(mobileSheet === 'formatting'\) refreshActiveFormatting\(\)/);
   assert.match(editor, /editor\.focus\(\{ preventScroll: true \}\)/);
+});
+
+test('keyboard-aware mobile toolbar exposes Aa and Checklist while preserving desktop rendering', () => {
+  assert.match(editor, /window\.visualViewport/);
+  assert.match(editor, /setMobileKeyboardOpen\(isEditorFocused\(\) && obscuredHeight > 120\)/);
+  assert.match(editor, /mobileKeyboardOpen && <button[\s\S]*?handleMobileFormat\('checklist'\)/);
+  assert.match(editor, /is-keyboard-open/);
+  assert.match(editor, /!desktopPresentation && <MobileFormattingSheet/);
+  assert.match(editor, /if \(desktopPresentation\) return;/);
+  assert.match(css, /tanooki-mobile-editor\.is-keyboard-open \.tanooki-mobile-editor-bottom-bar \{ grid-template-columns: repeat\(5/);
+  assert.match(css, /\.tanooki-mobile-format-toolbar-actions \{[^}]*overflow-x: auto/);
 });
 
 test('formatting active states derive from the selected inline marks and containing block/list', () => {
@@ -80,13 +94,14 @@ test('checklist state is accessible, toggles on its list item, and survives edit
   assert.match(editor, /editorRef\.current\.innerHTML = stripLayout\(note\.content \?\? ''\)/);
 });
 
-test('checklist and formatted content remain in the existing editable HTML without replacing the four-action toolbar', () => {
+test('checklist and formatted content remain in the existing editable HTML and mobile actions reuse the editor toolbar', () => {
   assert.match(editor, /className=\{`note-content editor-content/);
   assert.match(editor, /<MobileFormattingSheet open=\{mobileSheet === 'formatting'\}/);
   const toolbar = editor.match(/<nav className="tanooki-mobile-editor-bottom-bar"[\s\S]*?<\/nav>/)?.[0];
   assert.ok(toolbar);
-  assert.equal((toolbar.match(/<button type="button"/g) || []).length, 4);
-  assert.match(toolbar, /aria-label="Định dạng và checklist"/);
+  assert.equal((toolbar.match(/<button type="button"/g) || []).length, 5);
+  for (const action of ['Định dạng (Aa)', 'Checklist', 'Đính kèm', 'Vẽ và đánh dấu', 'Tạo ghi chú mới']) assert.ok(toolbar.includes(action));
+  assert.match(toolbar, /mobileKeyboardOpen && <button/);
   assert.match(css, /\.note-content ul\[data-checklist\] > li/);
   assert.match(css, /\.note-content \.note-checklist-toggle:focus-visible/);
 });

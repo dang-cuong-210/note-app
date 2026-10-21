@@ -11,10 +11,10 @@ const [editor, drawing, css] = await Promise.all([
 
 const stroke = (x = 0.2) => ({ tool: 'pen', color: '#25211f', width: 5, points: [{ x, y: 0.3 }, { x: x + 0.1, y: 0.4 }] });
 
-test('mobile drawing button opens the drawing UI while preserving the four primary actions', () => {
+test('mobile drawing button opens the drawing UI from the shared keyboard toolbar', () => {
   const toolbar = editor.match(/<nav className="tanooki-mobile-editor-bottom-bar"[\s\S]*?<\/nav>/)?.[0];
   assert.ok(toolbar);
-  assert.equal((toolbar.match(/<button type="button"/g) || []).length, 4);
+  assert.equal((toolbar.match(/<button type="button"/g) || []).length, 5);
   assert.match(toolbar, /onClick=\{\(\) => \{ rememberCaret\(\); setDrawingOpen\(true\); \}\} aria-label="Vẽ và đánh dấu"/);
   assert.match(editor, /drawingOpen && <MobileDrawingMarkup/);
   assert.match(editor, /onDone=\{\(image\) => \{ setDrawingOpen\(false\); void handleImageUpload\(image\); \}\}/);
