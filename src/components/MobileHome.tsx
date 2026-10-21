@@ -32,15 +32,15 @@ export function MobileHome({ notes, folders, searchQuery, onSearchChange, onSear
   const activeNotes = useMemo(() => notes.filter((note) => !note.trashed && !note.archived), [notes]);
 
   return <div className="tanooki-mobile-home">
-    <div className="tanooki-mobile-home-scroll">
-      <header className="tanooki-mobile-home-header">
-        <div className="tanooki-mobile-home-brand"><TanookiMark /><span>Tanooki</span></div>
-        <label className="tanooki-mobile-home-search">
-          <Search size={22} aria-hidden="true" />
-          <input data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} placeholder="Tìm kiếm ghi chú, thư mục..." aria-label="Tìm kiếm ghi chú, thư mục" />
-        </label>
-      </header>
+    <header className="tanooki-mobile-home-header">
+      <div className="tanooki-mobile-home-brand"><TanookiMark /><span>Tanooki</span></div>
+      <label className="tanooki-mobile-home-search">
+        <Search size={22} aria-hidden="true" />
+        <input data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} placeholder="Tìm kiếm ghi chú, thư mục..." aria-label="Tìm kiếm ghi chú, thư mục" />
+      </label>
+    </header>
 
+    <div className="tanooki-mobile-home-scroll">
       {searching ? <div className="tanooki-mobile-home-search-results">
         {folderMatches.length > 0 && <section className="tanooki-mobile-home-match-section" aria-label="Thư mục phù hợp">
           <h2>Thư mục</h2>

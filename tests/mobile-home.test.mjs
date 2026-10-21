@@ -21,9 +21,28 @@ test('new mobile Home renders the branded search and folder landing structure', 
   assert.match(home, /Đã xóa gần đây/);
 });
 
+test('mobile Home keeps header and actions outside its only scrollable content region', async () => {
+  const home = await readFile(new URL('../src/components/MobileHome.tsx', import.meta.url), 'utf8');
+  const headerAt = home.indexOf('<header className="tanooki-mobile-home-header">');
+  const scrollAt = home.indexOf('<div className="tanooki-mobile-home-scroll">');
+  const footerAt = home.indexOf('<footer className="tanooki-mobile-home-actions">');
+  assert.ok(headerAt >= 0 && scrollAt > headerAt && footerAt > scrollAt);
+  assert.doesNotMatch(home.slice(headerAt, scrollAt), /tanooki-mobile-home-scroll/);
+});
+
+test('mobile app shell locks the document while Home content alone may scroll on overflow', async () => {
+  const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+  assert.match(app, /className="tanooki-app-shell h-screen/);
+  assert.match(css, /html:has\(\.tanooki-app-shell\), body:has\(\.tanooki-app-shell\), #root:has\(\.tanooki-app-shell\) \{[^}]*overflow: hidden[^}]*overscroll-behavior: none/);
+  assert.match(css, /\.tanooki-app-shell \{[^}]*height: 100vh; height: 100dvh[^}]*overflow: hidden/);
+  assert.match(css, /\.tanooki-mobile-home \{[^}]*height: 100%[^}]*overflow: hidden/);
+  assert.match(css, /\.tanooki-mobile-home-scroll \{[^}]*overflow-y: auto[^}]*overscroll-behavior-y: contain[^}]*-webkit-overflow-scrolling: touch/);
+});
+
 test('mobile viewport and folder page hide scrollbar chrome without disabling scrolling', async () => {
   const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
-  assert.match(css, /@media \(max-width: 1023px\) \{\s*html, body \{ scrollbar-width: none; -ms-overflow-style: none; \}/);
+  assert.match(css, /@media \(max-width: 1023px\) \{[\s\S]*?html, body \{ scrollbar-width: none; -ms-overflow-style: none; \}/);
   assert.match(css, /html::-webkit-scrollbar, body::-webkit-scrollbar \{ display: none; \}/);
   assert.match(css, /\.tanooki-mobile-page \{ scrollbar-width: none; -ms-overflow-style: none; \}/);
   assert.match(css, /\.tanooki-mobile-page \{[^}]*overflow-y: auto/);

@@ -572,7 +572,7 @@ function AppContent() {
   };
 
   return (
-    <div className="h-screen flex overflow-hidden relative" style={{ backgroundColor: 'var(--bg)' }}>
+    <div className="tanooki-app-shell h-screen flex overflow-hidden relative" style={{ backgroundColor: 'var(--bg)' }}>
       <FolderSyncNotice conflicts={data.folderConflicts} error={data.folderSyncError} onResolve={data.resolveFolderConflict} />
       {/* The note editor already has a Back button on mobile. */}
             {/* Sidebar - desktop */}
