@@ -276,3 +276,22 @@ export function MobileCreateFolderSheet({ open, onClose, onCreate }: { open: boo
     </form>
   </MobileBottomSheet>;
 }
+
+export function MobileFolderRenameSheet({ open, folderName, onClose, onRename }: { open: boolean; folderName: string; onClose: () => void; onRename: (name: string) => void }) {
+  const [name, setName] = useState(folderName);
+  useEffect(() => { if (open) setName(folderName); }, [open, folderName]);
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onRename(trimmed);
+    onClose();
+  };
+  return <MobileBottomSheet open={open} title="Đổi tên thư mục" onClose={onClose} labelledBy="mobile-context-folder-rename">
+    <form className="tanooki-mobile-folder-form" onSubmit={submit}>
+      <label htmlFor="mobile-context-folder-rename-name">Tên thư mục</label>
+      <input id="mobile-context-folder-rename-name" autoFocus maxLength={80} value={name} onChange={(event) => setName(event.target.value)} />
+      <div><button type="button" className="is-cancel" onClick={onClose}>Hủy</button><button type="submit" className="is-save" disabled={!name.trim()}>Lưu</button></div>
+    </form>
+  </MobileBottomSheet>;
+}

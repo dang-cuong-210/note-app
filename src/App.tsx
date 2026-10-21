@@ -672,6 +672,13 @@ function AppContent() {
             onOpenFolder={openMobileFolderFromOverview}
             onAddFolder={data.addFolder}
             onCreateNote={createMobileNote}
+            onTogglePin={data.togglePin}
+            onTrash={handleTrash}
+            onDuplicate={handleDuplicate}
+            onArchive={data.archiveNote}
+            onMove={data.moveNote}
+            onRenameFolder={data.renameFolder}
+            onDeleteFolder={deleteMobileWorkspaceFolder}
           />
         ) : showMobileFolders ? (
           <MobileFoldersView
@@ -679,6 +686,8 @@ function AppContent() {
             notes={data.notes}
             onOpenFolder={openMobileFolderFromOverview}
             onAddFolder={data.addFolder}
+            onRenameFolder={data.renameFolder}
+            onDeleteFolder={deleteMobileWorkspaceFolder}
           />
         ) : showMobileMore ? (
           <MobileMoreView

@@ -31,7 +31,7 @@ export function LiveSearchResults({ notes, query, onOpenNote, onShowAll }: {
         const preview = record?.bodyText
           ? bodyMatched ? getSearchSnippet(record.bodyText, query, 100) : record.bodyText.slice(0, 100)
           : 'Chưa có nội dung';
-        return <button key={note.id} type="button" onClick={() => onOpenNote(note.id)} className="tanooki-live-search-result">
+        return <button key={note.id} type="button" data-mobile-context-kind="note" data-mobile-context-id={note.id} data-mobile-context-title={note.title.trim() || 'Chưa có tiêu đề'} data-mobile-context-detail={preview} onClick={() => onOpenNote(note.id)} className="tanooki-live-search-result">
           <span className="tanooki-live-search-icon"><FileText size={19} aria-hidden="true" /></span>
           <span className="tanooki-live-search-copy">
             <strong>{note.title.trim() ? <HighlightedText text={note.title} query={query} /> : 'Chưa có tiêu đề'}</strong>

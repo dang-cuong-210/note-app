@@ -668,6 +668,23 @@
     .tanooki-mobile-brand { display: none; }
   }
 }
+
+/* Mobile long-press context presentation; the original list remains in place underneath. */
+.tanooki-mobile-context-layer { position: fixed; z-index: 130; inset: 0; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); pointer-events: none; }
+.tanooki-mobile-context-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: rgb(15 13 12 / 48%); backdrop-filter: blur(3px); pointer-events: auto; }
+.tanooki-mobile-context-highlight { position: fixed; z-index: 1; display: flex; flex-direction: column; justify-content: center; gap: 5px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border)); border-radius: 16px; background: var(--bg-secondary); padding: 13px 16px; color: var(--text); box-shadow: 0 12px 36px rgb(0 0 0 / 28%); transform: scale(1.015); pointer-events: none; }
+.tanooki-mobile-context-highlight > strong { overflow: hidden; font-size: 16px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.tanooki-mobile-context-highlight > span { display: -webkit-box; overflow: hidden; color: var(--text-secondary); font-size: 13px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.tanooki-mobile-context-menu { position: fixed; z-index: 2; display: flex; width: min(300px, calc(100vw - 28px)); max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 32px); flex-direction: column; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-secondary); padding: 5px; color: var(--text); box-shadow: 0 14px 42px rgb(0 0 0 / 30%); pointer-events: auto; }
+.tanooki-mobile-context-menu > button { display: flex; min-height: 46px; flex: none; align-items: center; gap: 12px; border-radius: 10px; padding: 0 12px; text-align: left; color: var(--text); font-size: 14px; }
+.tanooki-mobile-context-menu > button > svg { flex: none; color: var(--text-secondary); }
+.tanooki-mobile-context-menu > button > span { min-width: 0; flex: 1; }
+.tanooki-mobile-context-menu > button:active { background: var(--accent-light); }
+.tanooki-mobile-context-menu > button.is-danger, .tanooki-mobile-context-menu > button.is-danger > svg { color: var(--danger); }
+.tanooki-mobile-context-divider { height: 1px; flex: none; margin: 4px 8px; background: var(--border); }
+.tanooki-mobile-context-submenu { display: flex; max-height: 180px; flex-direction: column; overflow-y: auto; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 4px 0; }
+.tanooki-mobile-context-submenu > button { min-height: 42px; flex: none; overflow: hidden; padding: 0 15px 0 42px; color: var(--text-secondary); font-size: 13px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+@media (min-width: 1024px) { .tanooki-mobile-context-layer { display: none; } }
 /* Keep keyboard outlines even where existing utilities specify outline-none. */
 .tanooki-auth :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
