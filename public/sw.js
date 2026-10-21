@@ -1,13 +1,14 @@
-const CACHE_NAME = 'noted-v1';
+const CACHE_NAME = 'noted-v2';
 const ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/apple-touch-icon.png',
-  '/favicon-32.png',
-  '/favicon-16.png',
+  '/tanooki-icon-v2-192.png',
+  '/tanooki-icon-v2-512.png',
+  '/tanooki-maskable-v2-512.png',
+  '/tanooki-apple-touch-icon-v2.png',
+  '/tanooki-icon-v2-32.png',
+  '/tanooki-icon-v2-16.png',
 ];
 
 // Install: cache core assets
