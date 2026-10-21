@@ -21,6 +21,19 @@ test('new mobile Home renders the branded search and folder landing structure', 
   assert.match(home, /Đã xóa gần đây/);
 });
 
+test('mobile viewport and folder page hide scrollbar chrome without disabling scrolling', async () => {
+  const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+  assert.match(css, /@media \(max-width: 1023px\) \{\s*html, body \{ scrollbar-width: none; -ms-overflow-style: none; \}/);
+  assert.match(css, /html::-webkit-scrollbar, body::-webkit-scrollbar \{ display: none; \}/);
+  assert.match(css, /\.tanooki-mobile-page \{ scrollbar-width: none; -ms-overflow-style: none; \}/);
+  assert.match(css, /\.tanooki-mobile-page \{[^}]*overflow-y: auto/);
+  assert.match(css, /\.tanooki-mobile-home-scroll \{[^}]*overflow-y: auto/);
+  assert.match(css, /\.tanooki-mobile-home-scroll::-webkit-scrollbar \{ display: none; \}/);
+  assert.match(css, /\.tanooki-mobile-all-notes-scroll \{[^}]*overflow-y: auto[^}]*scrollbar-width: none/);
+  assert.match(css, /\.tanooki-mobile-workspace-scroll \{[^}]*overflow-y: auto[^}]*scrollbar-width: none/);
+  assert.match(css, /\.tanooki-mobile-trash-scroll \{[^}]*overflow-y: auto[^}]*scrollbar-width: none/);
+});
+
 test('the old bottom navigation is hidden while the new mobile Home is open', () => {
   assert.equal(shouldShowMobileBottomNav(false, null, { kind: 'home' }), false);
   assert.equal(shouldShowMobileBottomNav(false, null, { kind: 'all' }), true);
