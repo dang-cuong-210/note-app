@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArchiveRestore, ChevronRight, Copy, Edit3, FileText, Folder, Pencil, Pin, PinOff, Plus, Search, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Folder as FolderRecord, Note } from '@/types';
@@ -34,9 +34,30 @@ interface MobileHomeProps {
 export function MobileHome({ notes, folders, searchQuery, onSearchChange, onSearchSubmit, onOpenNote, onOpenView, onOpenFolder, onAddFolder, onCreateNote, onTogglePin, onTrash, onDuplicate, onArchive, onMove, onRenameFolder, onDeleteFolder }: MobileHomeProps) {
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [contextTarget, setContextTarget] = useState<MobileContextTarget | null>(null);
+  const [contextClosing, setContextClosing] = useState(false);
   const [renameFolderTarget, setRenameFolderTarget] = useState<MobileContextTarget | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
-  const longPressHandlers = useMobileLongPress((target) => { setMoveOpen(false); setContextTarget(target); });
+  const contextCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeContext = (afterClose?: () => void) => {
+    if (!contextTarget) return;
+    if (contextCloseTimer.current) clearTimeout(contextCloseTimer.current);
+    setContextClosing(true);
+    contextCloseTimer.current = setTimeout(() => {
+      setContextTarget(null);
+      setContextClosing(false);
+      setMoveOpen(false);
+      contextCloseTimer.current = null;
+      afterClose?.();
+    }, 150);
+  };
+  const longPressHandlers = useMobileLongPress((target) => {
+    if (contextCloseTimer.current) clearTimeout(contextCloseTimer.current);
+    contextCloseTimer.current = null;
+    setContextClosing(false);
+    setMoveOpen(false);
+    setContextTarget(target);
+  });
+  useEffect(() => () => { if (contextCloseTimer.current) clearTimeout(contextCloseTimer.current); }, []);
   const counts = useMemo(() => getMobileHomeCounts(notes), [notes]);
   const folderMatches = useMemo(() => getMatchingMobileHomeFolders(folders, searchQuery), [folders, searchQuery]);
   const folderHierarchy = useMemo(() => getFolderHierarchy(folders), [folders]);
@@ -93,11 +114,11 @@ export function MobileHome({ notes, folders, searchQuery, onSearchChange, onSear
       </button>
     </footer>}
     <MobileCreateFolderSheet open={createFolderOpen} onClose={() => setCreateFolderOpen(false)} onCreate={onAddFolder} />
-    <MobileContextPopover target={contextTarget} onClose={() => { setContextTarget(null); setMoveOpen(false); }} labelledBy="mobile-home-context-menu">
+    <MobileContextPopover target={contextTarget} closing={contextClosing} onClose={() => closeContext()} labelledBy="mobile-home-context-menu">
       {contextTarget?.kind === 'note' ? (() => {
         const note = notes.find((item) => item.id === contextTarget.id && !item.trashed && !item.archived);
         if (!note) return null;
-        const run = (action: () => void) => { setContextTarget(null); setMoveOpen(false); action(); };
+        const run = (action: () => void) => closeContext(action);
         return <>
           <button type="button" role="menuitem" onClick={() => run(() => onTogglePin(note.id))}>{note.pinned ? <PinOff size={18} /> : <Pin size={18} />}<span>{note.pinned ? 'Bỏ ghim' : 'Ghim'}</span></button>
           <button type="button" role="menuitem" onClick={() => setMoveOpen((open) => !open)}><Folder size={18} /><span>Di chuyển</span><ChevronRight className="ml-auto" size={17} /></button>
@@ -108,8 +129,8 @@ export function MobileHome({ notes, folders, searchQuery, onSearchChange, onSear
           <button type="button" role="menuitem" className="is-danger" onClick={() => run(() => onTrash(note.id))}><Trash2 size={18} /><span>Chuyển vào thùng rác</span></button>
         </>;
       })() : contextTarget?.kind === 'folder' ? <>
-        <button type="button" role="menuitem" onClick={() => { setRenameFolderTarget(contextTarget); setContextTarget(null); }}><Edit3 size={18} /><span>Đổi tên</span></button>
-        <button type="button" role="menuitem" className="is-danger" onClick={() => { const folder = folders.find((item) => item.id === contextTarget.id); setContextTarget(null); if (folder && window.confirm(`Xóa thư mục “${folder.name}”? Ghi chú trực tiếp sẽ được chuyển về Tất cả ghi chú; thư mục con sẽ được chuyển lên cấp cha.`)) onDeleteFolder(folder.id); }}><Trash2 size={18} /><span>Xóa thư mục</span></button>
+        <button type="button" role="menuitem" onClick={() => closeContext(() => setRenameFolderTarget(contextTarget))}><Edit3 size={18} /><span>Đổi tên</span></button>
+        <button type="button" role="menuitem" className="is-danger" onClick={() => { const folder = folders.find((item) => item.id === contextTarget.id); closeContext(() => { if (folder && window.confirm(`Xóa thư mục “${folder.name}”? Ghi chú trực tiếp sẽ được chuyển về Tất cả ghi chú; thư mục con sẽ được chuyển lên cấp cha.`)) onDeleteFolder(folder.id); }); }}><Trash2 size={18} /><span>Xóa thư mục</span></button>
       </> : null}
     </MobileContextPopover>
     {renameFolderTarget && <MobileFolderRenameSheet open folderName={renameFolderTarget.title} onClose={() => setRenameFolderTarget(null)} onRename={(name) => onRenameFolder(renameFolderTarget.id, name)} />}
@@ -137,9 +158,28 @@ function FolderPlusIcon() {
 export function MobileFoldersView({ folders, notes, onOpenFolder, onAddFolder, onRenameFolder, onDeleteFolder }: { folders: FolderRecord[]; notes: Note[]; onOpenFolder: (id: string) => void; onAddFolder: (name: string) => void; onRenameFolder: (id: string, name: string) => void; onDeleteFolder: (id: string) => void }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [contextTarget, setContextTarget] = useState<MobileContextTarget | null>(null);
+  const [contextClosing, setContextClosing] = useState(false);
   const [renameFolderTarget, setRenameFolderTarget] = useState<MobileContextTarget | null>(null);
+  const contextCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeContext = (afterClose?: () => void) => {
+    if (!contextTarget) return;
+    if (contextCloseTimer.current) clearTimeout(contextCloseTimer.current);
+    setContextClosing(true);
+    contextCloseTimer.current = setTimeout(() => {
+      setContextTarget(null);
+      setContextClosing(false);
+      contextCloseTimer.current = null;
+      afterClose?.();
+    }, 150);
+  };
   const folderHierarchy = useMemo(() => getFolderHierarchy(folders), [folders]);
-  const longPressHandlers = useMobileLongPress(setContextTarget);
+  const longPressHandlers = useMobileLongPress((target) => {
+    if (contextCloseTimer.current) clearTimeout(contextCloseTimer.current);
+    contextCloseTimer.current = null;
+    setContextClosing(false);
+    setContextTarget(target);
+  });
+  useEffect(() => () => { if (contextCloseTimer.current) clearTimeout(contextCloseTimer.current); }, []);
   return <div className="tanooki-mobile-page">
     <header className="tanooki-mobile-page-heading"><div><h1>Thư mục</h1><p>Ghi chú được sắp xếp theo chủ đề.</p></div><button type="button" aria-label="Tạo thư mục" onClick={() => setCreateOpen(true)}><Plus size={20} /></button></header>
       {folderHierarchy.some(({ depth }) => depth === 0) ? <div className="tanooki-mobile-folder-list" {...longPressHandlers}>
@@ -153,10 +193,10 @@ export function MobileFoldersView({ folders, notes, onOpenFolder, onAddFolder, o
       })}
     </div> : <p className="tanooki-mobile-empty">Chưa có thư mục nào.</p>}
     <MobileCreateFolderSheet open={createOpen} onClose={() => setCreateOpen(false)} onCreate={onAddFolder} />
-    <MobileContextPopover target={contextTarget} onClose={() => setContextTarget(null)} labelledBy="mobile-folders-context-menu">
+    <MobileContextPopover target={contextTarget} closing={contextClosing} onClose={() => closeContext()} labelledBy="mobile-folders-context-menu">
       {contextTarget?.kind === 'folder' && <>
-        <button type="button" role="menuitem" onClick={() => { setRenameFolderTarget(contextTarget); setContextTarget(null); }}><Edit3 size={18} /><span>Đổi tên</span></button>
-        <button type="button" role="menuitem" className="is-danger" onClick={() => { const folder = folders.find((item) => item.id === contextTarget.id); setContextTarget(null); if (folder && window.confirm(`Xóa thư mục “${folder.name}”? Ghi chú trực tiếp sẽ được chuyển về Tất cả ghi chú; thư mục con sẽ được chuyển lên cấp cha.`)) onDeleteFolder(folder.id); }}><Trash2 size={18} /><span>Xóa thư mục</span></button>
+        <button type="button" role="menuitem" onClick={() => closeContext(() => setRenameFolderTarget(contextTarget))}><Edit3 size={18} /><span>Đổi tên</span></button>
+        <button type="button" role="menuitem" className="is-danger" onClick={() => { const folder = folders.find((item) => item.id === contextTarget.id); closeContext(() => { if (folder && window.confirm(`Xóa thư mục “${folder.name}”? Ghi chú trực tiếp sẽ được chuyển về Tất cả ghi chú; thư mục con sẽ được chuyển lên cấp cha.`)) onDeleteFolder(folder.id); }); }}><Trash2 size={18} /><span>Xóa thư mục</span></button>
       </>}
     </MobileContextPopover>
     {renameFolderTarget && <MobileFolderRenameSheet open folderName={renameFolderTarget.title} onClose={() => setRenameFolderTarget(null)} onRename={(name) => onRenameFolder(renameFolderTarget.id, name)} />}

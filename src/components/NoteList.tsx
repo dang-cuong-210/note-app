@@ -119,6 +119,7 @@ export function NoteList({
   }: NoteListProps) {
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [longPressTarget, setLongPressTarget] = useState<MobileContextTarget | null>(null);
+  const [longPressClosing, setLongPressClosing] = useState(false);
   const [moveFor, setMoveFor] = useState<string | null>(null);
   const [folderFilter, setFolderFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
@@ -153,14 +154,41 @@ export function NoteList({
   const filterPanelRef = useRef<HTMLDivElement>(null);
   const notesScrollRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const longPressCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
-  const longPressHandlers = useMobileLongPress((target) => { setContextMoveOpen(false); setLongPressTarget(target); });
+  const closeLongPress = (afterClose?: () => void) => {
+    if (!longPressTarget) return;
+    if (longPressCloseTimer.current) clearTimeout(longPressCloseTimer.current);
+    setLongPressClosing(true);
+    longPressCloseTimer.current = setTimeout(() => {
+      setLongPressTarget(null);
+      setLongPressClosing(false);
+      longPressCloseTimer.current = null;
+      afterClose?.();
+    }, 150);
+  };
+  const longPressHandlers = useMobileLongPress((target) => {
+    if (longPressCloseTimer.current) clearTimeout(longPressCloseTimer.current);
+    longPressCloseTimer.current = null;
+    setLongPressClosing(false);
+    setContextMoveOpen(false);
+    setLongPressTarget(target);
+  });
+
+  useEffect(() => () => {
+    if (longPressCloseTimer.current) clearTimeout(longPressCloseTimer.current);
+  }, []);
 
   useLayoutEffect(() => {
     if ((mobileAllNotesMode || mobileRecentMode) && notesScrollRef.current) notesScrollRef.current.scrollTop = 0;
   }, [mobileAllNotesMode, mobileRecentMode]);
 
-  useEffect(() => { setLongPressTarget(null); }, [view]);
+  useEffect(() => {
+    if (longPressCloseTimer.current) clearTimeout(longPressCloseTimer.current);
+    longPressCloseTimer.current = null;
+    setLongPressClosing(false);
+    setLongPressTarget(null);
+  }, [view]);
 
   useEffect(() => {
     if (!filterOpen || mobileMode) return;
@@ -826,10 +854,10 @@ export function NoteList({
       </footer>}
       {mobileWorkspaceMode && <footer className="tanooki-mobile-all-notes-footer"><span>{mobileWorkspaceSummary}</span><button type="button" onClick={onAddNote} aria-label="Tạo ghi chú mới" title="Tạo ghi chú mới"><Plus size={26} aria-hidden="true" /></button></footer>}
 
-      {mobileMode && longPressTarget && <MobileContextPopover target={longPressTarget} onClose={() => { setLongPressTarget(null); setContextMoveOpen(false); }} labelledBy="mobile-long-press-menu">
+      {mobileMode && longPressTarget && <MobileContextPopover target={longPressTarget} closing={longPressClosing} onClose={() => closeLongPress()} labelledBy="mobile-long-press-menu">
         {longPressTarget.kind === 'note' && sorted.find((item) => item.id === longPressTarget.id) ? (() => {
           const targetNote = sorted.find((item) => item.id === longPressTarget.id)!;
-          const run = (action: () => void) => { setLongPressTarget(null); setContextMoveOpen(false); action(); };
+          const run = (action: () => void) => closeLongPress(action);
           if (view.kind === 'trash') return <>
             <button type="button" role="menuitem" onClick={() => run(() => onRestore(targetNote.id))}><RotateCcw size={18} aria-hidden="true" /><span>Khôi phục</span></button>
             <button type="button" role="menuitem" className="is-danger" onClick={() => run(() => { void handleDelete(targetNote); })}><Trash2 size={18} aria-hidden="true" /><span>Xóa vĩnh viễn</span></button>
@@ -847,8 +875,8 @@ export function NoteList({
             <button type="button" role="menuitem" className="is-danger" onClick={() => run(() => onTrash(targetNote.id))}><Trash2 size={18} aria-hidden="true" /><span>{mobileTrashMode ? 'Xóa' : 'Chuyển vào thùng rác'}</span></button>
           </>;
         })() : longPressTarget.kind === 'folder' ? <>
-          <button type="button" role="menuitem" onClick={() => { setContextFolderRenameId(longPressTarget.id); setContextFolderRenameName(longPressTarget.title); setLongPressTarget(null); }}><Edit3 size={18} aria-hidden="true" /><span>Đổi tên</span></button>
-          <button type="button" role="menuitem" className="is-danger" onClick={() => { const folder = folders.find((item) => item.id === longPressTarget.id); setLongPressTarget(null); if (folder && window.confirm(`Xóa thư mục “${folder.name}”? Ghi chú trực tiếp sẽ được chuyển về Tất cả ghi chú; thư mục con sẽ được chuyển lên cấp cha.`)) onDeleteFolder?.(folder.id); }}><Trash2 size={18} aria-hidden="true" /><span>Xóa thư mục</span></button>
+          <button type="button" role="menuitem" onClick={() => closeLongPress(() => { setContextFolderRenameId(longPressTarget.id); setContextFolderRenameName(longPressTarget.title); })}><Edit3 size={18} aria-hidden="true" /><span>Đổi tên</span></button>
+          <button type="button" role="menuitem" className="is-danger" onClick={() => { const folder = folders.find((item) => item.id === longPressTarget.id); closeLongPress(() => { if (folder && window.confirm(`Xóa thư mục “${folder.name}”? Ghi chú trực tiếp sẽ được chuyển về Tất cả ghi chú; thư mục con sẽ được chuyển lên cấp cha.`)) onDeleteFolder?.(folder.id); }); }}><Trash2 size={18} aria-hidden="true" /><span>Xóa thư mục</span></button>
         </> : null}
       </MobileContextPopover>}
       {mobileMode && contextFolderRenameId && <MobileFolderRenameSheet open folderName={contextFolderRenameName} onClose={() => setContextFolderRenameId(null)} onRename={(name) => onRenameFolder?.(contextFolderRenameId, name)} />}

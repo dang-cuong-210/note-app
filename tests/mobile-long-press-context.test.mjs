@@ -75,8 +75,33 @@ test('context overlay dismisses by outside tap or Escape and stays viewport cons
   assert.match(component, /availableHeight = Math\.max\(220, maxBottom - minTop\)/);
   assert.match(component, /const groupHeight = previewHeight[\s\S]*?maxBottom - groupHeight/);
   assert.match(css, /max-height: 60dvh/);
-  assert.match(css, /backdrop-filter: blur\(2px\)/);
+  assert.match(css, /backdrop-filter: blur\(7px\)/);
   assert.match(component, /visibility: 'hidden'/);
+});
+
+test('long-press context opens in a short stagger and closes without dropping scroll state early', async () => {
+  const component = await read('../src/components/MobileContextPopover.tsx');
+  const list = await read('../src/components/NoteList.tsx');
+  const home = await read('../src/components/MobileHome.tsx');
+  const css = await read('../src/index.css');
+  assert.match(component, /setStage\('backdrop'\)/);
+  assert.match(component, /backdropTimer = setTimeout\(\(\) => setStage\('backdrop'\), 32\)/);
+  assert.match(component, /previewTimer = setTimeout\(\(\) => setStage\('preview'\), 60\)/);
+  assert.match(component, /menuTimer = setTimeout\(\(\) => setStage\('menu'\), 100\)/);
+  assert.match(component, /element\.classList\.add\('is-context-lifting'\)/);
+  assert.match(component, /setStage\('closing'\)/);
+  assert.match(list, /setLongPressClosing\(true\)[\s\S]*?setTimeout\(\(\) => \{[\s\S]*?setLongPressTarget\(null\)[\s\S]*?\}, 150\)/);
+  assert.match(list, /closeLongPress\(action\)/);
+  assert.match(home, /<MobileContextPopover target=\{contextTarget\} closing=\{contextClosing\}/);
+  assert.match(home, /const run = \(action: \(\) => void\) => closeContext\(action\)/);
+  assert.match(home, /<MobileContextPopover target=\{contextTarget\} closing=\{contextClosing\} onClose=\{\(\) => closeContext\(\)\} labelledBy="mobile-folders-context-menu"/);
+  assert.match(css, /\.is-context-lifting \{[^}]*scale\(1\.015\)[^}]*140ms/);
+  assert.match(css, /\.tanooki-mobile-context-backdrop \{[^}]*transition: opacity 185ms/);
+  assert.match(css, /\.tanooki-mobile-context-highlight\.is-visible \{[^}]*translateY\(0\) scale\(1\)/);
+  assert.match(css, /\.tanooki-mobile-context-menu\.is-visible \{[^}]*translateY\(0\) scale\(1\)/);
+  assert.match(css, /\.tanooki-mobile-context-group\.is-closing[\s\S]*?transition-duration: 130ms/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.is-context-lifting \{ transform: none/);
+  assert.match(css, /transition-duration: 60ms; transition-delay: 0s/);
 });
 
 test('note context uses a dedicated readable preview with a multi-line body excerpt', async () => {
@@ -138,7 +163,7 @@ test('note context actions reuse existing pin, move, archive, duplicate, trash a
 
 test('context state clears on view change and mobile-only rendering preserves desktop menus', async () => {
   const list = await read('../src/components/NoteList.tsx');
-  assert.match(list, /useEffect\(\(\) => \{ setLongPressTarget\(null\); \}, \[view\]\)/);
+  assert.match(list, /useEffect\(\(\) => \{[\s\S]*?setLongPressTarget\(null\);[\s\S]*?\}, \[view\]\)/);
   assert.match(list, /\{mobileMode && longPressTarget && <MobileContextPopover/);
   assert.match(list, /menuFor === note\.id && !mobileMode/);
 });

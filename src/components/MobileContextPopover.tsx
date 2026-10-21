@@ -4,16 +4,55 @@ import { Folder } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { MobileContextTarget } from '@/components/useMobileLongPress';
 
-export function MobileContextPopover({ target, children, onClose, labelledBy }: {
+export function MobileContextPopover({ target, children, onClose, labelledBy, closing = false }: {
   target: MobileContextTarget | null;
   children: ReactNode;
   onClose: () => void;
   labelledBy: string;
+  closing?: boolean;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number; previewHeight: number; menuMaxHeight: number } | null>(null);
+  const [stage, setStage] = useState<'lifting' | 'backdrop' | 'preview' | 'menu' | 'closing'>('lifting');
+  const closingRef = useRef(closing);
+  closingRef.current = closing;
+
+  useEffect(() => {
+    if (!target) return;
+    setStage('lifting');
+    const sourceRows = Array.from(document.querySelectorAll<HTMLElement>('[data-mobile-context-kind]'))
+      .filter((element) => element.dataset.mobileContextKind === target.kind && element.dataset.mobileContextId === target.id);
+    sourceRows.forEach((element) => element.classList.add('is-context-lifting'));
+    let backdropTimer: ReturnType<typeof setTimeout> | null = null;
+    let previewTimer: ReturnType<typeof setTimeout> | null = null;
+    let menuTimer: ReturnType<typeof setTimeout> | null = null;
+    if (!closingRef.current) {
+      backdropTimer = setTimeout(() => setStage('backdrop'), 32);
+      previewTimer = setTimeout(() => setStage('preview'), 60);
+      menuTimer = setTimeout(() => setStage('menu'), 100);
+    }
+    return () => {
+      if (backdropTimer) clearTimeout(backdropTimer);
+      if (previewTimer) clearTimeout(previewTimer);
+      if (menuTimer) clearTimeout(menuTimer);
+      sourceRows.forEach((element) => element.classList.remove('is-context-lifting'));
+    };
+  }, [target]);
+
+  useEffect(() => {
+    if (!target) return;
+    if (closing) {
+      setStage('closing');
+      document.querySelectorAll<HTMLElement>('[data-mobile-context-kind]')
+        .forEach((element) => {
+          if (element.dataset.mobileContextKind === target.kind && element.dataset.mobileContextId === target.id) {
+            element.classList.remove('is-context-lifting');
+          }
+        });
+    }
+  }, [closing, target]);
 
   useEffect(() => {
     if (!target) return;
@@ -104,18 +143,20 @@ export function MobileContextPopover({ target, children, onClose, labelledBy }: 
   }, [target]);
 
   if (!target || typeof document === 'undefined') return null;
-  const { rect } = target;
+  const backdropVisible = stage === 'backdrop' || stage === 'preview' || stage === 'menu';
+  const previewVisible = stage === 'preview' || stage === 'menu';
+  const menuVisible = stage === 'menu';
   return createPortal(<div
     ref={layerRef}
-    className="tanooki-mobile-context-layer"
+    className={`tanooki-mobile-context-layer${closing ? ' is-closing' : ''}`}
     onContextMenuCapture={(event) => { event.preventDefault(); event.stopPropagation(); }}
   >
-    <button type="button" className="tanooki-mobile-context-backdrop" aria-label="Đóng menu thao tác" onClick={onClose} />
-    <div className={`tanooki-mobile-context-group${target.kind === 'folder' ? ' is-folder' : ' is-note'}${position ? ' is-open' : ''}`} style={position ? { left: position.left, top: position.top } : { left: 12, top: 12, visibility: 'hidden' }}>
-      <div ref={previewRef} className={`tanooki-mobile-context-highlight${target.kind === 'folder' ? ' is-folder' : ' is-note'}`} style={position && target.kind === 'note' ? { height: position.previewHeight } : undefined}>
+    <button type="button" className={`tanooki-mobile-context-backdrop${backdropVisible && !closing ? ' is-visible' : ''}`} aria-label="Đóng menu thao tác" onClick={onClose} />
+    <div className={`tanooki-mobile-context-group${target.kind === 'folder' ? ' is-folder' : ' is-note'}${closing ? ' is-closing' : ''}`} style={position ? { left: position.left, top: position.top } : { left: 12, top: 12, visibility: 'hidden' }}>
+      <div ref={previewRef} className={`tanooki-mobile-context-highlight${target.kind === 'folder' ? ' is-folder' : ' is-note'}${previewVisible && !closing ? ' is-visible' : ''}`} style={position && target.kind === 'note' ? { height: position.previewHeight } : undefined}>
         {target.kind === 'folder' ? <><Folder size={24} aria-hidden="true" /><strong>{target.title}</strong><span>{target.detail}</span></> : <><strong>{target.title}</strong><div className="tanooki-mobile-context-preview-body">{target.preview || target.detail || 'Chưa có nội dung'}</div></>}
       </div>
-      <div ref={menuRef} id={labelledBy} className="tanooki-mobile-context-menu" role="menu" aria-label={`Thao tác ${target.kind === 'note' ? 'ghi chú' : 'thư mục'}`} style={position ? { maxHeight: position.menuMaxHeight } : { maxHeight: '60dvh' }} onPointerDown={(event) => event.stopPropagation()}>
+      <div ref={menuRef} id={labelledBy} className={`tanooki-mobile-context-menu${menuVisible && !closing ? ' is-visible' : ''}`} role="menu" aria-label={`Thao tác ${target.kind === 'note' ? 'ghi chú' : 'thư mục'}`} style={position ? { maxHeight: position.menuMaxHeight } : { maxHeight: '60dvh' }} onPointerDown={(event) => event.stopPropagation()}>
         {children}
       </div>
     </div>
