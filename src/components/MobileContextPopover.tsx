@@ -22,6 +22,24 @@ export function MobileContextPopover({ target, children, onClose, labelledBy }: 
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [target, onClose]);
 
+  useEffect(() => {
+    const scrollElement = target?.scrollElement;
+    if (!scrollElement) return;
+    const previous = ['overflow-y', 'overscroll-behavior-y'].map((property) => ({
+      property,
+      value: scrollElement.style.getPropertyValue(property),
+      priority: scrollElement.style.getPropertyPriority(property),
+    }));
+    scrollElement.style.setProperty('overflow-y', 'hidden');
+    scrollElement.style.setProperty('overscroll-behavior-y', 'contain');
+    return () => {
+      for (const { property, value, priority } of previous) {
+        if (value) scrollElement.style.setProperty(property, value, priority);
+        else scrollElement.style.removeProperty(property);
+      }
+    };
+  }, [target]);
+
   useLayoutEffect(() => {
     if (!target || !menuRef.current) return;
     const rect = target.rect;
@@ -61,7 +79,7 @@ export function MobileContextPopover({ target, children, onClose, labelledBy }: 
     <div className="tanooki-mobile-context-highlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} aria-hidden="true">
       <strong>{target.title}</strong>{target.detail && <span>{target.detail}</span>}
     </div>
-    <div ref={menuRef} id={labelledBy} className="tanooki-mobile-context-menu" role="menu" aria-label={`Thao tác ${target.kind === 'note' ? 'ghi chú' : 'thư mục'}`} style={position ? { left: position.left, top: position.top } : { left: Math.max(14, rect.left), top: rect.bottom + 10 }} onPointerDown={(event) => event.stopPropagation()}>
+    <div ref={menuRef} id={labelledBy} className="tanooki-mobile-context-menu" role="menu" aria-label={`Thao tác ${target.kind === 'note' ? 'ghi chú' : 'thư mục'}`} style={position ? { left: position.left, top: position.top, visibility: 'visible' } : { left: Math.max(14, rect.left), top: rect.bottom + 10, visibility: 'hidden' }} onPointerDown={(event) => event.stopPropagation()}>
       {children}
     </div>
   </div>, document.body);

@@ -6,6 +6,7 @@ export interface MobileContextTarget {
   title: string;
   detail?: string;
   rect: DOMRect;
+  scrollElement: HTMLElement | null;
 }
 
 export function useMobileLongPress(onOpen: (target: MobileContextTarget) => void) {
@@ -37,22 +38,30 @@ export function useMobileLongPress(onOpen: (target: MobileContextTarget) => void
       const kind = element.dataset.mobileContextKind;
       const id = element.dataset.mobileContextId;
       if ((kind !== 'note' && kind !== 'folder') || !id) return;
+      let scrollElement: HTMLElement | null = element.parentElement;
+      while (scrollElement && scrollElement !== document.body) {
+        const overflowY = window.getComputedStyle(scrollElement).overflowY;
+        if ((overflowY === 'auto' || overflowY === 'scroll') && scrollElement.scrollHeight > scrollElement.clientHeight) break;
+        scrollElement = scrollElement.parentElement;
+      }
       const target: MobileContextTarget = {
         kind,
         id,
         title: element.dataset.mobileContextTitle || '',
         detail: element.dataset.mobileContextDetail || undefined,
         rect: element.getBoundingClientRect(),
+        scrollElement: scrollElement === document.body ? null : scrollElement,
       };
       start.current = { x: event.clientX, y: event.clientY, pointerId: event.pointerId, element, target };
       timer.current = setTimeout(() => {
         const pending = start.current;
         if (!pending) return;
+        pending.target.rect = pending.element.getBoundingClientRect();
         firedElement.current = pending.element;
         if (suppressClickTimer.current) clearTimeout(suppressClickTimer.current);
         suppressClickTimer.current = setTimeout(() => { firedElement.current = null; }, 1000);
         onOpenRef.current(pending.target);
-      }, 500);
+      }, 450);
     },
     onPointerMoveCapture: (event: ReactPointerEvent<HTMLElement>) => {
       const pending = start.current;
@@ -63,6 +72,12 @@ export function useMobileLongPress(onOpen: (target: MobileContextTarget) => void
       if (start.current?.pointerId === event.pointerId) cancel();
     },
     onPointerCancelCapture: cancel,
+    onContextMenuCapture: (event: ReactMouseEvent<HTMLElement>) => {
+      const hit = event.target instanceof Element ? event.target : null;
+      if (!hit?.closest('[data-mobile-context-kind="note"], [data-mobile-context-kind="folder"]')) return;
+      event.preventDefault();
+      event.stopPropagation();
+    },
     onClickCapture: (event: ReactMouseEvent<HTMLElement>) => {
       const target = event.target instanceof Element ? event.target : null;
       if (firedElement.current && target && firedElement.current.contains(target)) {

@@ -25,14 +25,28 @@ test('mobile folder rows preserve quick-open and provide context actions on Home
   assert.match(list, /onDeleteFolder\?\.\(folder\.id\)/);
 });
 
-test('long press opens after 500ms and movement over 10px cancels without affecting quick taps', async () => {
+test('long press opens after 450ms and movement over 10px cancels without affecting quick taps', async () => {
   const hook = await read('../src/components/useMobileLongPress.ts');
   assert.match(hook, /event\.pointerType !== 'touch'/);
-  assert.match(hook, /\}, 500\)/);
+  assert.match(hook, /\}, 450\)/);
   assert.match(hook, /Math\.hypot\(event\.clientX - pending\.x, event\.clientY - pending\.y\) > 10/);
   assert.match(hook, /onPointerCancelCapture: cancel/);
   assert.match(hook, /firedElement\.current\.contains\(target\)/);
   assert.match(hook, /setTimeout\(\(\) => \{ firedElement\.current = null; \}, 1000\)/);
+  assert.match(hook, /onClick=|onClickCapture/);
+  assert.match(hook, /pending\.target\.rect = pending\.element\.getBoundingClientRect\(\)/);
+});
+
+test('native context menu is prevented only for context-enabled mobile note and folder rows', async () => {
+  const hook = await read('../src/components/useMobileLongPress.ts');
+  const css = await read('../src/index.css');
+  const editor = await read('../src/components/NoteEditor.tsx');
+  assert.match(hook, /onContextMenuCapture:[\s\S]*?event\.preventDefault\(\)/);
+  assert.match(hook, /closest\('\[data-mobile-context-kind="note"\], \[data-mobile-context-kind="folder"\]'\)/);
+  assert.match(css, /@media \(max-width: 1023px\) \{\s*\[data-mobile-context-kind="note"\], \[data-mobile-context-kind="folder"\] \{[^}]*-webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: pan-y/);
+  assert.match(css, /:where\(\[data-mobile-context-kind="note"\], \[data-mobile-context-kind="folder"\]\) :is\(input, textarea, \[contenteditable="true"\]\) \{ -webkit-user-select: text; user-select: text/);
+  assert.match(editor, /contentEditable=\{canEdit\}/);
+  assert.doesNotMatch(css, /\.note-content\s*\{[^}]*user-select:\s*none/);
 });
 
 test('context overlay dismisses by outside tap or Escape and stays viewport constrained', async () => {
@@ -43,6 +57,18 @@ test('context overlay dismisses by outside tap or Escape and stays viewport cons
   assert.match(component, /below \+ menu\.height <= viewportHeight/);
   assert.match(css, /max-height: calc\(100dvh - env\(safe-area-inset-top\) - env\(safe-area-inset-bottom\) - 32px\)/);
   assert.match(css, /backdrop-filter: blur\(3px\)/);
+  assert.match(component, /visibility: 'hidden'/);
+});
+
+test('context menu locks only its originating scroll container and restores its prior inline styles', async () => {
+  const hook = await read('../src/components/useMobileLongPress.ts');
+  const component = await read('../src/components/MobileContextPopover.tsx');
+  assert.match(hook, /scrollElement: HTMLElement \| null/);
+  assert.match(hook, /window\.getComputedStyle\(scrollElement\)\.overflowY/);
+  assert.match(component, /target\?\.scrollElement/);
+  assert.match(component, /scrollElement\.style\.setProperty\('overflow-y', 'hidden'\)/);
+  assert.match(component, /scrollElement\.style\.setProperty\(property, value, priority\)/);
+  assert.match(component, /scrollElement\.style\.removeProperty\(property\)/);
 });
 
 test('note context actions reuse existing pin, move, archive, duplicate, trash and Trash restore/delete handlers', async () => {
