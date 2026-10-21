@@ -37,16 +37,34 @@ test('long press opens after 450ms and movement over 10px cancels without affect
   assert.match(hook, /pending\.target\.rect = pending\.element\.getBoundingClientRect\(\)/);
 });
 
-test('native context menu is prevented only for context-enabled mobile note and folder rows', async () => {
+test('native text selection and context menus are blocked only on context surfaces, not in the editor', async () => {
   const hook = await read('../src/components/useMobileLongPress.ts');
+  const popover = await read('../src/components/MobileContextPopover.tsx');
   const css = await read('../src/index.css');
   const editor = await read('../src/components/NoteEditor.tsx');
+  assert.match(hook, /document\.addEventListener\('selectstart', preventContextSelection, true\)/);
+  assert.match(hook, /document\.removeEventListener\('selectstart', preventContextSelection, true\)/);
+  assert.match(hook, /const CONTEXT_SURFACE_SELECTOR = '\[data-mobile-context-kind="note"\], \[data-mobile-context-kind="folder"\]'/);
   assert.match(hook, /onContextMenuCapture:[\s\S]*?event\.preventDefault\(\)/);
-  assert.match(hook, /closest\('\[data-mobile-context-kind="note"\], \[data-mobile-context-kind="folder"\]'\)/);
-  assert.match(css, /@media \(max-width: 1023px\) \{\s*\[data-mobile-context-kind="note"\], \[data-mobile-context-kind="folder"\] \{[^}]*-webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: pan-y/);
-  assert.match(css, /:where\(\[data-mobile-context-kind="note"\], \[data-mobile-context-kind="folder"\]\) :is\(input, textarea, \[contenteditable="true"\]\) \{ -webkit-user-select: text; user-select: text/);
+  assert.match(hook, /window\.getSelection\(\)\?\.removeAllRanges\(\);[\s\S]*?onOpenRef\.current\(pending\.target\)/);
+  assert.match(popover, /layer\.addEventListener\('selectstart', preventSelection, true\)/);
+  assert.match(popover, /layer\.removeEventListener\('selectstart', preventSelection, true\)/);
+  assert.match(popover, /onContextMenuCapture=\{\(event\) => \{ event\.preventDefault\(\); event\.stopPropagation\(\); \}\}/);
+  assert.match(popover, /requestAnimationFrame\(\(\) => window\.getSelection\(\)\?\.removeAllRanges\(\)\)/);
+  assert.match(css, /\[data-mobile-context-kind="note"\] \*, \[data-mobile-context-kind="folder"\] \* \{[^}]*-webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none/);
+  assert.match(css, /\.tanooki-mobile-context-layer \* \{ -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none; \}/);
+  assert.match(css, /\[role="textbox"\][\s\S]*?\{\s*-webkit-user-select: text !important; user-select: text !important/);
   assert.match(editor, /contentEditable=\{canEdit\}/);
   assert.doesNotMatch(css, /\.note-content\s*\{[^}]*user-select:\s*none/);
+});
+
+test('long-press selection guard preserves editor selection and movement/quick-tap behavior', async () => {
+  const hook = await read('../src/components/useMobileLongPress.ts');
+  assert.match(hook, /function isEditableTarget[\s\S]*?target\.closest\(EDITABLE_SELECTOR\)/);
+  assert.match(hook, /if \(!hit\?\.closest\(CONTEXT_SURFACE_SELECTOR\) \|\| isEditableTarget\(hit\)\) return/);
+  assert.match(hook, /Math\.hypot\(event\.clientX - pending\.x, event\.clientY - pending\.y\) > 10/);
+  assert.match(hook, /firedElement\.current\.contains\(target\)/);
+  assert.match(hook, /onPointerUpCapture:[\s\S]*?cancel\(\)/);
 });
 
 test('context overlay dismisses by outside tap or Escape and stays viewport constrained', async () => {

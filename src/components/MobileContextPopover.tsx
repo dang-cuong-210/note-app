@@ -15,12 +15,26 @@ export function MobileContextPopover({ target, children, onClose, labelledBy }: 
 
   useEffect(() => {
     if (!target) return;
+    // The preview is a portal rendered after the initiating gesture. Clear any
+    // selection iOS retained while React mounted the context layer.
+    const frame = window.requestAnimationFrame(() => window.getSelection()?.removeAllRanges());
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); onClose(); }
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, [target, onClose]);
+
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!target || !layer) return;
+    const preventSelection = (event: Event) => { event.preventDefault(); };
+    layer.addEventListener('selectstart', preventSelection, true);
+    return () => layer.removeEventListener('selectstart', preventSelection, true);
+  }, [target]);
 
   useEffect(() => {
     const scrollElement = target?.scrollElement;
@@ -74,7 +88,11 @@ export function MobileContextPopover({ target, children, onClose, labelledBy }: 
 
   if (!target || typeof document === 'undefined') return null;
   const { rect } = target;
-  return createPortal(<div ref={layerRef} className="tanooki-mobile-context-layer">
+  return createPortal(<div
+    ref={layerRef}
+    className="tanooki-mobile-context-layer"
+    onContextMenuCapture={(event) => { event.preventDefault(); event.stopPropagation(); }}
+  >
     <button type="button" className="tanooki-mobile-context-backdrop" aria-label="Đóng menu thao tác" onClick={onClose} />
     <div className="tanooki-mobile-context-highlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} aria-hidden="true">
       <strong>{target.title}</strong>{target.detail && <span>{target.detail}</span>}

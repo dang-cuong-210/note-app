@@ -1,5 +1,18 @@
 import { useEffect, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 
+const EDITABLE_SELECTOR = 'input, textarea, select, [contenteditable="true"], [role="textbox"]';
+const CONTEXT_SURFACE_SELECTOR = '[data-mobile-context-kind="note"], [data-mobile-context-kind="folder"]';
+
+function isEditableTarget(target: EventTarget | null) {
+  return target instanceof Element && Boolean(target.closest(EDITABLE_SELECTOR));
+}
+
+function preventContextSelection(event: Event) {
+  const hit = event.target instanceof Element ? event.target : null;
+  if (!hit?.closest(CONTEXT_SURFACE_SELECTOR) || isEditableTarget(hit)) return;
+  event.preventDefault();
+}
+
 export interface MobileContextTarget {
   kind: 'note' | 'folder';
   id: string;
@@ -26,6 +39,13 @@ export function useMobileLongPress(onOpen: (target: MobileContextTarget) => void
   useEffect(() => () => {
     cancel();
     if (suppressClickTimer.current) clearTimeout(suppressClickTimer.current);
+  }, []);
+
+  useEffect(() => {
+    // Native selectstart is not exposed by React's DOM event types. Keep a
+    // capture listener scoped to marked rows, and remove it with this hook.
+    document.addEventListener('selectstart', preventContextSelection, true);
+    return () => document.removeEventListener('selectstart', preventContextSelection, true);
   }, []);
 
   return {
@@ -60,6 +80,8 @@ export function useMobileLongPress(onOpen: (target: MobileContextTarget) => void
         firedElement.current = pending.element;
         if (suppressClickTimer.current) clearTimeout(suppressClickTimer.current);
         suppressClickTimer.current = setTimeout(() => { firedElement.current = null; }, 1000);
+        // iOS may have started selecting the row before the custom overlay is mounted.
+        window.getSelection()?.removeAllRanges();
         onOpenRef.current(pending.target);
       }, 450);
     },
@@ -74,7 +96,7 @@ export function useMobileLongPress(onOpen: (target: MobileContextTarget) => void
     onPointerCancelCapture: cancel,
     onContextMenuCapture: (event: ReactMouseEvent<HTMLElement>) => {
       const hit = event.target instanceof Element ? event.target : null;
-      if (!hit?.closest('[data-mobile-context-kind="note"], [data-mobile-context-kind="folder"]')) return;
+      if (!hit?.closest(CONTEXT_SURFACE_SELECTOR) || isEditableTarget(hit)) return;
       event.preventDefault();
       event.stopPropagation();
     },
