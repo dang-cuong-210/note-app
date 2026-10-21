@@ -743,6 +743,7 @@ function AppContent() {
               <NoteList
                 notes={data.notes}
                 folders={data.folders}
+                attachments={data.attachments}
                 view={view}
                 onOpenFolder={(id) => handleViewChange({ kind: 'folder', id })}
                 onAddFolder={data.addFolder}

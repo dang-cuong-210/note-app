@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { formatMobileAllNoteDate, groupMobileAllNotes } from '../src/lib/mobileAllNotes.js';
 import { getMobileDestinationAfterView } from '../src/lib/mobileNavigation.js';
+import { readMobileAllNotesGallery, writeMobileAllNotesGallery, MOBILE_ALL_NOTES_GALLERY_KEY } from '../src/lib/mobileAllNotesView.js';
 
 const localDate = (year, month, day, hour = 12) => new Date(year, month - 1, day, hour).getTime();
 const note = (id, updatedAt, fields = {}) => ({
@@ -50,11 +51,54 @@ test('All Notes uses existing note opening, folder names, filtered results and a
   assert.match(app, /mobileDestination !== 'all'/);
 });
 
-test('mobile All Notes keeps its search input and opens the existing filter and sort sheet', async () => {
+test('mobile All Notes keeps search and opens a compact popover from the more button', async () => {
   const list = await readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8');
   assert.match(list, /data-global-search value=\{searchQuery\} onChange=\{\(event\) => onSearchChange\(event\.target\.value\)\}/);
-  assert.match(list, /onClick=\{\(\) => setMobileControlsOpen\(true\)\} aria-label="Tùy chọn ghi chú"/);
+  assert.match(list, /onClick=\{\(\) => setMobileAllNotesMenuOpen\(true\)\} aria-label="Tùy chọn ghi chú"/);
+  assert.match(list, /role="menu" aria-label="Tùy chọn ghi chú"/);
+  assert.match(list, /const closeOnEscape = \(event: KeyboardEvent\)/);
+  assert.match(list, /aria-label="Đóng tùy chọn ghi chú" onClick=\{\(\) => \{ setMobileAllNotesMenuOpen\(false\); mobileAllNotesMoreRef\.current\?\.focus\(\); \}\}/);
+  assert.match(list, /Bộ lọc &amp; sắp xếp/);
+  assert.match(list, /setMobileControlsOpen\(true\); setMobileAllNotesMenuOpen\(false\)/);
   assert.match(list, /<MobileBottomSheet open=\{mobileControlsOpen\} title="Bộ lọc và sắp xếp"/);
+});
+
+test('All Notes Gallery/List preference persists locally and gallery uses a two-column layout', async () => {
+  const values = new Map();
+  const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+  assert.equal(readMobileAllNotesGallery(storage), false);
+  writeMobileAllNotesGallery(true, storage);
+  assert.equal(values.get(MOBILE_ALL_NOTES_GALLERY_KEY), 'true');
+  assert.equal(readMobileAllNotesGallery(storage), true);
+  writeMobileAllNotesGallery(false, storage);
+  assert.equal(readMobileAllNotesGallery(storage), false);
+  const list = await readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+  assert.match(list, /mobileAllNotesGallery \? 'Xem dưới dạng danh sách' : 'Xem dưới dạng bộ sưu tập'/);
+  assert.match(list, /function MobileAllNoteGalleryCard/);
+  assert.match(css, /\.tanooki-mobile-all-notes-card\.is-gallery \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+});
+
+test('All Notes selection mode selects only visible notes and offers supported bulk actions', async () => {
+  const list = await readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8');
+  assert.match(list, /setMobileAllNotesSelectionMode\(true\); setSelectedAllNoteIds\(\[\]\)/);
+  assert.match(list, /const selectedAllNotes = sorted\.filter\(\(note\) => selectedAllNoteIds\.includes\(note\.id\)\)/);
+  assert.match(list, /onOpen=\{\(\) => mobileAllNotesSelectionMode \? toggleAllNoteSelection\(note\.id\) : onSelectNote\(note\.id\)\}/);
+  assert.match(list, /archiveSelectedAllNotes/);
+  assert.match(list, /trashSelectedAllNotes/);
+  assert.match(list, /moveSelectedAllNotes/);
+  assert.match(list, /const leaveAllNotesSelection = \(\) => \{ setMobileAllNotesSelectionMode\(false\); setSelectedAllNoteIds\(\[\]\); \}/);
+});
+
+test('All Notes attachment action opens a real scope-filtered browser with existing URL refresh support', async () => {
+  const list = await readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8');
+  const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  assert.match(list, /Xem tệp đính kèm/);
+  assert.match(list, /attachments\.filter\(\(attachment\) => visibleNoteIdSet\.has\(attachment\.noteId\)\)/);
+  assert.match(list, /refreshAttachmentUrl\(attachment\.storagePath\)/);
+  assert.match(list, /mobileVisibleInlineImages/);
+  assert.match(app, /attachments=\{data\.attachments\}/);
+  assert.match(list, /Không có tệp đính kèm trong các ghi chú đang hiển thị/);
 });
 
 test('mobile All Notes layout uses safe-area padding, a scrollable grouped list and truncating rows', async () => {
