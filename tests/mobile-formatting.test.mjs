@@ -52,13 +52,27 @@ test('mobile formatting saves editor-owned connected ranges and tracks selection
 
 test('keyboard-aware mobile toolbar exposes Aa and Checklist while preserving desktop rendering', () => {
   assert.match(editor, /window\.visualViewport/);
-  assert.match(editor, /setMobileKeyboardOpen\(isEditorFocused\(\) && obscuredHeight > 120\)/);
+  assert.match(editor, /const obscuredHeight = window\.innerHeight - \(viewport\?\.height \?\? window\.innerHeight\) - \(viewport\?\.offsetTop \?\? 0\)/);
+  assert.match(editor, /const keyboardOpen = isEditorFocused\(\) && obscuredHeight > 120/);
+  assert.match(editor, /setMobileKeyboardViewport\(\(current\) => Math\.abs\(current\.height - nextViewport\.height\)/);
   assert.match(editor, /mobileKeyboardOpen && <button[\s\S]*?handleMobileFormat\('checklist'\)/);
   assert.match(editor, /is-keyboard-open/);
+  assert.match(editor, /mobileKeyboardOpen && mobileKeyboardViewport\.height > 0 \? \{ position: 'fixed', top: `\$\{mobileKeyboardViewport\.offsetTop\}px`, right: 0, left: 0, height: `\$\{mobileKeyboardViewport\.height\}px` \} : \{\}/);
+  assert.match(css, /\.tanooki-mobile-editor\.is-keyboard-open \.tanooki-mobile-editor-bottom-bar \{ padding-bottom: 5px; \}/);
   assert.match(editor, /!desktopPresentation && <MobileFormattingSheet/);
   assert.match(editor, /if \(desktopPresentation\) return;/);
   assert.match(css, /tanooki-mobile-editor\.is-keyboard-open \.tanooki-mobile-editor-bottom-bar \{ grid-template-columns: repeat\(5/);
   assert.match(css, /\.tanooki-mobile-format-toolbar-actions \{[^}]*overflow-x: auto/);
+});
+
+test('mobile editor toolbar controls preserve focus, keyboard close restores normal layout and desktop is unchanged', () => {
+  const bottomBar = editor.match(/<nav className="tanooki-mobile-editor-bottom-bar"[\s\S]*?<\/nav>/)?.[0] ?? '';
+  assert.ok(bottomBar);
+  assert.match(bottomBar, /onPointerDown=\{\(event\) => \{ event\.preventDefault\(\); rememberCaret\(\); \}\}/);
+  assert.match(editor, /document\.addEventListener\('focusout', handleFocusChange\)/);
+  assert.match(editor, /setMobileKeyboardOpen\(keyboardOpen\)/);
+  assert.match(editor, /mobileKeyboardOpen && mobileKeyboardViewport\.height > 0 \? \{ position: 'fixed'[\s\S]*?: \{\}/);
+  assert.match(editor, /desktopPresentation \? 'tanooki-desktop-editor'/);
 });
 
 test('formatting active states derive from the selected inline marks and containing block/list', () => {

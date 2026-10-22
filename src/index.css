@@ -1256,6 +1256,7 @@ input[data-global-search]:focus-visible {
   .tanooki-mobile-editor-bottom-bar { display: grid; min-height: 56px; flex: 0 0 auto; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; border-top: 1px solid var(--border); background: var(--bg); padding: 4px 8px calc(5px + env(safe-area-inset-bottom)); color: var(--accent); }
   .tanooki-mobile-editor-bottom-bar > button { display: grid; min-width: 48px; min-height: 44px; place-items: center; border-radius: 10px; color: var(--accent); }
   .tanooki-mobile-editor.is-keyboard-open .tanooki-mobile-editor-bottom-bar { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .tanooki-mobile-editor.is-keyboard-open .tanooki-mobile-editor-bottom-bar { padding-bottom: 5px; }
   .tanooki-mobile-upload-status { display: flex; min-height: 30px; flex: none; align-items: center; justify-content: center; gap: 7px; border-top: 1px solid var(--border); background: var(--bg); color: var(--text-secondary); font-size: 12px; }
   .tanooki-mobile-editor.is-light-paper .tanooki-mobile-editor-canvas { background: #fff; }
   .tanooki-mobile-editor.is-light-paper .tanooki-mobile-editor-canvas > input,

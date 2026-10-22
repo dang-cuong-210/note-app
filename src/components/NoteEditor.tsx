@@ -180,6 +180,7 @@ export function NoteEditor({
   const [mobileInlineImages, setMobileInlineImages] = useState<MobileInlineImage[]>([]);
   const [activeFormatting, setActiveFormatting] = useState<string[]>([]);
   const [mobileKeyboardOpen, setMobileKeyboardOpen] = useState(false);
+  const [mobileKeyboardViewport, setMobileKeyboardViewport] = useState({ height: 0, offsetTop: 0 });
   const [mobileFindOpen, setMobileFindOpen] = useState(false);
   const [mobileFindQuery, setMobileFindQuery] = useState('');
   const [mobileFindIndex, setMobileFindIndex] = useState(-1);
@@ -606,7 +607,12 @@ export function NoteEditor({
     };
     const updateKeyboardState = () => {
       const obscuredHeight = window.innerHeight - (viewport?.height ?? window.innerHeight) - (viewport?.offsetTop ?? 0);
-      setMobileKeyboardOpen(isEditorFocused() && obscuredHeight > 120);
+      const keyboardOpen = isEditorFocused() && obscuredHeight > 120;
+      if (keyboardOpen) {
+        const nextViewport = { height: viewport?.height ?? window.innerHeight, offsetTop: viewport?.offsetTop ?? 0 };
+        setMobileKeyboardViewport((current) => Math.abs(current.height - nextViewport.height) > 0.5 || Math.abs(current.offsetTop - nextViewport.offsetTop) > 0.5 ? nextViewport : current);
+      }
+      setMobileKeyboardOpen(keyboardOpen);
     };
     const handleFocusChange = () => {
       cancelAnimationFrame(focusFrame);
@@ -1652,7 +1658,7 @@ export function NoteEditor({
     : folders.some((folder) => folder.name === breadcrumb) ? breadcrumb : 'Ghi chú');
 
   return (
-    <div className={`${desktopPresentation ? 'h-full' : 'h-[100dvh] tanooki-mobile-editor'} min-h-0 min-w-0 flex flex-col bg-app ${desktopPresentation ? 'tanooki-desktop-editor' : `is-writing ${mobileKeyboardOpen ? 'is-keyboard-open' : ''}`} ${!desktopPresentation && mobilePaperMode ? 'is-light-paper' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
+    <div className={`${desktopPresentation ? 'h-full' : 'h-[100dvh] tanooki-mobile-editor'} min-h-0 min-w-0 flex flex-col bg-app ${desktopPresentation ? 'tanooki-desktop-editor' : `is-writing ${mobileKeyboardOpen ? 'is-keyboard-open' : ''}`} ${!desktopPresentation && mobilePaperMode ? 'is-light-paper' : ''}`} style={{ backgroundColor: 'var(--bg)', ...(!desktopPresentation && mobileKeyboardOpen && mobileKeyboardViewport.height > 0 ? { position: 'fixed', top: `${mobileKeyboardViewport.offsetTop}px`, right: 0, left: 0, height: `${mobileKeyboardViewport.height}px` } : {}) }}>
       {/* Toolbar */}
       <div
         className={`${desktopPresentation ? 'flex items-center justify-between gap-3 px-3 py-2 border-b flex-shrink-0 tanooki-editor-topbar' : 'hidden'}`}
