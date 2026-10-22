@@ -63,6 +63,19 @@ test('mobile All Notes keeps search and opens a compact popover from the more bu
   assert.match(list, /<MobileBottomSheet open=\{mobileControlsOpen\} title="Bộ lọc và sắp xếp"/);
 });
 
+test('mobile note cards use tap and long-press while the screen-level All Notes menu and desktop actions remain', async () => {
+  const list = await readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8');
+  const longPress = await readFile(new URL('../src/components/useMobileLongPress.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(list, /tanooki-mobile-all-notes-(?:gallery-)?more|tanooki-mobile-trash-more/);
+  assert.doesNotMatch(list, /onMore=\{\(\) => \{ setMenuFor\(note\.id\)/);
+  assert.match(list, /onOpen=\{\(\) => onSelectNote\(note\.id\)\}/);
+  assert.match(list, /data-mobile-context-kind=\{!selectionMode \? 'note' : undefined\}/);
+  assert.match(list, /onClick=\{\(\) => setMobileAllNotesMenuOpen\(true\)\} aria-label="Tùy chọn ghi chú"/);
+  for (const action of ['Xem dưới dạng bộ sưu tập', 'Chọn ghi chú', 'Xem tệp đính kèm', 'Bộ lọc &amp; sắp xếp']) assert.ok(list.includes(action), `missing screen-level action: ${action}`);
+  assert.match(longPress, /onOpenRef\.current\(pending\.target\)/);
+  assert.match(list, /\{!mobileMode && <div[\s\S]*?aria-label="Thao tác ghi chú"/);
+});
+
 test('All Notes Gallery/List preference persists locally and gallery uses a two-column layout', async () => {
   const values = new Map();
   const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };

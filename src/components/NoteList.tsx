@@ -30,7 +30,7 @@ import type { ViewType } from '@/lib/navigation';
 import { sortNotes, formatTime } from '@/lib/utils';
 import { buildSearchRecords, filterSearchRecords, getNotesInView, getSearchSnippet, highlightSegments, normalizeSearchText, rankSearchRecords, sortSearchNotes } from '@/lib/advancedSearch.js';
 import { useToast } from '@/contexts/ToastContext';
-import { MobileBottomSheet, MobileFolderRenameSheet, MobileNoteActionsSheet, MobileTrashActionsSheet } from '@/components/MobileEditorSheets';
+import { MobileBottomSheet, MobileFolderRenameSheet } from '@/components/MobileEditorSheets';
 import { confirmPermanentTrashDelete } from '@/lib/trashActions.js';
 import { formatMobileAllNoteDate, groupMobileAllNotes } from '@/lib/mobileAllNotes.js';
 import { getEffectiveRecentTime, getRecentNotes, groupMobileRecentNotes } from '@/lib/recentNotes.js';
@@ -243,7 +243,6 @@ export function NoteList({
       noteTitle: note.title.trim() || 'Chưa có tiêu đề',
     })).filter((image) => image.src);
   }), [mobileAllNotesMode, sorted]);
-  const menuNote = sorted.find((note) => note.id === menuFor) || null;
   const currentFolder = view.kind === 'folder' ? folders.find((folder) => folder.id === view.id) ?? null : null;
   const currentFolderAncestorIds = currentFolder ? getFolderAncestorIds(folders, currentFolder.id) : [];
   const currentFolderBreadcrumb = currentFolderAncestorIds.map((id) => folders.find((folder) => folder.id === id)?.name).filter(Boolean).join(' / ');
@@ -639,7 +638,6 @@ export function NoteList({
                 {trashSelectionMode
                   ? <button type="button" className="tanooki-mobile-trash-row-main" onClick={() => toggleTrashSelection(note.id)}>{rowContent}</button>
                   : <div className="tanooki-mobile-trash-row-main">{rowContent}</div>}
-                <button type="button" data-context-ignore className="tanooki-mobile-trash-more" aria-label={`Thao tác: ${note.title.trim() || 'Chưa có tiêu đề'}`} onClick={() => { setMenuFor(note.id); setMoveFor(null); }}><MoreHorizontal size={20} aria-hidden="true" /></button>
               </div>;
             })}
           </div> : mobileWorkspaceMode ? <div className="tanooki-mobile-workspace-content">
@@ -659,7 +657,7 @@ export function NoteList({
                   const fn = folderName(note.folderId);
                   const bodyMatched = Boolean(normalizeSearchText(searchQuery) && record?.bodyNormalized.includes(normalizeSearchText(searchQuery)));
                   const preview = record?.bodyText ? bodyMatched ? getSearchSnippet(record.bodyText, searchQuery) : record.bodyText.length > 120 ? `${record.bodyText.slice(0, 120)}…` : record.bodyText : 'Chưa có nội dung';
-                  return <MobileAllNoteRow key={note.id} note={note} selected={note.id === selectedNoteId} date={formatMobileAllNoteDate(note.updatedAt)} preview={preview} contextPreview={record?.bodyText || ''} query={searchQuery} folderName={fn} onOpen={() => onSelectNote(note.id)} onMore={() => { setMenuFor(note.id); setMoveFor(null); }} />;
+                  return <MobileAllNoteRow key={note.id} note={note} selected={note.id === selectedNoteId} date={formatMobileAllNoteDate(note.updatedAt)} preview={preview} contextPreview={record?.bodyText || ''} query={searchQuery} folderName={fn} onOpen={() => onSelectNote(note.id)} />;
                 })}
               </div></section>)}
             </div>}
@@ -684,7 +682,6 @@ export function NoteList({
                     selected={selectedAllNoteIds.includes(note.id)}
                     selectionMode={mobileAllNotesSelectionMode}
                     onOpen={() => mobileAllNotesSelectionMode ? toggleAllNoteSelection(note.id) : onSelectNote(note.id)}
-                    onMore={() => { setMenuFor(note.id); setMoveFor(null); }}
                   />;
                   return <MobileAllNoteRow
                     key={note.id}
@@ -698,7 +695,6 @@ export function NoteList({
                     selectionMode={mobileAllNotesMode && mobileAllNotesSelectionMode}
                     onToggleSelection={() => toggleAllNoteSelection(note.id)}
                     onOpen={() => mobileAllNotesSelectionMode ? toggleAllNoteSelection(note.id) : onSelectNote(note.id)}
-                    onMore={() => { setMenuFor(note.id); setMoveFor(null); }}
                   />;
                 })}
               </div>
@@ -764,10 +760,8 @@ export function NoteList({
                     </div>
                   </button>
 
-                  {/* Action menu button — always visible, touch-friendly */}
-                  <div
+                  {!mobileMode && <div
                     className="absolute right-2 top-2"
-                    
                   >
                     <button
                       data-context-ignore
@@ -786,7 +780,7 @@ export function NoteList({
                     >
                       <MoreHorizontal size={16} />
                     </button>
-                  </div>
+                  </div>}
 
                   {/* Dropdown menu */}
                   {menuFor === note.id && !mobileMode && (
@@ -945,18 +939,6 @@ export function NoteList({
         </button>
       )}
 
-      {mobileMode && menuNote && view.kind === 'trash' && <MobileTrashActionsSheet note={menuNote} open onClose={() => setMenuFor(null)} onRestore={onRestore} onPermanentDelete={() => { void handleDelete(menuNote); }} />}
-      {mobileMode && menuNote && view.kind !== 'trash' && <MobileNoteActionsSheet
-        note={menuNote}
-        folders={folders}
-        open
-        onClose={() => setMenuFor(null)}
-        onTogglePin={onTogglePin}
-        onArchive={() => handleArchive(menuNote)}
-        onMove={onMove}
-        onDuplicate={onDuplicate}
-        onTrash={(id) => { const target = sorted.find((item) => item.id === id); if (target) handleTrash(target); }}
-      />}
       {mobileMode && <MobileBottomSheet open={mobileControlsOpen} title="Bộ lọc và sắp xếp" onClose={() => setMobileControlsOpen(false)} labelledBy="mobile-note-filters">
         <div className="tanooki-mobile-sheet-group">
           {filterControls}
@@ -1000,7 +982,6 @@ function MobileAllNoteRow({
   query,
   folderName,
   onOpen,
-  onMore,
   selectionMode = false,
   onToggleSelection,
 }: {
@@ -1012,7 +993,6 @@ function MobileAllNoteRow({
   query: string;
   folderName: string | null;
   onOpen: () => void;
-  onMore: () => void;
   selectionMode?: boolean;
   onToggleSelection?: () => void;
 }) {
@@ -1023,11 +1003,10 @@ function MobileAllNoteRow({
       <span className="tanooki-mobile-all-notes-summary"><time>{date}</time><span aria-hidden="true">·</span><span className="tanooki-mobile-all-notes-preview">{recordPreview(preview, query)}</span></span>
       {folderName && <span className="tanooki-mobile-all-notes-folder"><FolderIcon size={15} fill="currentColor" aria-hidden="true" /><span>{folderName}</span></span>}
     </button>
-    {!selectionMode && <button type="button" data-context-ignore className="tanooki-mobile-all-notes-more" onClick={onMore} aria-label={`Thao tác: ${note.title.trim() || 'Chưa có tiêu đề'}`}><MoreHorizontal size={21} aria-hidden="true" /></button>}
   </article>;
 }
 
-function MobileAllNoteGalleryCard({ note, preview, contextPreview, date, folderName, selected, selectionMode, onOpen, onMore }: {
+function MobileAllNoteGalleryCard({ note, preview, contextPreview, date, folderName, selected, selectionMode, onOpen }: {
   note: Note;
   preview: string;
   contextPreview: string;
@@ -1036,7 +1015,6 @@ function MobileAllNoteGalleryCard({ note, preview, contextPreview, date, folderN
   selected: boolean;
   selectionMode: boolean;
   onOpen: () => void;
-  onMore: () => void;
 }) {
   return <article className={`tanooki-mobile-all-notes-gallery-card${selected ? ' is-selected' : ''}`} data-mobile-context-kind={!selectionMode ? 'note' : undefined} data-mobile-context-id={!selectionMode ? note.id : undefined} data-mobile-context-title={!selectionMode ? note.title.trim() || 'Chưa có tiêu đề' : undefined} data-mobile-context-detail={!selectionMode ? preview : undefined} data-mobile-context-preview={!selectionMode ? contextPreview.slice(0, 1600) : undefined}>
     {selectionMode && <button type="button" className="tanooki-mobile-all-notes-gallery-check" aria-label={`${selected ? 'Bỏ chọn' : 'Chọn'} ${note.title.trim() || 'Chưa có tiêu đề'}`} aria-pressed={selected} onClick={onOpen}><span>{selected && <Check size={14} aria-hidden="true" />}</span></button>}
@@ -1046,7 +1024,6 @@ function MobileAllNoteGalleryCard({ note, preview, contextPreview, date, folderN
       <span className="tanooki-mobile-all-notes-gallery-preview">{preview}</span>
       {folderName && <span className="tanooki-mobile-all-notes-folder"><FolderIcon size={14} fill="currentColor" aria-hidden="true" /><span>{folderName}</span></span>}
     </button>
-    {!selectionMode && <button type="button" data-context-ignore className="tanooki-mobile-all-notes-gallery-more" onClick={onMore} aria-label={`Thao tác: ${note.title.trim() || 'Chưa có tiêu đề'}`}><MoreHorizontal size={20} aria-hidden="true" /></button>}
   </article>;
 }
 

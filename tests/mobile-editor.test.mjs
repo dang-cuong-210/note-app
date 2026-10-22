@@ -89,8 +89,9 @@ test('mobile tools retain note metadata and tag management while the paperclip o
   for (const label of ['Ngày tạo', 'Cập nhật', 'Tệp đính kèm', 'Số từ', 'Ký tự', 'Thẻ']) assert.ok(sheets.includes(label));
 });
 
-test('mobile note-list action sheet retains its existing pin, move, archive, duplicate and trash callbacks', () => {
-  assert.match(noteList, /<MobileNoteActionsSheet[\s\S]*?onTogglePin=\{onTogglePin\}[\s\S]*?onArchive=\{\(\) => handleArchive\(menuNote\)\}[\s\S]*?onMove=\{onMove\}[\s\S]*?onDuplicate=\{onDuplicate\}[\s\S]*?onTrash=/);
+test('mobile note actions remain available through the long-press context menu', () => {
+  assert.match(noteList, /longPressTarget\.kind === 'note'[\s\S]*?onTogglePin\(targetNote\.id\)[\s\S]*?onMove\(targetNote\.id, folder\.id\)[\s\S]*?handleArchive\(targetNote\)[\s\S]*?onDuplicate\(targetNote\.id\)[\s\S]*?onTrash\(targetNote\.id\)/);
+  assert.doesNotMatch(noteList, /<MobileNoteActionsSheet/);
   assert.match(sheets, /export function MobileNoteActionsSheet/);
   for (const label of ['Ghim', 'Lưu trữ', 'Chuyển thư mục', 'Tạo bản sao', 'Chuyển vào thùng rác']) assert.ok(sheets.includes(label));
 });
@@ -173,11 +174,10 @@ test('mobile More opens an anchored popover, closes outside or on Escape, and ha
   assert.match(editor, /is-light-paper/);
 });
 
-test('mobile Trash row actions use a bottom sheet for restore and permanent deletion', () => {
-  assert.match(noteList, /mobileMode && menuNote && view\.kind === 'trash' && <MobileTrashActionsSheet/);
-  assert.match(sheets, /<button type="button" onClick=\{\(\) => \{ onClose\(\); onRestore\(note\.id\); \}\}>/);
-  assert.match(sheets, /onPermanentDelete\(note\.id\)/);
-  assert.ok(sheets.includes('Xóa vĩnh viễn'));
+test('mobile Trash restore and permanent deletion remain available through the long-press context menu', () => {
+  assert.match(noteList, /if \(view\.kind === 'trash'\) return <>[\s\S]*?onRestore\(targetNote\.id\)[\s\S]*?handleDelete\(targetNote\)/);
+  assert.doesNotMatch(noteList, /<MobileTrashActionsSheet/);
+  assert.ok(noteList.includes('Xóa vĩnh viễn'));
 });
 
 test('mobile folder creation sheet uses the existing addFolder callback; Home and More remain present', () => {

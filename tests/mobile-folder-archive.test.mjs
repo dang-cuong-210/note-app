@@ -42,7 +42,8 @@ test('folder actions reuse existing rename, nested add, delete and archive-note 
   assert.match(list, /onRenameFolder\?\.\(currentFolder\.id, folderActionName\.trim\(\)\)/);
   assert.match(list, /onAddFolder\?\.\(folderActionName\.trim\(\), currentFolder\.id\)/);
   assert.match(list, /onDeleteFolder\?\.\(currentFolder\.id\)/);
-  assert.match(list, /MobileNoteActionsSheet/);
+  assert.match(list, /data-mobile-context-kind=\{mobileMode \? 'note' : undefined\}/);
+  assert.match(list, /longPressTarget\.kind === 'note'/);
   assert.match(list, /setWorkspaceOptionsOpen\(false\); setMobileControlsOpen\(true\)/);
 });
 

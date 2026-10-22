@@ -26,17 +26,16 @@ test('mobile trash screen retains the seven-day retention policy and scopes sear
   assert.match(noteList, /mobileTrashMode \? 'tanooki-mobile-trash-scroll'/);
 });
 
-test('mobile trash rows keep title, deletion timestamp, preview, More actions and safe fallbacks', () => {
+test('mobile trash rows keep title, deletion timestamp, preview and safe fallbacks without per-note More buttons', () => {
   assert.match(noteList, /mobileTrashMode \? <div className="tanooki-mobile-trash-card"/);
   assert.match(noteList, /note\.title\.trim\(\) \|\| 'Chưa có tiêu đề'/);
   assert.match(noteList, /noteTime\(note\.trashedAt \|\| note\.updatedAt\)/);
   assert.match(noteList, /record\?\.bodyText \? record\.bodyText\.slice\(0, 120\) : 'Chưa có nội dung'/);
   assert.match(noteList, /const fn = folderName\(note\.folderId\)/);
   assert.match(noteList, /tanooki-mobile-trash-folder/);
-  assert.match(noteList, /className="tanooki-mobile-trash-more"/);
-  assert.match(noteList, /MobileTrashActionsSheet note=\{menuNote\}/);
-  assert.match(noteList, /onRestore=\{onRestore\}/);
-  assert.match(noteList, /onPermanentDelete=\{\(\) => \{ void handleDelete\(menuNote\); \}\}/);
+  assert.doesNotMatch(noteList, /tanooki-mobile-trash-more/);
+  assert.match(noteList, /longPressTarget\.kind === 'note'[\s\S]*?onRestore\(targetNote\.id\)/);
+  assert.match(noteList, /handleDelete\(targetNote\)/);
   assert.match(noteList, /confirmPermanentTrashDelete\(currentNote, \{[\s\S]*?isMobile: mobileTrashMode/);
 });
 
@@ -44,7 +43,7 @@ test('mobile Trash normal rows are non-interactive and cannot change note select
   const trashRows = noteList.match(/mobileTrashMode \? <div className="tanooki-mobile-trash-card">([\s\S]*?)<\/div> : mobileWorkspaceMode/)[1];
   assert.match(trashRows, /trashSelectionMode\s*\? <button[^>]*className="tanooki-mobile-trash-row-main" onClick=\{\(\) => toggleTrashSelection\(note\.id\)\}>\{rowContent\}<\/button>\s*: <div className="tanooki-mobile-trash-row-main">\{rowContent\}<\/div>/);
   assert.doesNotMatch(trashRows, /onSelectNote\(note\.id\)/);
-  assert.match(trashRows, /className="tanooki-mobile-trash-more"[^>]*onClick=\{\(\) => \{ setMenuFor\(note\.id\)/);
+  assert.doesNotMatch(trashRows, /tanooki-mobile-trash-more|data-context-ignore/);
 });
 
 test('mobile Trash edit mode toggles row selection and exposes selected state', () => {
