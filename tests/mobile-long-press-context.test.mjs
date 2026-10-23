@@ -149,7 +149,7 @@ test('note context actions reuse existing pin, move, archive, duplicate, trash a
   const list = await read('../src/components/NoteList.tsx');
   const home = await read('../src/components/MobileHome.tsx');
   assert.match(list, /onTogglePin\(targetNote\.id\)/);
-  assert.match(list, /onMove\(targetNote\.id, folder\.id\)/);
+  assert.match(list, /<DesktopFolderMoveOptions mobile folders=\{folders\} onSelect=\{\(folderId\) => run\(\(\) => onMove\(targetNote\.id, folderId\)\)\}/);
   assert.match(list, /handleArchive\(targetNote\)/);
   assert.match(list, /onDuplicate\(targetNote\.id\)/);
   assert.match(list, /onTrash\(targetNote\.id\)/);

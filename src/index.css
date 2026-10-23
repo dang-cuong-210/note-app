@@ -1120,6 +1120,17 @@ input[data-global-search]:focus-visible {
   .tanooki-desktop-note-rows.is-selecting .tanooki-desktop-note-row { padding-left: 37px; }
   .tanooki-desktop-note-check { position: absolute; z-index: 1; top: 50%; left: 13px; display: grid; width: 17px; height: 17px; transform: translateY(-50%); place-items: center; border: 1.5px solid var(--text-tertiary); border-radius: 50%; color: #fff; pointer-events: none; }
   .tanooki-desktop-note-check.is-selected { border-color: var(--accent); background: var(--accent); }
+  .tanooki-desktop-context-menu { position: fixed; z-index: 140; display: flex; width: min(224px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); flex-direction: column; gap: 2px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-secondary); padding: 5px; color: var(--text); box-shadow: 0 12px 30px rgb(30 25 20 / 22%); }
+  .tanooki-desktop-context-menu > button { display: flex; min-height: 34px; flex: none; align-items: center; gap: 9px; border-radius: 7px; padding: 0 9px; color: var(--text-secondary); font-size: 12px; text-align: left; }
+  .tanooki-desktop-context-menu > button > svg { flex: none; color: var(--text-tertiary); }
+  .tanooki-desktop-context-menu > button:hover, .tanooki-desktop-context-menu > button:focus-visible { outline: none; background: color-mix(in srgb, var(--accent-light) 60%, transparent); color: var(--text); }
+  .tanooki-desktop-context-menu > button:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
+  .tanooki-desktop-context-menu > button.is-danger, .tanooki-desktop-context-menu > button.is-danger > svg { color: var(--danger); }
+  .tanooki-desktop-context-separator { height: 1px; flex: none; margin: 3px 5px; background: var(--border); }
+  .tanooki-desktop-context-heading { padding: 4px 9px 2px; color: var(--text-tertiary); font-size: 10px; font-weight: 650; }
+  .tanooki-desktop-note-row.is-context-open, .tanooki-desktop-folder-child-row.is-context-open { background: color-mix(in srgb, var(--accent-light) 48%, var(--bg-secondary)); box-shadow: inset 2px 0 0 color-mix(in srgb, var(--tanooki-red) 70%, transparent); }
+  .tanooki-desktop-sidebar .is-context-open > .tanooki-desktop-nav-item { background: color-mix(in srgb, var(--accent-light) 48%, var(--bg-secondary)); box-shadow: inset 2px 0 0 color-mix(in srgb, var(--tanooki-red) 70%, transparent); }
+  .tanooki-dashboard-note-card.is-context-open, .tanooki-dashboard-recent-row.is-context-open, .tanooki-dashboard-folder.is-context-open { background: color-mix(in srgb, var(--accent-light) 48%, var(--bg-secondary)); box-shadow: inset 2px 0 0 color-mix(in srgb, var(--tanooki-red) 70%, transparent); }
   .tanooki-desktop-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); align-content: start; gap: 9px; padding: 9px; }
   .tanooki-desktop-gallery-card { position: relative; min-width: 0; min-height: 148px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--border) 75%, transparent); border-radius: 12px; background: var(--bg-secondary); }
   .tanooki-desktop-gallery-card:hover { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: color-mix(in srgb, var(--accent-light) 45%, var(--bg-secondary)); }

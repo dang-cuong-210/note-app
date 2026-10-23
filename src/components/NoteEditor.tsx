@@ -51,6 +51,7 @@ import { applyInlineFormatToRange, isInlineFormatActiveAtNode, isInlineFormatApp
 import { getBlankLinesToAppend, isMeaningfulNoteContent } from '@/lib/editorBehavior.js';
 import { MobileDrawingMarkup } from '@/components/MobileDrawingMarkup';
 import { getFolderHierarchy, getFolderOptionLabel } from '@/lib/folderHierarchy.js';
+import { shareNoteContent } from '@/lib/shareNote';
 
 // Attachment display settings travel inside note HTML, so no database migration is needed.
 // The marker is a comment, never a visible or editable element.
@@ -1697,11 +1698,9 @@ export function NoteEditor({
   const handleShareNote = async () => {
     const shareData = { title: title.trim() || 'Ghi chú', text: editorRef.current?.innerText || '' };
     try {
-      if (navigator.share) await navigator.share(shareData);
-      else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(`${shareData.title}\n\n${shareData.text}`);
-        toast('Đã sao chép nội dung ghi chú');
-      } else toast('Thiết bị này không hỗ trợ chia sẻ trực tiếp.');
+      const result = await shareNoteContent(shareData.title, shareData.text);
+      if (result === 'copied') toast('Đã sao chép nội dung ghi chú');
+      if (result === 'unsupported') toast('Thiết bị này không hỗ trợ chia sẻ trực tiếp.');
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') toast('Không thể chia sẻ ghi chú');
     }

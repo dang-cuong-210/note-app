@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useMemo, type FormEvent } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, type FormEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import {
   Pin,
   PinOff,
@@ -25,6 +25,7 @@ import {
   MoveRight,
   Edit3,
   Image as ImageIcon,
+  Share2,
 } from 'lucide-react';
 import type { Note, Folder, Attachment } from '@/types';
 import type { ViewType } from '@/lib/navigation';
@@ -42,6 +43,9 @@ import { readMobileAllNotesGallery, writeMobileAllNotesGallery } from '@/lib/mob
 import { refreshAttachmentUrl } from '@/lib/attachments';
 import { MobileContextPopover } from '@/components/MobileContextPopover';
 import { useMobileLongPress, type MobileContextTarget } from '@/components/useMobileLongPress';
+import { DesktopContextMenu, type DesktopMenuPoint } from '@/components/DesktopContextMenu';
+import { announceDesktopContextMenu } from '@/lib/desktopContextMenuEvents';
+import { shareNoteContent } from '@/lib/shareNote';
 
 interface NoteListProps {
   notes: Note[];
@@ -119,6 +123,7 @@ export function NoteList({
   attachments = [],
   }: NoteListProps) {
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [desktopContextMenu, setDesktopContextMenu] = useState<{ kind: 'note' | 'folder'; id: string; point: DesktopMenuPoint } | null>(null);
   const [longPressTarget, setLongPressTarget] = useState<MobileContextTarget | null>(null);
   const [longPressClosing, setLongPressClosing] = useState(false);
   const [moveFor, setMoveFor] = useState<string | null>(null);
@@ -192,6 +197,12 @@ export function NoteList({
     longPressCloseTimer.current = null;
     setLongPressClosing(false);
     setLongPressTarget(null);
+  }, [view]);
+
+  useEffect(() => {
+    setDesktopContextMenu(null);
+    setMenuFor(null);
+    setMoveFor(null);
   }, [view]);
 
   useEffect(() => {
@@ -415,6 +426,16 @@ export function NoteList({
     };
   }, [menuFor, mobileMode]);
 
+  useEffect(() => {
+    if (mobileMode) return;
+    const closeOtherMenu = () => {
+      setMenuFor(null);
+      setMoveFor(null);
+    };
+    window.addEventListener('tanooki:desktop-context-menu-open', closeOtherMenu);
+    return () => window.removeEventListener('tanooki:desktop-context-menu-open', closeOtherMenu);
+  }, [mobileMode]);
+
   const handleTrash = (note: Note) => {
     onTrash(note.id);
     toast('Đã chuyển ghi chú vào thùng rác', {
@@ -429,6 +450,16 @@ export function NoteList({
       label: 'Hoàn tác',
       onClick: () => onArchive(note.id, note.archived),
     });
+  };
+
+  const handleShare = async (note: Note) => {
+    try {
+      const result = await shareNoteContent(note.title.trim() || 'Ghi chú', recordById.get(note.id)?.bodyText || '');
+      if (result === 'copied') toast('Đã sao chép nội dung ghi chú');
+      if (result === 'unsupported') toast('Thiết bị này không hỗ trợ chia sẻ trực tiếp.');
+    } catch (error) {
+      if (!(error instanceof Error && error.name === 'AbortError')) toast('Không thể chia sẻ ghi chú');
+    }
   };
 
   const createDesktopChildFolder = (event: FormEvent<HTMLFormElement>) => {
@@ -653,7 +684,7 @@ export function NoteList({
         {desktopMode && currentFolder && <section className="tanooki-desktop-folder-children" aria-labelledby="tanooki-desktop-folder-children-heading">
           <div className="tanooki-desktop-folder-section-heading"><h3 id="tanooki-desktop-folder-children-heading">Thư mục</h3><button type="button" onClick={() => setDesktopFolderCreateOpen(true)}><Plus size={15} aria-hidden="true" />Thư mục mới</button></div>
           {desktopFolderCreateOpen && <form className="tanooki-desktop-folder-create" onSubmit={createDesktopChildFolder}><input autoFocus value={desktopFolderName} onChange={(event) => setDesktopFolderName(event.target.value)} placeholder={`Thư mục con trong ${currentFolder.name}`} aria-label={`Tên thư mục con trong ${currentFolder.name}`} /><button type="submit" disabled={!desktopFolderName.trim()}>Tạo</button><button type="button" onClick={() => { setDesktopFolderCreateOpen(false); setDesktopFolderName(''); }}>Hủy</button></form>}
-          {childFolders.length > 0 ? <div className="tanooki-desktop-folder-children-card">{childFolders.map((folder) => <button key={folder.id} type="button" className="tanooki-desktop-folder-child-row" onClick={() => onOpenFolder?.(folder.id)}><FolderIcon size={18} aria-hidden="true" /><strong>{folder.name}</strong><span>{notes.filter((note) => note.folderId === folder.id && !note.trashed && !note.archived).length}</span><ChevronRight size={17} aria-hidden="true" /></button>)}</div> : allChildFolders.length > 0 && searchQuery.trim() ? <p className="tanooki-desktop-folder-no-match">Không tìm thấy thư mục con phù hợp.</p> : null}
+          {childFolders.length > 0 ? <div className="tanooki-desktop-folder-children-card">{childFolders.map((folder) => <button key={folder.id} type="button" className={`tanooki-desktop-folder-child-row${desktopContextMenu?.kind === 'folder' && desktopContextMenu.id === folder.id ? ' is-context-open' : ''}`} onClick={() => onOpenFolder?.(folder.id)} onContextMenu={(event) => { if (mobileMode || !desktopMode) return; event.preventDefault(); event.stopPropagation(); announceDesktopContextMenu(); setDesktopContextMenu({ kind: 'folder', id: folder.id, point: { x: event.clientX, y: event.clientY } }); }}><FolderIcon size={18} aria-hidden="true" /><strong>{folder.name}</strong><span>{notes.filter((note) => note.folderId === folder.id && !note.trashed && !note.archived).length}</span><ChevronRight size={17} aria-hidden="true" /></button>)}</div> : allChildFolders.length > 0 && searchQuery.trim() ? <p className="tanooki-desktop-folder-no-match">Không tìm thấy thư mục con phù hợp.</p> : null}
         </section>}
         {desktopMode && currentFolder && sorted.length > 0 && <h3 className="tanooki-desktop-folder-notes-heading">Ghi chú</h3>}
         {mobileSearchMode && !normalizeSearchText(searchQuery) ? <section className="px-4 pb-8 pt-3" aria-label="Tìm kiếm gần đây">
@@ -764,7 +795,7 @@ export function NoteList({
               const bodyMatched = Boolean(normalizeSearchText(searchQuery) && record?.bodyNormalized.includes(normalizeSearchText(searchQuery)));
               const preview = record?.bodyText ? bodyMatched ? getSearchSnippet(record.bodyText, searchQuery) : record.bodyText : 'Chưa có nội dung';
               const selected = selectedAllNoteIds.includes(note.id);
-              return <DesktopNoteGalleryCard key={note.id} note={note} preview={preview} date={noteTime(note.updatedAt)} folderName={fn} selected={selected} selectionMode={mobileAllNotesSelectionMode} onOpen={() => mobileAllNotesSelectionMode ? toggleAllNoteSelection(note.id) : onSelectNote(note.id)} />;
+              return <DesktopNoteGalleryCard key={note.id} note={note} preview={preview} date={noteTime(note.updatedAt)} folderName={fn} selected={selected} selectionMode={mobileAllNotesSelectionMode} onOpen={() => mobileAllNotesSelectionMode ? toggleAllNoteSelection(note.id) : onSelectNote(note.id)} onContextMenu={(event) => { if (mobileAllNotesSelectionMode) return; event.preventDefault(); event.stopPropagation(); announceDesktopContextMenu(); setContextMoveOpen(false); setDesktopContextMenu({ kind: 'note', id: note.id, point: { x: event.clientX, y: event.clientY } }); }} contextOpen={desktopContextMenu?.kind === 'note' && desktopContextMenu.id === note.id} />;
             })}
           </div> : <div className={`space-y-0.5${desktopWorkspaceMode ? ` tanooki-desktop-note-rows${mobileAllNotesSelectionMode ? ' is-selecting' : ''}` : ''}`}>
             {sorted.map((note) => {
@@ -780,11 +811,21 @@ export function NoteList({
                   key={note.id}
                   className="relative"
                   ref={menuFor === note.id ? menuRef : undefined}
+                  onContextMenu={(event) => {
+                    if (mobileMode || !desktopMode || (mobileAllNotesSelectionMode && desktopWorkspaceMode)) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    announceDesktopContextMenu();
+                    setMenuFor(null);
+                    setMoveFor(null);
+                    setContextMoveOpen(false);
+                    setDesktopContextMenu({ kind: 'note', id: note.id, point: { x: event.clientX, y: event.clientY } });
+                  }}
                 >
                   <button
                     onClick={() => mobileAllNotesSelectionMode && desktopWorkspaceMode ? toggleAllNoteSelection(note.id) : onSelectNote(note.id)}
                     aria-pressed={mobileAllNotesSelectionMode && desktopWorkspaceMode ? selected : undefined}
-                    className={`tanooki-desktop-note-row w-full text-left px-3 py-3 rounded-lg transition-colors ${selected ? 'is-selected' : ''} ${
+                    className={`tanooki-desktop-note-row w-full text-left px-3 py-3 rounded-lg transition-colors ${desktopContextMenu?.kind === 'note' && desktopContextMenu.id === note.id ? 'is-context-open' : ''} ${selected ? 'is-selected' : ''} ${
                       selected ? 'bg-accent-light' : 'hover-bg'
                     } ${menuFor === note.id ? 'bg-accent-light' : ''}`}
                     data-mobile-context-kind={mobileMode ? 'note' : undefined}
@@ -836,6 +877,8 @@ export function NoteList({
                       data-context-ignore
                       onClick={(e) => {
                         e.stopPropagation();
+                        announceDesktopContextMenu();
+                        setDesktopContextMenu(null);
                         setMenuFor(menuFor === note.id ? null : note.id);
                         setMoveFor(null);
                       }}
@@ -861,6 +904,7 @@ export function NoteList({
                       {view.kind !== 'trash' && (
                         <MenuItem icon={note.pinned ? <PinOff size={15} /> : <Pin size={15} />} label={note.pinned ? 'Bỏ ghim' : 'Ghim'} onClick={() => { onTogglePin(note.id); setMenuFor(null); }} />
                       )}
+                      {view.kind !== 'trash' && <MenuItem icon={<Share2 size={15} />} label="Chia sẻ" onClick={() => { void handleShare(note); setMenuFor(null); }} />}
                       {view.kind !== 'trash' && (
                         <MenuItem icon={<Copy size={15} />} label="Tạo bản sao" onClick={() => { onDuplicate(note.id); setMenuFor(null); }} />
                       )}
@@ -884,10 +928,7 @@ export function NoteList({
                               style={{ backgroundColor: 'var(--bg)', borderColor: 'var(--border)' }}
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <MenuItem label="Không có thư mục" onClick={() => { onMove(note.id, null); setMenuFor(null); setMoveFor(null); }} />
-                              {getFolderHierarchy(folders).map(({ folder, depth }) => (
-                                <MenuItem key={folder.id} label={getFolderOptionLabel(folder, depth)} icon={<FolderIcon size={14} />} onClick={() => { onMove(note.id, folder.id); setMenuFor(null); setMoveFor(null); }} />
-                              ))}
+                              <DesktopFolderMoveOptions folders={folders} onSelect={(folderId) => { onMove(note.id, folderId); setMenuFor(null); setMoveFor(null); }} />
                             </div>
                           )}
                         </div>
@@ -911,6 +952,35 @@ export function NoteList({
         </>}
       </div>
 
+      {desktopMode && desktopContextMenu && (() => {
+        const close = () => { setDesktopContextMenu(null); setContextMoveOpen(false); };
+        if (desktopContextMenu.kind === 'folder') {
+          const folder = folders.find((item) => item.id === desktopContextMenu.id);
+          if (!folder) return null;
+          return <DesktopContextMenu point={desktopContextMenu.point} onClose={close} label={`Thao tác thư mục ${folder.name}`}>
+            <button type="button" role="menuitem" onClick={() => { close(); const name = window.prompt('Đổi tên thư mục', folder.name); if (name?.trim()) onRenameFolder?.(folder.id, name.trim()); }}><Edit3 size={15} aria-hidden="true" />Đổi tên</button>
+            <button type="button" role="menuitem" className="is-danger" onClick={() => { close(); if (window.confirm(`Xóa thư mục “${folder.name}”? Ghi chú trực tiếp sẽ được chuyển về Tất cả ghi chú; thư mục con sẽ được chuyển lên cấp cha.`)) onDeleteFolder?.(folder.id); }}><Trash2 size={15} aria-hidden="true" />Xóa thư mục</button>
+          </DesktopContextMenu>;
+        }
+        const note = sorted.find((item) => item.id === desktopContextMenu.id);
+        if (!note) return null;
+        return <DesktopContextMenu point={desktopContextMenu.point} onClose={close} label={`Thao tác ghi chú ${note.title || 'Chưa có tiêu đề'}`}>
+          {view.kind === 'trash' ? <>
+            <button type="button" role="menuitem" onClick={() => { close(); onRestore(note.id); }}><RotateCcw size={15} aria-hidden="true" />Khôi phục</button>
+            <button type="button" role="menuitem" className="is-danger" onClick={() => { close(); void handleDelete(note); }}><Trash2 size={15} aria-hidden="true" />Xóa vĩnh viễn</button>
+          </> : <>
+            <button type="button" role="menuitem" onClick={() => { close(); onTogglePin(note.id); }}>{note.pinned ? <PinOff size={15} aria-hidden="true" /> : <Pin size={15} aria-hidden="true" />}{note.pinned ? 'Bỏ ghim' : 'Ghim'}</button>
+            <button type="button" role="menuitem" onClick={() => { close(); void handleShare(note); }}><Share2 size={15} aria-hidden="true" />Chia sẻ</button>
+            <button type="button" role="menuitem" onClick={() => { close(); handleArchive(note); }}>{note.archived ? <ArchiveRestore size={15} aria-hidden="true" /> : <Archive size={15} aria-hidden="true" />}{note.archived ? 'Bỏ lưu trữ' : 'Lưu trữ'}</button>
+            <button type="button" role="menuitem" onClick={() => setContextMoveOpen((open) => !open)}><FolderIcon size={15} aria-hidden="true" />Di chuyển<ChevronRight className="ml-auto" size={14} aria-hidden="true" /></button>
+            {contextMoveOpen && <div className="tanooki-desktop-context-folder-options"><DesktopFolderMoveOptions folders={folders} onSelect={(folderId) => { close(); onMove(note.id, folderId); }} /></div>}
+            <button type="button" role="menuitem" onClick={() => { close(); onDuplicate(note.id); }}><Copy size={15} aria-hidden="true" />Tạo bản sao</button>
+            <div className="tanooki-desktop-context-separator" />
+            <button type="button" role="menuitem" className="is-danger" onClick={() => { close(); handleTrash(note); }}><Trash2 size={15} aria-hidden="true" />Chuyển vào thùng rác</button>
+          </>}
+        </DesktopContextMenu>;
+      })()}
+
       {mobileTrashMode && <footer className="tanooki-mobile-trash-footer"><span>{sorted.length} ghi chú</span></footer>}
       {(mobileAllNotesMode || mobileRecentMode) && <footer className="tanooki-mobile-all-notes-footer">
         <span>{sorted.length} ghi chú</span>
@@ -930,8 +1000,7 @@ export function NoteList({
             <button type="button" role="menuitem" onClick={() => run(() => onTogglePin(targetNote.id))}>{targetNote.pinned ? <PinOff size={18} aria-hidden="true" /> : <Pin size={18} aria-hidden="true" />}<span>{targetNote.pinned ? 'Bỏ ghim' : 'Ghim'}</span></button>
             <button type="button" role="menuitem" onClick={() => setContextMoveOpen((open) => !open)}><FolderIcon size={18} aria-hidden="true" /><span>Di chuyển</span><ChevronRight className="ml-auto" size={17} aria-hidden="true" /></button>
             {contextMoveOpen && <div className="tanooki-mobile-context-submenu">
-              <button type="button" role="menuitem" onClick={() => run(() => onMove(targetNote.id, null))}>Không có thư mục</button>
-              {getFolderHierarchy(folders).map(({ folder, depth }) => <button type="button" role="menuitem" key={folder.id} onClick={() => run(() => onMove(targetNote.id, folder.id))}>{getFolderOptionLabel(folder, depth)}</button>)}
+              <DesktopFolderMoveOptions mobile folders={folders} onSelect={(folderId) => run(() => onMove(targetNote.id, folderId))} />
             </div>}
             <button type="button" role="menuitem" onClick={() => run(() => handleArchive(targetNote))}>{targetNote.archived ? <ArchiveRestore size={18} aria-hidden="true" /> : <Archive size={18} aria-hidden="true" />}<span>{targetNote.archived ? 'Bỏ lưu trữ' : 'Lưu trữ'}</span></button>
             <button type="button" role="menuitem" onClick={() => run(() => onDuplicate(targetNote.id))}><Copy size={18} aria-hidden="true" /><span>Tạo bản sao</span></button>
@@ -1066,7 +1135,7 @@ function DesktopAttachmentBrowser({
   </section>;
 }
 
-function DesktopNoteGalleryCard({ note, preview, date, folderName, selected, selectionMode, onOpen }: {
+function DesktopNoteGalleryCard({ note, preview, date, folderName, selected, selectionMode, onOpen, onContextMenu, contextOpen }: {
   note: Note;
   preview: string;
   date: string;
@@ -1074,8 +1143,10 @@ function DesktopNoteGalleryCard({ note, preview, date, folderName, selected, sel
   selected: boolean;
   selectionMode: boolean;
   onOpen: () => void;
+  onContextMenu: (event: ReactMouseEvent<HTMLElement>) => void;
+  contextOpen: boolean;
 }) {
-  return <article className={`tanooki-desktop-gallery-card${selected ? ' is-selected' : ''}`}>
+  return <article className={`tanooki-desktop-gallery-card${selected ? ' is-selected' : ''}${contextOpen ? ' is-context-open' : ''}`} onContextMenu={onContextMenu}>
     {selectionMode && <button type="button" className="tanooki-desktop-gallery-check" onClick={onOpen} aria-label={`${selected ? 'Bỏ chọn' : 'Chọn'} ${note.title.trim() || 'Chưa có tiêu đề'}`} aria-pressed={selected}><span>{selected && <Check size={12} aria-hidden="true" />}</span></button>}
     <button type="button" className="tanooki-desktop-gallery-main" onClick={onOpen}>
       <strong>{note.title.trim() || 'Chưa có tiêu đề'}</strong><time>{date}</time><span className="tanooki-desktop-gallery-preview">{preview}</span>
@@ -1105,6 +1176,17 @@ function MenuItem({
       {label}
     </button>
   );
+}
+
+export function DesktopFolderMoveOptions({ folders, onSelect, mobile = false }: { folders: Folder[]; onSelect: (folderId: string | null) => void; mobile?: boolean }) {
+  return <>
+    <button type="button" role="menuitem" onClick={() => onSelect(null)} className={mobile ? undefined : 'w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg mx-1 transition-colors text-left hover-bg'}>
+      {!mobile && <FolderIcon size={14} aria-hidden="true" />}Không có thư mục
+    </button>
+    {getFolderHierarchy(folders).map(({ folder, depth }) => <button key={folder.id} type="button" role="menuitem" onClick={() => onSelect(folder.id)} className={mobile ? undefined : 'w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg mx-1 transition-colors text-left hover-bg'}>
+      {!mobile && <FolderIcon size={14} aria-hidden="true" />}{getFolderOptionLabel(folder, depth)}
+    </button>)}
+  </>;
 }
 
 function MobileAllNoteRow({

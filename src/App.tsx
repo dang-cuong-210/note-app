@@ -643,6 +643,13 @@ function AppContent() {
             onViewChange={handleViewChange}
             onOpenNote={(id) => { recordNoteOpen(id); const destination = getDashboardNoteDestination(id); setView(destination.view); setSelectedNoteId(destination.selectedNoteId); }}
             recentOpenedAt={recentOpenedAt}
+            onTogglePin={data.togglePin}
+            onTrash={handleTrash}
+            onDuplicate={handleDuplicate}
+            onArchive={data.archiveNote}
+            onMove={data.moveNote}
+            onRenameFolder={data.renameFolder}
+            onDeleteFolder={data.removeFolder}
           />
         ) : showMobileHome ? (
           <MobileHome

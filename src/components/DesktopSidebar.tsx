@@ -6,6 +6,8 @@ import type { ViewType } from '@/lib/navigation';
 import { getAllTags } from '@/lib/utils';
 import { getDirectFolderNoteCount } from '@/lib/dashboardData.js';
 import { getFolderHierarchy } from '@/lib/folderHierarchy.js';
+import { DesktopContextMenu, type DesktopMenuPoint } from '@/components/DesktopContextMenu';
+import { announceDesktopContextMenu } from '@/lib/desktopContextMenuEvents';
 
 interface DesktopSidebarProps {
   notes: Note[];
@@ -37,6 +39,7 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
   const [folderInputOpen, setFolderInputOpen] = useState(false);
   const [folderName, setFolderName] = useState('');
   const [folderMenuFor, setFolderMenuFor] = useState<string | null>(null);
+  const [folderContextMenu, setFolderContextMenu] = useState<{ folder: Folder; point: DesktopMenuPoint } | null>(null);
   const [editingFolder, setEditingFolder] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const folderMenuRef = useRef<HTMLDivElement>(null);
@@ -62,6 +65,11 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
     document.addEventListener('pointerdown', onPointerDown, true);
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
   }, [folderMenuFor]);
+
+  useEffect(() => {
+    setFolderContextMenu(null);
+    setFolderMenuFor(null);
+  }, [currentView]);
 
   const isActive = (view: ViewType) => JSON.stringify(view) === JSON.stringify(currentView);
   const submitFolder = () => {
@@ -125,12 +133,12 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
           <button type="button" aria-label="Thêm thư mục gốc" title="Thêm thư mục gốc" onClick={beginCreateFolder} className="rounded p-1 hover-bg"><Plus size={16} /></button>
         </div>
         {folderInputOpen && <input autoFocus value={folderName} onChange={(event) => setFolderName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submitFolder(); if (event.key === 'Escape') { folderCreateCommitted.current = true; setFolderInputOpen(false); setFolderName(''); } }} onBlur={submitFolder} placeholder="Tên thư mục gốc" aria-label="Tên thư mục mới" className="mb-1 w-full rounded-lg border bg-transparent px-2 py-2 text-sm outline-none focus-visible:ring-2" style={{ borderColor: 'var(--border)' }} />}
-        {getFolderHierarchy(folders).filter(({ depth }) => depth === 0).map(({ folder }, index) => <div key={folder.id} className="group relative mb-0.5">
+        {getFolderHierarchy(folders).filter(({ depth }) => depth === 0).map(({ folder }, index) => <div key={folder.id} className={`group relative mb-0.5${folderContextMenu?.folder.id === folder.id ? ' is-context-open' : ''}`} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); announceDesktopContextMenu(); setFolderMenuFor(null); setFolderContextMenu({ folder, point: { x: event.clientX, y: event.clientY } }); }}>
             {editingFolder === folder.id ? <input autoFocus value={editName} onChange={(event) => setEditName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') commitRename(folder); if (event.key === 'Escape') { renameCommitted.current = true; setEditingFolder(null); } }} onBlur={() => commitRename(folder)} aria-label={`Đổi tên ${folder.name}`} className="w-full rounded-lg border bg-transparent px-2 py-2 text-sm outline-none focus-visible:ring-2" style={{ borderColor: 'var(--border)' }} /> : <div className="flex min-w-0 items-center">
               <button type="button" onClick={() => onViewChange({ kind: 'folder', id: folder.id })} aria-current={isActive({ kind: 'folder', id: folder.id }) ? 'page' : undefined} className={`tanooki-desktop-nav-item min-w-0 flex-1 pr-9 ${isActive({ kind: 'folder', id: folder.id }) ? 'is-active' : ''}`}>
                 <FolderIcon size={17} aria-hidden="true" style={{ color: ['var(--tanooki-red)', 'var(--tanooki-orange)', 'var(--tanooki-ochre)', 'var(--tanooki-brown)'][index % 4] }} /><span className="flex-1 truncate">{folder.name}</span><span className="text-xs text-tertiary">{getDirectFolderNoteCount(activeNotes, folder.id)}</span>
               </button>
-              <button ref={folderMenuFor === folder.id ? folderTriggerRef : undefined} type="button" aria-label={`Tùy chọn thư mục ${folder.name}`} aria-expanded={folderMenuFor === folder.id} onClick={() => setFolderMenuFor(folderMenuFor === folder.id ? null : folder.id)} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover-bg"><MoreHorizontal size={16} /></button>
+              <button ref={folderMenuFor === folder.id ? folderTriggerRef : undefined} type="button" aria-label={`Tùy chọn thư mục ${folder.name}`} aria-expanded={folderMenuFor === folder.id} onClick={() => { announceDesktopContextMenu(); setFolderContextMenu(null); setFolderMenuFor(folderMenuFor === folder.id ? null : folder.id); }} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover-bg"><MoreHorizontal size={16} /></button>
               {folderMenuFor === folder.id && <div ref={folderMenuRef} role="menu" className="absolute right-0 top-9 z-30 w-40 rounded-xl border p-1 shadow-lg" style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}>
                 <button type="button" role="menuitem" onClick={() => beginRename(folder)} className="w-full rounded-lg px-3 py-2 text-left text-sm hover-bg">Đổi tên</button>
                 <button type="button" role="menuitem" onClick={() => { setFolderMenuFor(null); if (window.confirm(`Xóa thư mục “${folder.name}”? Ghi chú trực tiếp sẽ được chuyển về Tất cả ghi chú; thư mục con sẽ được chuyển lên cấp cha.`)) onDeleteFolder(folder.id); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-danger hover-bg">Xóa thư mục</button>
@@ -145,6 +153,11 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
         <div className="space-y-0.5">{tags.slice(0, 12).map((tag) => <button key={tag.name} type="button" onClick={() => onViewChange({ kind: 'tag', name: tag.name })} aria-current={isActive({ kind: 'tag', name: tag.name }) ? 'page' : undefined} className={`tanooki-desktop-nav-item ${isActive({ kind: 'tag', name: tag.name }) ? 'is-active' : ''}`}><TagIcon size={16} aria-hidden="true" /><span className="flex-1 truncate">{tag.name}</span><span className="text-xs text-tertiary">{tag.count}</span></button>)}</div>
       </div>
     </nav>
+
+    {folderContextMenu && <DesktopContextMenu point={folderContextMenu.point} onClose={() => setFolderContextMenu(null)} label={`Thao tác thư mục ${folderContextMenu.folder.name}`}>
+      <button type="button" role="menuitem" onClick={() => { const folder = folderContextMenu.folder; setFolderContextMenu(null); beginRename(folder); }}>Đổi tên</button>
+      <button type="button" role="menuitem" className="is-danger" onClick={() => { const folder = folderContextMenu.folder; setFolderContextMenu(null); if (window.confirm(`Xóa thư mục “${folder.name}”? Ghi chú trực tiếp sẽ được chuyển về Tất cả ghi chú; thư mục con sẽ được chuyển lên cấp cha.`)) onDeleteFolder(folder.id); }}>Xóa thư mục</button>
+    </DesktopContextMenu>}
 
     <div className="space-y-1 border-t p-3" style={{ borderColor: 'var(--border)' }}>
       <button type="button" onClick={() => onViewChange({ kind: 'settings' })} aria-current={currentView.kind === 'settings' ? 'page' : undefined} className={`tanooki-desktop-nav-item ${currentView.kind === 'settings' ? 'is-active' : ''}`}><SettingsIcon size={18} /><span>Cài đặt</span></button>
