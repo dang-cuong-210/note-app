@@ -7,8 +7,9 @@ const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 test('mobile note rows keep normal tap navigation and expose long-press context data', async () => {
   const list = await read('../src/components/NoteList.tsx');
   const home = await read('../src/components/LiveSearchResults.tsx');
-  assert.match(list, /onClick=\{\(\) => onSelectNote\(note\.id\)\}/);
+  assert.match(list, /onOpen=\{\(\) => onSelectNote\(note\.id\)\}/);
   assert.match(list, /onClick=\{onOpen\}/);
+  assert.match(list, /onClick=\{\(\) => mobileAllNotesSelectionMode && desktopWorkspaceMode \? toggleAllNoteSelection\(note\.id\) : onSelectNote\(note\.id\)\}/);
   assert.match(list, /data-mobile-context-kind=\{!selectionMode \? 'note' : undefined\}/);
   assert.match(list, /data-mobile-context-kind=\{mobileMode \? 'note' : undefined\}/);
   assert.match(home, /data-mobile-context-kind="note"/);

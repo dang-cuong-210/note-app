@@ -62,7 +62,7 @@ test('mobile Trash selection control has a 44px target while preserving its visu
 });
 
 test('desktop Trash row selection, restore and permanent-delete behavior remain unchanged', () => {
-  assert.match(noteList, /<button\s+onClick=\{\(\) => onSelectNote\(note\.id\)\}[\s\S]*?className=\{`tanooki-desktop-note-row/);
+  assert.match(noteList, /<button\s+onClick=\{\(\) => mobileAllNotesSelectionMode && desktopWorkspaceMode \? toggleAllNoteSelection\(note\.id\) : onSelectNote\(note\.id\)\}[\s\S]*?className=\{`tanooki-desktop-note-row/);
   assert.match(noteList, /<MenuItem icon=\{<RotateCcw size=\{15\} \/>\} label="Khôi phục" onClick=\{\(\) => \{ onRestore\(note\.id\); setMenuFor\(null\); \}\} \/>/);
   assert.match(noteList, /label="Xóa vĩnh viễn" danger onClick=\{\(\) => \{ handleDelete\(note\); setMenuFor\(null\); \}\}/);
   assert.match(noteList, /confirmPermanentTrashDelete\(currentNote, \{[\s\S]*?permanentDelete: onPermanentDelete/);

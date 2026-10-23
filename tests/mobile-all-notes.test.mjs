@@ -73,7 +73,7 @@ test('mobile note cards use tap and long-press while the screen-level All Notes 
   assert.match(list, /onClick=\{\(\) => setMobileAllNotesMenuOpen\(true\)\} aria-label="Tùy chọn ghi chú"/);
   for (const action of ['Xem dưới dạng bộ sưu tập', 'Chọn ghi chú', 'Xem tệp đính kèm', 'Bộ lọc &amp; sắp xếp']) assert.ok(list.includes(action), `missing screen-level action: ${action}`);
   assert.match(longPress, /onOpenRef\.current\(pending\.target\)/);
-  assert.match(list, /\{!mobileMode && <div[\s\S]*?aria-label="Thao tác ghi chú"/);
+  assert.match(list, /\{!mobileMode && !\(mobileAllNotesSelectionMode && desktopWorkspaceMode\) && <div[\s\S]*?aria-label="Thao tác ghi chú"/);
 });
 
 test('All Notes Gallery/List preference persists locally and gallery uses a two-column layout', async () => {

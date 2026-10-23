@@ -47,3 +47,65 @@ test('desktop note properties support empty content and unfiled notes', () => {
   assert.equal(properties.characterCount, 0);
   assert.deepEqual(properties.tags, []);
 });
+
+test('desktop All Notes workspace exposes search, filters, sort, list/gallery, selection, and attachments', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const list = await readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8');
+  const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
+
+  assert.match(list, /const desktopWorkspaceMode = desktopMode && \(view\.kind === 'all' \|\| view\.kind === 'folder'\)/);
+  assert.match(list, /className="tanooki-desktop-workspace-header"/);
+  assert.match(list, /placeholder="Tìm kiếm ghi chú\.\.\." aria-label="Tìm kiếm ghi chú" data-global-search/);
+  assert.match(list, /className="tanooki-desktop-filter-popover"/);
+  assert.match(list, /<SortSelect value=\{sortMode\} onChange=\{setSortMode\} \/>/);
+  assert.match(list, /aria-label="Xem dạng danh sách" aria-pressed=\{!mobileAllNotesGallery\}/);
+  assert.match(list, /aria-label="Xem dạng bộ sưu tập" aria-pressed=\{mobileAllNotesGallery\}/);
+  assert.match(list, /aria-pressed=\{mobileAllNotesSelectionMode\}/);
+  assert.match(list, /aria-pressed=\{desktopAttachmentsOpen\}/);
+  assert.match(app, /attachments=\{data\.attachments\}/);
+});
+
+test('desktop Gallery and multi-select use the same filtered and sorted notes as List', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const list = await readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8');
+
+  assert.match(list, /const sorted = useMemo\(\(\) =>/);
+  assert.match(list, /const selectedAllNotes = sorted\.filter\(\(note\) => selectedAllNoteIds\.includes\(note\.id\)\)/);
+  assert.match(list, /desktopWorkspaceMode && mobileAllNotesGallery \? <div className="tanooki-desktop-gallery">\s*\{sorted\.map/);
+  assert.match(list, /function DesktopNoteGalleryCard/);
+  assert.match(list, /mobileAllNotesSelectionMode \? toggleAllNoteSelection\(note\.id\) : onSelectNote\(note\.id\)/);
+  assert.match(list, /const leaveAllNotesSelection = \(\) =>/);
+  assert.match(list, /const archiveSelectedAllNotes = \(\) =>/);
+  assert.match(list, /const trashSelectedAllNotes = \(\) =>/);
+  assert.match(list, /const moveSelectedAllNotes = \(\) =>/);
+  assert.match(list, /className="tanooki-desktop-bulk-toolbar"[\s\S]*?Di chuyển ghi chú[\s\S]*?Lưu trữ[\s\S]*?Thùng rác/);
+  assert.match(list, /onClick=\{\(\) => mobileAllNotesSelectionMode && desktopWorkspaceMode \? toggleAllNoteSelection\(note\.id\) : onSelectNote\(note\.id\)\}/);
+});
+
+test('desktop attachment browser scopes metadata and inline images to visible notes and retains folder context', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const list = await readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8');
+
+  assert.match(list, /attachments\.filter\(\(attachment\) => visibleNoteIdSet\.has\(attachment\.noteId\)\)/);
+  assert.match(list, /new DOMParser\(\)\.parseFromString\(note\.content \|\| '', 'text\/html'\)/);
+  assert.match(list, /<DesktopAttachmentBrowser[\s\S]*?entries=\{visibleWorkspaceAttachments\}/);
+  assert.match(list, /function DesktopAttachmentBrowser/);
+  assert.match(list, /Tất cả[\s\S]*Hình ảnh[\s\S]*Bản vẽ[\s\S]*Tệp/);
+  assert.match(list, /refreshAttachmentUrl\(attachment\.storagePath\)/);
+  assert.match(list, /onOpenNote=\{\(id\) => \{ setDesktopAttachmentsOpen\(false\); onSelectNote\(id\); \}\}/);
+  assert.match(list, /currentFolderAncestorIds\.map/);
+  assert.match(list, /desktopWorkspaceMode = desktopMode && \(view\.kind === 'all' \|\| view\.kind === 'folder'\)/);
+});
+
+test('desktop workspace presentation is isolated from mobile All Notes and nested folder rendering', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const list = await readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+
+  assert.match(list, /mobileAllNotesMode && <header className="tanooki-mobile-all-notes-header"/);
+  assert.match(list, /mobileAllNotesMode && mobileAllNotesMenuOpen/);
+  assert.match(list, /desktopMode && currentFolder && <section className="tanooki-desktop-folder-children"/);
+  assert.match(list, /className="tanooki-desktop-folder-breadcrumb"/);
+  assert.match(css, /\.tanooki-desktop-gallery \{ display: grid; grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 170px\), 1fr\)\)/);
+  assert.match(css, /\.tanooki-desktop-workspace-header/);
+});

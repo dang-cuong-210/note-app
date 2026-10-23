@@ -24,6 +24,7 @@ import {
   Paperclip,
   MoveRight,
   Edit3,
+  Image as ImageIcon,
 } from 'lucide-react';
 import type { Note, Folder, Attachment } from '@/types';
 import type { ViewType } from '@/lib/navigation';
@@ -137,6 +138,9 @@ export function NoteList({
   const [mobileAllNotesMoveOpen, setMobileAllNotesMoveOpen] = useState(false);
   const [mobileAllNotesMoveFolder, setMobileAllNotesMoveFolder] = useState('none');
   const [mobileAttachmentsOpen, setMobileAttachmentsOpen] = useState(false);
+  const [desktopAttachmentsOpen, setDesktopAttachmentsOpen] = useState(false);
+  const [desktopAttachmentFilter, setDesktopAttachmentFilter] = useState<'all' | 'images' | 'drawings' | 'files'>('all');
+  const [desktopMoveOpen, setDesktopMoveOpen] = useState(false);
   const [trashSelectionMode, setTrashSelectionMode] = useState(false);
   const [selectedTrashIds, setSelectedTrashIds] = useState<string[]>([]);
   const [workspaceOptionsOpen, setWorkspaceOptionsOpen] = useState(false);
@@ -232,17 +236,31 @@ export function NoteList({
   const recordById = useMemo(() => new Map(visibleRecords.map((record) => [record.note.id, record])), [visibleRecords]);
   const mobileAllNoteGroups = useMemo(() => groupMobileAllNotes(sorted), [sorted]);
   const mobileRecentGroups = useMemo(() => groupMobileRecentNotes(sorted, recentOpenedAt), [sorted, recentOpenedAt]);
-  const visibleNoteIdSet = useMemo(() => new Set(mobileAllNotesMode ? sorted.map((note) => note.id) : []), [mobileAllNotesMode, sorted]);
-  const mobileVisibleAttachments = useMemo(() => mobileAllNotesMode ? attachments.filter((attachment) => visibleNoteIdSet.has(attachment.noteId)) : [], [attachments, mobileAllNotesMode, visibleNoteIdSet]);
-  const mobileVisibleInlineImages = useMemo(() => sorted.flatMap((note) => {
-    if (!mobileAllNotesMode || typeof DOMParser === 'undefined') return [];
+  const desktopWorkspaceMode = desktopMode && (view.kind === 'all' || view.kind === 'folder');
+  const selectionWorkspaceMode = mobileAllNotesMode || desktopWorkspaceMode;
+  const visibleNoteIdSet = useMemo(() => new Set(selectionWorkspaceMode ? sorted.map((note) => note.id) : []), [selectionWorkspaceMode, sorted]);
+  const workspaceAttachments = useMemo(() => selectionWorkspaceMode ? attachments.filter((attachment) => visibleNoteIdSet.has(attachment.noteId)) : [], [attachments, selectionWorkspaceMode, visibleNoteIdSet]);
+  const workspaceInlineImages = useMemo(() => sorted.flatMap((note) => {
+    if (!selectionWorkspaceMode || typeof DOMParser === 'undefined') return [];
     const parsed = new DOMParser().parseFromString(note.content || '', 'text/html');
     return [...parsed.querySelectorAll('img[src]')].map((image, index) => ({
       src: image.getAttribute('src') || '',
       name: image.getAttribute('alt') || `${note.title.trim() || 'Ghi chú'} · Hình ảnh ${index + 1}`,
       noteTitle: note.title.trim() || 'Chưa có tiêu đề',
+      noteId: note.id,
+      drawing: image.hasAttribute('data-note-drawing') || image.classList.contains('noted-drawing') || (image.getAttribute('alt') || '').startsWith('tanooki-drawing-'),
     })).filter((image) => image.src);
-  }), [mobileAllNotesMode, sorted]);
+  }), [selectionWorkspaceMode, sorted]);
+  const workspaceAttachmentCount = workspaceAttachments.length + workspaceInlineImages.length;
+  const mobileVisibleAttachments = mobileAllNotesMode ? workspaceAttachments : [];
+  const mobileVisibleInlineImages = mobileAllNotesMode ? workspaceInlineImages : [];
+  const visibleWorkspaceAttachments = useMemo(() => {
+    const entries = [
+      ...workspaceInlineImages.map((image) => ({ kind: image.drawing ? 'drawings' as const : 'images' as const, id: `inline:${image.noteId}:${image.src}`, name: image.name, noteTitle: image.noteTitle, noteId: image.noteId, type: 'image/*', url: image.src, storagePath: '' })),
+      ...workspaceAttachments.map((attachment) => ({ kind: attachment.type.startsWith('image/') ? 'images' as const : 'files' as const, id: attachment.id, name: attachment.name, noteTitle: sorted.find((note) => note.id === attachment.noteId)?.title.trim() || 'Chưa có tiêu đề', noteId: attachment.noteId, type: attachment.type, url: attachment.url, storagePath: attachment.storagePath, attachment })),
+    ];
+    return desktopAttachmentFilter === 'all' ? entries : entries.filter((entry) => entry.kind === desktopAttachmentFilter);
+  }, [desktopAttachmentFilter, sorted, workspaceAttachments, workspaceInlineImages]);
   const currentFolder = view.kind === 'folder' ? folders.find((folder) => folder.id === view.id) ?? null : null;
   const currentFolderAncestorIds = currentFolder ? getFolderAncestorIds(folders, currentFolder.id) : [];
   const currentFolderBreadcrumb = currentFolderAncestorIds.map((id) => folders.find((folder) => folder.id === id)?.name).filter(Boolean).join(' / ');
@@ -260,14 +278,14 @@ export function NoteList({
   }, [mobileAllNotesGallery]);
 
   useEffect(() => {
-    if (!mobileAllNotesMode) {
+    if (!selectionWorkspaceMode) {
       setMobileAllNotesMenuOpen(false);
       setMobileAllNotesSelectionMode(false);
       setSelectedAllNoteIds([]);
       return;
     }
     setSelectedAllNoteIds((current) => current.filter((id) => sorted.some((note) => note.id === id)));
-  }, [mobileAllNotesMode, sorted]);
+  }, [selectionWorkspaceMode, sorted]);
 
   useEffect(() => {
     if (!mobileAllNotesMenuOpen) return;
@@ -285,7 +303,8 @@ export function NoteList({
   const toggleAllNoteSelection = (id: string) => setSelectedAllNoteIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   const leaveAllNotesSelection = () => { setMobileAllNotesSelectionMode(false); setSelectedAllNoteIds([]); };
   const archiveSelectedAllNotes = () => {
-    selectedAllNotes.forEach((note) => onArchive(note.id, true));
+    const archive = mobileAllNotesMode || selectedAllNotes.some((note) => !note.archived);
+    selectedAllNotes.forEach((note) => onArchive(note.id, archive));
     leaveAllNotesSelection();
   };
   const trashSelectedAllNotes = () => {
@@ -296,6 +315,7 @@ export function NoteList({
     const folderId = mobileAllNotesMoveFolder === 'none' ? null : mobileAllNotesMoveFolder;
     selectedAllNotes.forEach((note) => onMove(note.id, folderId));
     setMobileAllNotesMoveOpen(false);
+    setDesktopMoveOpen(false);
     leaveAllNotesSelection();
   };
 
@@ -450,7 +470,30 @@ export function NoteList({
 
   return (
     <div className={`${mobileAllNotesMode || mobileRecentMode || mobileTrashMode || mobileWorkspaceMode ? '' : 'h-full'} w-full max-lg:min-w-0 max-lg:max-w-full ${mobileAllNotesMode || mobileRecentMode ? 'tanooki-mobile-all-notes' : mobileTrashMode ? 'tanooki-mobile-trash' : mobileWorkspaceMode ? 'tanooki-mobile-workspace' : 'max-lg:pb-[calc(72px+env(safe-area-inset-bottom))]'} flex flex-col bg-app ${desktopMode ? 'tanooki-desktop-note-list' : ''}`} style={{ backgroundColor: 'var(--bg)' }}>
-      {desktopMode && <div className="tanooki-desktop-list-heading px-4 pt-4">{currentFolder && currentFolderAncestorIds.length > 0 && <nav className="tanooki-desktop-folder-breadcrumb" aria-label="Đường dẫn thư mục">{currentFolderAncestorIds.map((id) => { const ancestor = folders.find((folder) => folder.id === id); return ancestor ? <span key={id}><button type="button" onClick={() => onOpenFolder?.(id)}>{ancestor.name}</button><span aria-hidden="true"> / </span></span> : null; })}<strong>{currentFolder.name}</strong></nav>}<h2>{contextTitle}</h2><span>{sorted.length} ghi chú</span></div>}
+      {desktopMode && (desktopWorkspaceMode ? <header className="tanooki-desktop-workspace-header">
+        {currentFolder && currentFolderAncestorIds.length > 0 && <nav className="tanooki-desktop-folder-breadcrumb" aria-label="Đường dẫn thư mục">{currentFolderAncestorIds.map((id) => { const ancestor = folders.find((folder) => folder.id === id); return ancestor ? <span key={id}><button type="button" onClick={() => onOpenFolder?.(id)}>{ancestor.name}</button><span aria-hidden="true"> / </span></span> : null; })}<strong>{currentFolder.name}</strong></nav>}
+        <div className="tanooki-desktop-workspace-title"><h2>{contextTitle}</h2><span>{sorted.length} ghi chú</span></div>
+        <label className="tanooki-desktop-workspace-search"><Search size={16} aria-hidden="true" /><input ref={searchInputRef} value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} placeholder="Tìm kiếm ghi chú..." aria-label="Tìm kiếm ghi chú" data-global-search />{searchQuery && <button type="button" onClick={() => onSearchChange('')} aria-label="Xóa nội dung tìm kiếm"><X size={15} aria-hidden="true" /></button>}</label>
+        <div className="tanooki-desktop-workspace-actions">
+          <div className="relative" ref={filterPanelRef}>
+            <button type="button" className={`tanooki-desktop-workspace-action${activeFilterCount ? ' is-active' : ''}`} onClick={() => setFilterOpen((open) => !open)} aria-expanded={filterOpen} aria-label={activeFilterCount ? `Bộ lọc, ${activeFilterCount} bộ lọc đang bật` : 'Bộ lọc'} title="Bộ lọc"><SlidersHorizontal size={15} aria-hidden="true" /><span>Lọc</span>{activeFilterCount > 0 && <small>{activeFilterCount}</small>}</button>
+            {filterOpen && <div className="tanooki-desktop-filter-popover">{filterControls}{hasAdvancedFilters && <button type="button" onClick={clearSearchAndFilters}>Xóa bộ lọc</button>}</div>}
+          </div>
+          <label className="tanooki-desktop-sort-control"><ArrowDownUp size={15} aria-hidden="true" /><SortSelect value={sortMode} onChange={setSortMode} /></label>
+          <div className="tanooki-desktop-view-toggle" role="group" aria-label="Cách hiển thị ghi chú">
+            <button type="button" className={!mobileAllNotesGallery ? 'is-active' : ''} onClick={() => setMobileAllNotesGallery(false)} aria-label="Xem dạng danh sách" aria-pressed={!mobileAllNotesGallery} title="Danh sách"><List size={16} aria-hidden="true" /></button>
+            <button type="button" className={mobileAllNotesGallery ? 'is-active' : ''} onClick={() => setMobileAllNotesGallery(true)} aria-label="Xem dạng bộ sưu tập" aria-pressed={mobileAllNotesGallery} title="Bộ sưu tập"><Grid2X2 size={16} aria-hidden="true" /></button>
+          </div>
+          <button type="button" className={`tanooki-desktop-workspace-action${mobileAllNotesSelectionMode ? ' is-active' : ''}`} onClick={() => mobileAllNotesSelectionMode ? leaveAllNotesSelection() : (setMobileAllNotesSelectionMode(true), setSelectedAllNoteIds([]))} aria-pressed={mobileAllNotesSelectionMode} title={mobileAllNotesSelectionMode ? 'Xong' : 'Chọn ghi chú'}><Check size={15} aria-hidden="true" /><span>{mobileAllNotesSelectionMode ? 'Xong' : 'Chọn'}</span></button>
+          <button type="button" className={`tanooki-desktop-workspace-action${desktopAttachmentsOpen ? ' is-active' : ''}`} onClick={() => setDesktopAttachmentsOpen((open) => !open)} aria-pressed={desktopAttachmentsOpen} title="Tệp đính kèm"><Paperclip size={15} aria-hidden="true" /><span>Tệp</span></button>
+        </div>
+        {mobileAllNotesSelectionMode && <div className="tanooki-desktop-bulk-toolbar" aria-label="Thao tác ghi chú đã chọn">
+          <strong>{selectedAllNotes.length} ghi chú đã chọn</strong>
+          <div className="relative"><button type="button" disabled={!selectedAllNotes.length} onClick={() => setDesktopMoveOpen((open) => !open)}><MoveRight size={14} aria-hidden="true" />Di chuyển</button>{desktopMoveOpen && <div className="tanooki-desktop-move-popover"><label htmlFor="desktop-bulk-move-folder">Thư mục đích</label><select id="desktop-bulk-move-folder" value={mobileAllNotesMoveFolder} onChange={(event) => setMobileAllNotesMoveFolder(event.target.value)}><option value="none">Không có thư mục</option>{getFolderHierarchy(folders).map(({ folder, depth }) => <option key={folder.id} value={folder.id}>{getFolderOptionLabel(folder, depth)}</option>)}</select><button type="button" disabled={!selectedAllNotes.length} onClick={moveSelectedAllNotes}>Di chuyển ghi chú</button></div>}</div>
+          <button type="button" disabled={!selectedAllNotes.length} onClick={archiveSelectedAllNotes} title={selectedAllNotes.some((note) => !note.archived) ? 'Lưu trữ ghi chú đã chọn' : 'Bỏ lưu trữ ghi chú đã chọn'}>{selectedAllNotes.some((note) => !note.archived) ? <Archive size={14} aria-hidden="true" /> : <ArchiveRestore size={14} aria-hidden="true" />}{selectedAllNotes.some((note) => !note.archived) ? 'Lưu trữ' : 'Bỏ lưu trữ'}</button>
+          <button type="button" className="is-danger" disabled={!selectedAllNotes.length} onClick={trashSelectedAllNotes}><Trash2 size={14} aria-hidden="true" />Thùng rác</button>
+        </div>}
+      </header> : <div className="tanooki-desktop-list-heading px-4 pt-4">{currentFolder && currentFolderAncestorIds.length > 0 && <nav className="tanooki-desktop-folder-breadcrumb" aria-label="Đường dẫn thư mục">{currentFolderAncestorIds.map((id) => { const ancestor = folders.find((folder) => folder.id === id); return ancestor ? <span key={id}><button type="button" onClick={() => onOpenFolder?.(id)}>{ancestor.name}</button><span aria-hidden="true"> / </span></span> : null; })}<strong>{currentFolder.name}</strong></nav>}<h2>{contextTitle}</h2><span>{sorted.length} ghi chú</span></div>)}
       {mobileTrashMode && <header className="tanooki-mobile-trash-header">
         <div className="tanooki-mobile-trash-navigation">
           <button type="button" onClick={onBackToHome} aria-label="Quay lại Thư mục"><ChevronLeft size={22} aria-hidden="true" /><span>Thư mục</span></button>
@@ -508,7 +551,7 @@ export function NoteList({
         <label className="tanooki-mobile-workspace-search"><Search size={21} aria-hidden="true" /><input data-global-search value={searchQuery} onChange={(event) => onSearchChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} placeholder="Tìm kiếm ghi chú, thư mục..." aria-label="Tìm kiếm ghi chú, thư mục" />{searchQuery && <button type="button" onClick={() => onSearchChange('')} aria-label="Xóa nội dung tìm kiếm"><X size={17} aria-hidden="true" /></button>}</label>
       </header>}
       {/* Search bar */}
-      {!mobileAllNotesMode && !mobileRecentMode && !mobileTrashMode && !mobileWorkspaceMode && <div className="px-4 pt-2 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
+      {!mobileAllNotesMode && !mobileRecentMode && !mobileTrashMode && !mobileWorkspaceMode && !desktopWorkspaceMode && <div className="px-4 pt-2 pb-2 sticky top-0 z-10 bg-app" style={{ backgroundColor: 'var(--bg)' }}>
       {mobileSearchMode && <div className="mb-3 flex items-center gap-2">
         <button type="button" onClick={onBackToHome} className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-lg px-1 text-sm font-medium" style={{ color: 'var(--accent)' }} aria-label="Quay lại">
           <ChevronLeft size={20} aria-hidden="true" /><span>Quay lại</span>
@@ -592,6 +635,21 @@ export function NoteList({
 
       {/* Notes list */}
       <div ref={notesScrollRef} className={`flex-1 min-h-0 overflow-y-auto ${mobileAllNotesMode || mobileRecentMode ? 'tanooki-mobile-all-notes-scroll' : mobileTrashMode ? 'tanooki-mobile-trash-scroll' : mobileWorkspaceMode ? 'tanooki-mobile-workspace-scroll' : 'px-2'}`} {...(mobileMode ? longPressHandlers : {})}>
+        {desktopAttachmentsOpen && desktopWorkspaceMode ? <DesktopAttachmentBrowser
+          entries={visibleWorkspaceAttachments}
+          count={workspaceAttachmentCount}
+          filter={desktopAttachmentFilter}
+          onFilterChange={setDesktopAttachmentFilter}
+          onOpenNote={(id) => { setDesktopAttachmentsOpen(false); onSelectNote(id); }}
+          onOpenImage={(url) => { window.open(url, '_blank', 'noopener,noreferrer'); }}
+          onOpenAttachment={async (attachment) => {
+            try {
+              const url = attachment.url || await refreshAttachmentUrl(attachment.storagePath);
+              if (url) window.open(url, '_blank', 'noopener,noreferrer');
+              else toast('Không thể mở tệp');
+            } catch { toast('Không thể mở tệp'); }
+          }}
+        /> : <>
         {desktopMode && currentFolder && <section className="tanooki-desktop-folder-children" aria-labelledby="tanooki-desktop-folder-children-heading">
           <div className="tanooki-desktop-folder-section-heading"><h3 id="tanooki-desktop-folder-children-heading">Thư mục</h3><button type="button" onClick={() => setDesktopFolderCreateOpen(true)}><Plus size={15} aria-hidden="true" />Thư mục mới</button></div>
           {desktopFolderCreateOpen && <form className="tanooki-desktop-folder-create" onSubmit={createDesktopChildFolder}><input autoFocus value={desktopFolderName} onChange={(event) => setDesktopFolderName(event.target.value)} placeholder={`Thư mục con trong ${currentFolder.name}`} aria-label={`Tên thư mục con trong ${currentFolder.name}`} /><button type="submit" disabled={!desktopFolderName.trim()}>Tạo</button><button type="button" onClick={() => { setDesktopFolderCreateOpen(false); setDesktopFolderName(''); }}>Hủy</button></form>}
@@ -699,9 +757,18 @@ export function NoteList({
                 })}
               </div>
             </section>)}
-          </div> : <div className="space-y-0.5">
+          </div> : desktopWorkspaceMode && mobileAllNotesGallery ? <div className="tanooki-desktop-gallery">
             {sorted.map((note) => {
-              const selected = note.id === selectedNoteId;
+              const record = recordById.get(note.id);
+              const fn = folderName(note.folderId);
+              const bodyMatched = Boolean(normalizeSearchText(searchQuery) && record?.bodyNormalized.includes(normalizeSearchText(searchQuery)));
+              const preview = record?.bodyText ? bodyMatched ? getSearchSnippet(record.bodyText, searchQuery) : record.bodyText : 'Chưa có nội dung';
+              const selected = selectedAllNoteIds.includes(note.id);
+              return <DesktopNoteGalleryCard key={note.id} note={note} preview={preview} date={noteTime(note.updatedAt)} folderName={fn} selected={selected} selectionMode={mobileAllNotesSelectionMode} onOpen={() => mobileAllNotesSelectionMode ? toggleAllNoteSelection(note.id) : onSelectNote(note.id)} />;
+            })}
+          </div> : <div className={`space-y-0.5${desktopWorkspaceMode ? ` tanooki-desktop-note-rows${mobileAllNotesSelectionMode ? ' is-selecting' : ''}` : ''}`}>
+            {sorted.map((note) => {
+              const selected = mobileAllNotesSelectionMode && desktopWorkspaceMode ? selectedAllNoteIds.includes(note.id) : note.id === selectedNoteId;
               const fn = folderName(note.folderId);
               const record = recordById.get(note.id);
               const bodyMatched = Boolean(normalizeSearchText(searchQuery) && record?.bodyNormalized.includes(normalizeSearchText(searchQuery)));
@@ -715,7 +782,8 @@ export function NoteList({
                   ref={menuFor === note.id ? menuRef : undefined}
                 >
                   <button
-                    onClick={() => onSelectNote(note.id)}
+                    onClick={() => mobileAllNotesSelectionMode && desktopWorkspaceMode ? toggleAllNoteSelection(note.id) : onSelectNote(note.id)}
+                    aria-pressed={mobileAllNotesSelectionMode && desktopWorkspaceMode ? selected : undefined}
                     className={`tanooki-desktop-note-row w-full text-left px-3 py-3 rounded-lg transition-colors ${selected ? 'is-selected' : ''} ${
                       selected ? 'bg-accent-light' : 'hover-bg'
                     } ${menuFor === note.id ? 'bg-accent-light' : ''}`}
@@ -760,7 +828,8 @@ export function NoteList({
                     </div>
                   </button>
 
-                  {!mobileMode && <div
+                  {mobileAllNotesSelectionMode && desktopWorkspaceMode && <span className={`tanooki-desktop-note-check${selected ? ' is-selected' : ''}`} aria-hidden="true">{selected && <Check size={12} />}</span>}
+                  {!mobileMode && !(mobileAllNotesSelectionMode && desktopWorkspaceMode) && <div
                     className="absolute right-2 top-2"
                   >
                     <button
@@ -839,6 +908,7 @@ export function NoteList({
             })}
           </div>
         )}
+        </>}
       </div>
 
       {mobileTrashMode && <footer className="tanooki-mobile-trash-footer"><span>{sorted.length} ghi chú</span></footer>}
@@ -948,6 +1018,70 @@ export function NoteList({
       </MobileBottomSheet>}
     </div>
   );
+}
+
+type DesktopAttachmentEntry = {
+  kind: 'images' | 'drawings' | 'files';
+  id: string;
+  name: string;
+  noteTitle: string;
+  noteId: string;
+  type: string;
+  url: string | null;
+  storagePath: string;
+  attachment?: Attachment;
+};
+
+function DesktopAttachmentBrowser({
+  entries,
+  count,
+  filter,
+  onFilterChange,
+  onOpenNote,
+  onOpenImage,
+  onOpenAttachment,
+}: {
+  entries: DesktopAttachmentEntry[];
+  count: number;
+  filter: 'all' | 'images' | 'drawings' | 'files';
+  onFilterChange: (filter: 'all' | 'images' | 'drawings' | 'files') => void;
+  onOpenNote: (id: string) => void;
+  onOpenImage: (url: string, name: string) => void;
+  onOpenAttachment: (attachment: Attachment) => void;
+}) {
+  const filters = [
+    ['all', 'Tất cả'],
+    ['images', 'Hình ảnh'],
+    ['drawings', 'Bản vẽ'],
+    ['files', 'Tệp'],
+  ] as const;
+  return <section className="tanooki-desktop-attachment-browser" aria-label="Tệp đính kèm">
+    <div className="tanooki-desktop-attachment-heading"><div><h3>Tệp đính kèm</h3><span>{count} mục trong ghi chú đang hiển thị</span></div><div className="tanooki-desktop-attachment-filters" role="group" aria-label="Lọc tệp đính kèm">{filters.map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} className={filter === value ? 'is-active' : ''} onClick={() => onFilterChange(value)}>{label}</button>)}</div></div>
+    {entries.length ? <div className="tanooki-desktop-attachment-grid">{entries.map((entry) => <article key={entry.id} className="tanooki-desktop-attachment-card">
+      <button type="button" className="tanooki-desktop-attachment-preview" onClick={() => entry.attachment ? onOpenAttachment(entry.attachment) : entry.url && onOpenImage(entry.url, entry.name)} aria-label={`Mở ${entry.name}`}>
+        {entry.kind !== 'files' && entry.url ? <img src={entry.url} alt="" loading="lazy" /> : entry.kind === 'files' ? <Paperclip size={25} aria-hidden="true" /> : <ImageIcon size={25} aria-hidden="true" />}
+      </button>
+      <div className="tanooki-desktop-attachment-meta"><strong title={entry.name}>{entry.name}</strong><span>{entry.kind === 'drawings' ? 'Bản vẽ' : entry.kind === 'images' ? 'Hình ảnh' : entry.type || 'Tệp'}</span><button type="button" onClick={() => onOpenNote(entry.noteId)} title="Mở ghi chú chứa tệp này">{entry.noteTitle}</button></div>
+    </article>)}</div> : <p className="tanooki-desktop-attachment-empty">{count ? 'Không có mục nào trong bộ lọc này.' : 'Không có tệp đính kèm trong các ghi chú đang hiển thị.'}</p>}
+  </section>;
+}
+
+function DesktopNoteGalleryCard({ note, preview, date, folderName, selected, selectionMode, onOpen }: {
+  note: Note;
+  preview: string;
+  date: string;
+  folderName: string | null;
+  selected: boolean;
+  selectionMode: boolean;
+  onOpen: () => void;
+}) {
+  return <article className={`tanooki-desktop-gallery-card${selected ? ' is-selected' : ''}`}>
+    {selectionMode && <button type="button" className="tanooki-desktop-gallery-check" onClick={onOpen} aria-label={`${selected ? 'Bỏ chọn' : 'Chọn'} ${note.title.trim() || 'Chưa có tiêu đề'}`} aria-pressed={selected}><span>{selected && <Check size={12} aria-hidden="true" />}</span></button>}
+    <button type="button" className="tanooki-desktop-gallery-main" onClick={onOpen}>
+      <strong>{note.title.trim() || 'Chưa có tiêu đề'}</strong><time>{date}</time><span className="tanooki-desktop-gallery-preview">{preview}</span>
+      <span className="tanooki-desktop-gallery-meta">{note.pinned && <Pin size={12} fill="currentColor" aria-label="Đã ghim" />}{folderName && <><FolderIcon size={12} aria-hidden="true" /><span>{folderName}</span></>}</span>
+    </button>
+  </article>;
 }
 
 function MenuItem({
