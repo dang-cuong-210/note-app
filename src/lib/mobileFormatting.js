@@ -43,3 +43,7 @@ export function setChecklistItemChecked(item, checked) {
   }
   return value;
 }
+
+export function shouldExitChecklistOnEnter({ text, hasMedia = false, selectionCollapsed = true }) {
+  return selectionCollapsed && !hasMedia && !String(text ?? '').replace(/\u00a0/g, ' ').trim();
+}

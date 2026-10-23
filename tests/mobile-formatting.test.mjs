@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { MOBILE_FORMATTING_GROUPS, setChecklistItemChecked } from '../src/lib/mobileFormatting.js';
+import { MOBILE_FORMATTING_GROUPS, setChecklistItemChecked, shouldExitChecklistOnEnter } from '../src/lib/mobileFormatting.js';
 import { getMobileFormattingTransition } from '../src/lib/mobileFormattingState.js';
 
 const editor = await readFile(new URL('../src/components/NoteEditor.tsx', import.meta.url), 'utf8');
@@ -118,7 +118,7 @@ test('all inline marks use explicit selected-range and collapsed-caret toggle pa
   assert.match(handler, /transition === 'toggle-off' && selectedRange && isInlineFormatAppliedToRange/);
   assert.match(handler, /removeInlineFormatFromRange\(editor, selectedRange, actionId, selection\)/);
   assert.match(handler, /applyInlineFormatToRange\(editor, selectedRange, actionId, selection\)/);
-  assert.match(handler, /savedRange\?\.collapsed && \(transition === 'toggle-on' \|\| transition === 'toggle-off'\)/);
+  assert.match(handler, /selection && savedRange\?\.collapsed/);
   assert.match(handler, /toggleCollapsedInlineFormat\(editor, savedRange, actionId, selection\)/);
   for (const [id, selector, tag] of [
     ['bold', 'b,strong', 'strong'], ['italic', 'i,em', 'em'], ['underline', 'u', 'u'], ['strikeThrough', 's,strike,del', 's'],
@@ -135,8 +135,27 @@ test('inline toggle preserves independent marks, moves collapsed caret out of th
   assert.match(inlineFormatting, /unwrapFormatNodes\(fragment, format\.selector\)/);
   assert.match(inlineFormatting, /if \(!text\.parentNode \|\| isInsideFormat\(text, fragment, format\.selector\)\) continue/);
   assert.match(inlineFormatting, /element\.remove\(\)/);
+  assert.match(inlineFormatting, /caretContainer\.dataset\.noteInlineCaretBoundary = 'true'/);
+  assert.match(inlineFormatting, /caret\.selectNodeContents\(caretContainer\)/);
+  assert.match(inlineFormatting, /root\.querySelectorAll\('\[data-note-inline-caret-boundary\]'\)/);
+  assert.match(inlineFormatting, /boundary\.before\(boundary\.firstChild\)/);
   assert.match(editor, /removeEmptyInlineFormats\(snapshot\)/);
   assert.match(editor, /const serialized = removeEmptyInlineFormats\(snapshot\)/);
+});
+
+test('collapsed Bold, Italic, Underline and Strikethrough toggle from the live DOM caret independently', () => {
+  const handler = editor.match(/const handleMobileFormat = \(actionId: string\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  for (const action of ['bold', 'italic', 'underline', 'strikeThrough']) {
+    assert.ok(handler.includes(`'${action}'`));
+    assert.ok(inlineFormatting.includes(`${action}: { command:`));
+  }
+  assert.match(handler, /const activeBefore = readActiveFormatting\(\)/);
+  assert.match(handler, /selection && savedRange\?\.collapsed/);
+  assert.match(handler, /toggleCollapsedInlineFormat\(editor, savedRange, actionId, selection\)/);
+  assert.match(inlineFormatting, /let activeWrapper = element\?\.closest\(format\.selector\)/);
+  assert.match(inlineFormatting, /nestedMarks\.unshift\(nested\)/);
+  assert.match(inlineFormatting, /removeEmptyInlineFormats\(root\)/);
+  assert.match(editor, /commitEditor\(\);\s*refreshActiveFormatting\(\)/);
 });
 
 test('inline active states are read from the current collapsed caret or the full selected text range', () => {
@@ -179,10 +198,40 @@ test('checklist state is accessible, toggles on its list item, and survives edit
   assert.match(editor, /setChecklistItemChecked\(item, item\.dataset\.checked !== 'true'\)/);
   assert.match(editor, /handleChecklistEnter/);
   assert.match(editor, /item\.after\(nextItem\)/);
-  assert.match(editor, /if \(empty\) \{[\s\S]*?list\.replaceWith\(paragraph\)/);
+  assert.match(editor, /if \(shouldExit\) \{[\s\S]*?list\.replaceWith\(paragraph\)/);
   assert.match(editor, /snapshot\.innerHTML = editorRef\.current\.innerHTML/);
   assert.match(editor, /withLayout\(writeManagedTags\(serialized/);
   assert.match(editor, /editorRef\.current\.innerHTML = stripLayout\(note\.content \?\? ''\)/);
+});
+
+test('checklist Enter exits only on an actually empty collapsed row', () => {
+  assert.equal(shouldExitChecklistOnEnter({ text: '', selectionCollapsed: true }), true);
+  assert.equal(shouldExitChecklistOnEnter({ text: '   ', selectionCollapsed: true }), true);
+  assert.equal(shouldExitChecklistOnEnter({ text: '\u00a0', selectionCollapsed: true }), true);
+  assert.equal(shouldExitChecklistOnEnter({ text: 'Item 1', selectionCollapsed: true }), false);
+  assert.equal(shouldExitChecklistOnEnter({ text: '', selectionCollapsed: false }), false, 'selecting all text does not count as an empty row');
+  assert.equal(shouldExitChecklistOnEnter({ text: '', hasMedia: true, selectionCollapsed: true }), false);
+  const enter = editor.match(/const handleChecklistEnter: React\.KeyboardEventHandler<HTMLDivElement> = \(event\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  assert.match(enter, /liveRange && editor\?\.contains\(liveRange\.startContainer\)/);
+  assert.match(enter, /prepareChecklistItem\(item\)/);
+  assert.match(enter, /const shouldExit = shouldExitChecklistOnEnter/);
+  assert.ok(enter.indexOf('shouldExitChecklistOnEnter') < enter.indexOf('range.deleteContents()'), 'classify the original row before deleting a selection');
+  assert.match(enter, /nextItem\.append\(makeChecklistToggle\(false\), nextText\)/);
+  assert.match(enter, /item\.after\(nextItem\)/);
+  assert.match(enter, /caret\.setStart\(nextText, 0\)/);
+  assert.match(enter, /lastCaretRange\.current = caret\.cloneRange\(\)/);
+});
+
+test('checklist normalization restores the single checkbox-plus-text row structure for loaded and edited notes', () => {
+  const prepare = editor.match(/const prepareChecklistItem = \(item: HTMLLIElement\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  assert.match(prepare, /const originalChildren = Array\.from\(item\.childNodes\)/);
+  assert.match(prepare, /text\.replaceChildren\(\.\.\.content\)/);
+  assert.match(prepare, /item\.replaceChildren\(toggle, text\)/);
+  assert.match(editor, /for \(const list of Array\.from\(editor\.querySelectorAll\('ul\[data-checklist\]'\)\)\)/);
+  assert.match(editor, /prepareChecklistItem\(child\)/);
+  assert.match(editor, /normalizeChecklistMarkup\(editorRef\.current\)/);
+  assert.match(editor, /snapshot\.innerHTML = editorRef\.current\.innerHTML/);
+  assert.match(editor, /commitEditor\(\);\s*rememberCaret\(\);\s*refreshActiveFormatting\(\)/);
 });
 
 test('checklist and formatted content remain in the existing editable HTML and mobile actions reuse the editor toolbar', () => {

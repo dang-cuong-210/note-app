@@ -156,13 +156,17 @@ export function toggleCollapsedInlineFormat(editor, range, formatId, selection) 
         parent.insertBefore(bridge, nextSibling?.parentNode === parent ? nextSibling : null);
         if (!nextSibling && activeWrapper.parentNode === parent) activeWrapper.after(bridge);
       }
+    } else {
+      // A caret immediately beside an inline mark can inherit that mark in some
+      // contenteditable implementations. Keep it in a neutral, transient span.
+      caretContainer = document.createElement('span');
+      caretContainer.dataset.noteInlineCaretBoundary = 'true';
+      if (nextSibling?.parentNode === parent) parent.insertBefore(caretContainer, nextSibling);
+      else if (activeWrapper.parentNode === parent) activeWrapper.after(caretContainer);
+      else parent.append(caretContainer);
     }
     const caret = document.createRange();
-    if (caretContainer) {
-      caret.selectNodeContents(caretContainer);
-    } else if (nextSibling?.parentNode === parent) caret.setStartBefore(nextSibling);
-    else if (activeWrapper.parentNode === parent) caret.setStartAfter(activeWrapper);
-    else caret.setStart(parent, parent.childNodes.length);
+    caret.selectNodeContents(caretContainer);
     caret.collapse(true);
     selection.removeAllRanges();
     selection.addRange(caret);
@@ -181,6 +185,10 @@ export function toggleCollapsedInlineFormat(editor, range, formatId, selection) 
 
 /** Drop transient empty marks from serialized HTML without touching the live caret. */
 export function removeEmptyInlineFormats(root) {
+  for (const boundary of root.querySelectorAll('[data-note-inline-caret-boundary]')) {
+    while (boundary.firstChild) boundary.before(boundary.firstChild);
+    boundary.remove();
+  }
   for (const element of root.querySelectorAll('b,strong,i,em,u,s,strike,del')) {
     if (!element.textContent && !element.querySelector('br,img,[data-noted-attachment-id]')) element.remove();
   }
