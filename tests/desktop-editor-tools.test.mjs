@@ -43,6 +43,12 @@ test('desktop editor toolbar exposes shared formatting commands with active sele
   assert.match(editor, /if \(desktopPresentation\) \{[\s\S]*?refreshActiveFormatting\(\)/);
   assert.match(editor, /onPointerDown=\{\(event\) => \{ event\.preventDefault\(\); rememberCaret\(\); \}\} onClick=\{\(\) => handleMobileFormat\(action\.id\)\}/);
   for (const label of ['bold', 'italic', 'underline', 'strikeThrough', 'heading1', 'heading2', 'heading3', 'insertUnorderedList', 'insertOrderedList', 'checklist', 'quote', 'code']) assert.ok(editor.includes(label));
+  for (const icon of ['<List size={17}', '<ListOrdered size={17}', '<ListChecks size={17}', '<Quote size={17}', '<Code2 size={17}']) assert.ok(toolbar.includes(icon));
+  assert.match(toolbar, /aria-label="Đính kèm tệp" title="Đính kèm tệp"[\s\S]*?Paperclip/);
+  assert.match(toolbar, /aria-label="Thêm hình ảnh" title="Thêm hình ảnh"[\s\S]*?ImageIcon/);
+  assert.match(toolbar, /aria-label="Vẽ \/ Markup" title="Vẽ \/ Markup"[\s\S]*?PenTool/);
+  assert.doesNotMatch(toolbar, /<span>Đính kèm<\/span>|<span>Hình ảnh<\/span>|<span>Vẽ<\/span>/);
+  assert.match(toolbar, /aria-label="Thêm công cụ định dạng" title="Thêm công cụ định dạng"/);
 });
 
 test('desktop media controls use existing attachment, image, and drawing pipelines and replace the old strip', () => {
@@ -59,11 +65,14 @@ test('desktop media controls use existing attachment, image, and drawing pipelin
 });
 
 test('desktop writing column and toolbar stay within the editor pane and remain outside body scrolling', () => {
-  assert.match(css, /\.tanooki-editor-format-toolbar-inner \{[^}]*max-width: 920px[^}]*flex-wrap: wrap/s);
+  assert.match(css, /\.tanooki-editor-format-toolbar-inner \{[^}]*max-width: 920px[^}]*flex-wrap: nowrap[^}]*padding: 3px 16px/s);
+  assert.match(css, /\.tanooki-editor-format-button \{[^}]*width: 32px[^}]*height: 34px/s);
+  assert.match(css, /@container \(max-width: 620px\)[\s\S]*?\.tanooki-editor-media-group \{ display: none; \}[\s\S]*?\.tanooki-editor-format-overflow \{ display: block; \}/);
+  assert.match(css, /\.tanooki-editor-format-overflow-menu \{ position: absolute;/);
   assert.match(css, /\.tanooki-editor-canvas \{[^}]*max-width: 920px/s);
   assert.match(editor, /tanooki-editor-format-toolbar[\s\S]*?ref=\{editorScrollRef\} className=\{`flex-1 overflow-y-auto/);
   assert.match(css, /\.tanooki-editor-format-button:focus-visible/);
-  assert.match(css, /@media \(max-width: 1279px\) and \(min-width: 1024px\)[\s\S]*?\.tanooki-editor-format-toolbar-inner \{ padding-inline: 22px; \}/);
+  assert.match(css, /@media \(max-width: 1279px\) and \(min-width: 1024px\)[\s\S]*?\.tanooki-editor-format-toolbar-inner \{ padding-inline: 10px; \}/);
   assert.match(css, /\.tanooki-editor-canvas \{[^}]*padding: 26px 32px 56px/s);
 });
 

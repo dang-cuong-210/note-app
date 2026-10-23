@@ -1229,19 +1229,31 @@ input[data-global-search]:focus-visible {
   .tanooki-tag-entry > button:disabled { cursor: not-allowed; opacity: .4; }
   .tanooki-tag-suggestions > button { min-height: 28px; border-radius: var(--radius-pill); background: var(--bg-secondary); padding: 4px 9px; color: var(--text-secondary); font-size: 11px; }
   .tanooki-tag-suggestions > button:hover { color: var(--accent); }
-  .tanooki-editor-format-toolbar { position: relative; z-index: 5; flex: none; border-bottom: 1px solid var(--border); background: var(--bg); }
-  .tanooki-editor-format-toolbar-inner { display: flex; width: 100%; max-width: 920px; min-width: 0; flex-wrap: wrap; align-items: center; gap: 5px 8px; margin-inline: auto; padding: 8px 32px; }
-  .tanooki-editor-format-group { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 3px; border-right: 1px solid var(--border); padding-right: 8px; }
-  .tanooki-editor-format-group:last-of-type { border-right: 0; padding-right: 0; }
+  .tanooki-editor-format-toolbar { position: relative; z-index: 5; flex: none; container-type: inline-size; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .tanooki-editor-format-toolbar-inner { display: flex; width: 100%; max-width: 920px; min-width: 0; flex-wrap: nowrap; align-items: center; gap: 4px; margin-inline: auto; padding: 3px 16px; }
+  .tanooki-editor-format-group { display: flex; min-width: 0; flex: none; flex-wrap: nowrap; align-items: center; gap: 2px; border-right: 1px solid var(--border); padding-right: 5px; }
+  .tanooki-editor-format-toolbar-inner > .tanooki-editor-format-group:nth-child(3) { border-right: 0; padding-right: 0; }
   .tanooki-editor-media-group { margin-left: auto; }
-  .tanooki-editor-format-button { display: inline-flex; min-width: 34px; min-height: 32px; flex: none; align-items: center; justify-content: center; gap: 5px; border: 1px solid transparent; border-radius: 8px; background: transparent; padding: 0 7px; color: var(--text-secondary); font-size: 12px; font-weight: 550; line-height: 1; white-space: nowrap; cursor: pointer; transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease; }
+  .tanooki-editor-format-button { display: inline-flex; width: 32px; min-width: 32px; height: 34px; min-height: 34px; flex: none; align-items: center; justify-content: center; gap: 4px; border: 1px solid transparent; border-radius: 8px; background: transparent; padding: 0 4px; color: var(--text-secondary); font-size: 12px; font-weight: 550; line-height: 1; white-space: nowrap; cursor: pointer; transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease; }
   .tanooki-editor-format-button:hover, .tanooki-editor-format-button[aria-pressed="true"] { border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); background: color-mix(in srgb, var(--accent-light) 65%, var(--bg)); color: var(--accent); }
   .tanooki-editor-format-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tanooki-editor-format-toolbar button:focus-visible, .tanooki-editor-format-overflow summary:focus-visible { position: relative; z-index: 2; }
   .tanooki-editor-format-button:disabled { cursor: not-allowed; opacity: .5; }
   .tanooki-editor-format-button.format-bold { font-weight: 800; }
   .tanooki-editor-format-button.format-italic { font-style: italic; }
   .tanooki-editor-format-button.format-underline { text-decoration: underline; text-underline-offset: 3px; }
   .tanooki-editor-format-button.format-strikeThrough { text-decoration: line-through; }
+  .tanooki-editor-format-overflow { position: relative; display: none; flex: none; }
+  .tanooki-editor-format-overflow summary { list-style: none; cursor: pointer; }
+  .tanooki-editor-format-overflow summary::-webkit-details-marker { display: none; }
+  .tanooki-editor-format-overflow-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; display: flex; gap: 3px; border: 1px solid var(--border); border-radius: 11px; background: var(--bg); padding: 5px; box-shadow: 0 10px 28px rgb(37 33 31 / 16%); }
+  @container (max-width: 620px) {
+    .tanooki-editor-format-toolbar-inner { padding-inline: 10px; gap: 3px; }
+    .tanooki-editor-format-group { gap: 1px; padding-right: 3px; }
+    .tanooki-editor-format-group:has(.format-overflow-action) { display: none; }
+    .tanooki-editor-media-group { display: none; }
+    .tanooki-editor-format-overflow { display: block; }
+  }
   .tanooki-editor-upload-status { display: inline-flex; align-items: center; gap: 5px; color: var(--text-tertiary); font-size: 11px; white-space: nowrap; }
   .tanooki-editor-scroll { background: var(--bg-secondary); }
   .tanooki-editor-canvas { width: 100%; max-width: 920px; min-height: 100%; margin-inline: auto; border-inline: 0; background: var(--bg); padding: 26px 32px 56px; }
@@ -1282,7 +1294,7 @@ input[data-global-search]:focus-visible {
     .tanooki-editor-topbar { gap: 6px; padding-inline: 10px; }
     .tanooki-editor-topbar .tanooki-editor-action { width: 34px; height: 34px; }
     .tanooki-editor-sync-status { padding-inline: 6px; font-size: 10px; }
-    .tanooki-editor-format-toolbar-inner { padding-inline: 22px; }
+    .tanooki-editor-format-toolbar-inner { padding-inline: 10px; }
   }
   @media (min-width: 1400px) {
     .tanooki-desktop-tools-panel { display: flex; }

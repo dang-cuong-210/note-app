@@ -35,6 +35,10 @@ import {
   PenTool,
   SquarePen,
   Search,
+  List,
+  ListOrdered,
+  Quote,
+  Code2,
 } from 'lucide-react';
 import type { Note, Folder, Attachment } from '@/types';
 import { useToast } from '@/contexts/ToastContext';
@@ -1912,13 +1916,23 @@ export function NoteEditor({
       {desktopPresentation && <nav className="tanooki-editor-format-toolbar" aria-label="Định dạng và chèn nội dung">
         <div className="tanooki-editor-format-toolbar-inner">
           {MOBILE_FORMATTING_GROUPS.map((group) => <div key={group.label} className="tanooki-editor-format-group" role="group" aria-label={group.label}>
-            {group.actions.map((action) => <button key={action.id} type="button" className={`tanooki-editor-format-button format-${action.id}`} aria-label={action.name} title={action.name} aria-pressed={activeFormatting.includes(action.id)} onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => handleMobileFormat(action.id)}><span aria-hidden="true">{action.label}</span></button>)}
+            {group.actions.map((action) => <button key={action.id} type="button" className={`tanooki-editor-format-button format-${action.id}${action.id === 'quote' || action.id === 'code' ? ' format-overflow-action' : ''}`} aria-label={action.name} title={action.name} aria-pressed={activeFormatting.includes(action.id)} onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => handleMobileFormat(action.id)}><span aria-hidden="true">{action.id === 'insertUnorderedList' ? <List size={17} /> : action.id === 'insertOrderedList' ? <ListOrdered size={17} /> : action.id === 'checklist' ? <ListChecks size={17} /> : action.id === 'quote' ? <Quote size={17} /> : action.id === 'code' ? <Code2 size={17} /> : action.label}</span></button>)}
           </div>)}
           <div className="tanooki-editor-format-group tanooki-editor-media-group" role="group" aria-label="Tệp và hình ảnh">
-            <button type="button" className="tanooki-editor-format-button" aria-label="Đính kèm tệp" title="Đính kèm tệp" disabled={uploading} onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => fileInputRef.current?.click()}>{uploading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Paperclip size={16} aria-hidden="true" />}<span>Đính kèm</span></button>
-            <button type="button" className="tanooki-editor-format-button" aria-label="Thêm hình ảnh" title="Thêm hình ảnh" disabled={uploading} onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => imageInputRef.current?.click()}><ImageIcon size={16} aria-hidden="true" /><span>Hình ảnh</span></button>
-            <button type="button" className="tanooki-editor-format-button" aria-label="Vẽ và đánh dấu" title="Vẽ và đánh dấu" onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => { rememberCaret(); setDrawingOpen(true); }}><PenTool size={16} aria-hidden="true" /><span>Vẽ</span></button>
+            <button type="button" className="tanooki-editor-format-button" aria-label="Đính kèm tệp" title="Đính kèm tệp" disabled={uploading} onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => fileInputRef.current?.click()}>{uploading ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : <Paperclip size={17} aria-hidden="true" />}</button>
+            <button type="button" className="tanooki-editor-format-button" aria-label="Thêm hình ảnh" title="Thêm hình ảnh" disabled={uploading} onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => imageInputRef.current?.click()}><ImageIcon size={17} aria-hidden="true" /></button>
+            <button type="button" className="tanooki-editor-format-button" aria-label="Vẽ / Markup" title="Vẽ / Markup" onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => { rememberCaret(); setDrawingOpen(true); }}><PenTool size={17} aria-hidden="true" /></button>
           </div>
+          <details className="tanooki-editor-format-overflow">
+            <summary className="tanooki-editor-format-button" aria-label="Thêm công cụ định dạng" title="Thêm công cụ định dạng"><MoreHorizontal size={18} aria-hidden="true" /></summary>
+            <div className="tanooki-editor-format-overflow-menu" role="group" aria-label="Công cụ định dạng bổ sung">
+              <button type="button" className="tanooki-editor-format-button" aria-label="Trích dẫn" title="Trích dẫn" aria-pressed={activeFormatting.includes('quote')} onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={(event) => { handleMobileFormat('quote'); event.currentTarget.closest('details')?.removeAttribute('open'); }}><Quote size={17} aria-hidden="true" /></button>
+              <button type="button" className="tanooki-editor-format-button" aria-label="Khối mã" title="Khối mã" aria-pressed={activeFormatting.includes('code')} onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={(event) => { handleMobileFormat('code'); event.currentTarget.closest('details')?.removeAttribute('open'); }}><Code2 size={17} aria-hidden="true" /></button>
+              <button type="button" className="tanooki-editor-format-button" aria-label="Đính kèm tệp" title="Đính kèm tệp" disabled={uploading} onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={(event) => { fileInputRef.current?.click(); event.currentTarget.closest('details')?.removeAttribute('open'); }}>{uploading ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : <Paperclip size={17} aria-hidden="true" />}</button>
+              <button type="button" className="tanooki-editor-format-button" aria-label="Thêm hình ảnh" title="Thêm hình ảnh" disabled={uploading} onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={(event) => { imageInputRef.current?.click(); event.currentTarget.closest('details')?.removeAttribute('open'); }}><ImageIcon size={17} aria-hidden="true" /></button>
+              <button type="button" className="tanooki-editor-format-button" aria-label="Vẽ / Markup" title="Vẽ / Markup" onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={(event) => { rememberCaret(); setDrawingOpen(true); event.currentTarget.closest('details')?.removeAttribute('open'); }}><PenTool size={17} aria-hidden="true" /></button>
+            </div>
+          </details>
           {uploading && <span className="tanooki-editor-upload-status" role="status" aria-live="polite"><Loader2 size={14} className="animate-spin" aria-hidden="true" />Đang tải {uploadsInProgress} tệp lên…</span>}
         </div>
       </nav>}
