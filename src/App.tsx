@@ -746,7 +746,7 @@ function AppContent() {
             <div
               className={`${
                 selectedNoteId ? 'hidden lg:flex' : 'flex'
-              } w-full max-lg:min-w-0 max-lg:max-w-full ${isDesktop && (view.kind === 'all' || view.kind === 'folder') ? 'lg:w-[340px] xl:w-[400px] 2xl:w-[440px]' : 'lg:w-[300px] xl:w-[320px] 2xl:w-[340px]'} flex-shrink-0 border-r flex-col relative`}
+              } w-full max-lg:min-w-0 max-lg:max-w-full ${isDesktop && (view.kind === 'all' || view.kind === 'folder') ? 'lg:w-[360px] xl:w-[390px] 2xl:w-[410px]' : 'lg:w-[300px] xl:w-[320px] 2xl:w-[340px]'} flex-shrink-0 border-r flex-col relative`}
               style={{ borderColor: 'var(--border)' }}
             >
               <NoteList

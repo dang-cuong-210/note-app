@@ -1077,24 +1077,25 @@ input[data-global-search]:focus-visible {
 
 @layer components {
   .tanooki-desktop-note-list { background: var(--bg); color: var(--text); }
-  .tanooki-desktop-workspace-header { position: relative; z-index: 12; flex: none; border-bottom: 1px solid var(--border); background: var(--bg); padding: 13px 13px 11px; }
-  .tanooki-desktop-workspace-title { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+  .tanooki-desktop-workspace-header { position: relative; z-index: 12; flex: none; border-bottom: 1px solid var(--border); background: var(--bg); padding: 15px 15px 13px; }
+  .tanooki-desktop-workspace-title { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
   .tanooki-desktop-workspace-title h2 { min-width: 0; overflow: hidden; color: var(--text); font-size: 18px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
   .tanooki-desktop-workspace-title > span { flex: none; color: var(--text-tertiary); font-size: 11px; }
-  .tanooki-desktop-workspace-search { display: flex; min-height: 35px; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-secondary); padding: 0 9px; color: var(--text-tertiary); }
+  .tanooki-desktop-workspace-search { display: flex; min-height: 37px; align-items: center; gap: 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-secondary); padding: 0 10px; color: var(--text-tertiary); }
   .tanooki-desktop-workspace-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 12px; }
   .tanooki-desktop-workspace-search input::placeholder { color: var(--text-tertiary); }
   .tanooki-desktop-workspace-search button { display: grid; width: 22px; height: 22px; flex: none; place-items: center; border-radius: 6px; }
   .tanooki-desktop-workspace-search button:hover { background: var(--border); color: var(--text); }
-  .tanooki-desktop-workspace-actions { display: flex; min-width: 0; align-items: center; gap: 5px; margin-top: 8px; }
-  .tanooki-desktop-workspace-action { display: inline-flex; min-width: 0; min-height: 30px; align-items: center; justify-content: center; gap: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 0 7px; color: var(--text-secondary); font-size: 10px; cursor: pointer; }
-  .tanooki-desktop-workspace-action:hover, .tanooki-desktop-workspace-action.is-active { border-color: color-mix(in srgb, var(--accent) 38%, var(--border)); background: var(--accent-light); color: var(--accent); }
+  .tanooki-desktop-workspace-actions { display: flex; min-width: 0; align-items: center; gap: 6px; margin-top: 10px; }
+  .tanooki-desktop-workspace-action { display: inline-flex; min-width: 32px; min-height: 34px; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 0 8px; color: var(--text-secondary); font-size: 11px; cursor: pointer; transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease; }
+  .tanooki-desktop-workspace-action:hover, .tanooki-desktop-workspace-action.is-active { border-color: color-mix(in srgb, var(--accent) 38%, var(--border)); background: color-mix(in srgb, var(--accent-light) 72%, var(--bg)); color: var(--accent); }
+  .tanooki-desktop-workspace-action:focus-visible, .tanooki-desktop-view-toggle button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .tanooki-desktop-workspace-action:disabled { cursor: not-allowed; opacity: .45; }
   .tanooki-desktop-workspace-action small { display: grid; min-width: 15px; height: 15px; place-items: center; border-radius: 99px; background: var(--accent); padding: 0 3px; color: white; font-size: 9px; }
-  .tanooki-desktop-sort-control { display: flex; min-width: 0; align-items: center; gap: 4px; color: var(--text-tertiary); }
-  .tanooki-desktop-sort-control select { width: 88px; min-height: 30px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 0 4px; color: var(--text-secondary); font-size: 10px; }
+  .tanooki-desktop-sort-control { display: flex; min-width: 0; align-items: center; gap: 5px; color: var(--text-tertiary); }
+  .tanooki-desktop-sort-control select { width: 92px; min-height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 0 5px; color: var(--text-secondary); font-size: 10px; }
   .tanooki-desktop-view-toggle { display: flex; flex: none; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 2px; }
-  .tanooki-desktop-view-toggle button { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 6px; color: var(--text-tertiary); }
+  .tanooki-desktop-view-toggle button { display: grid; width: 30px; height: 28px; place-items: center; border-radius: 6px; color: var(--text-tertiary); transition: background-color 120ms ease, color 120ms ease; }
   .tanooki-desktop-view-toggle button:hover, .tanooki-desktop-view-toggle button.is-active { background: var(--accent-light); color: var(--accent); }
   .tanooki-desktop-filter-popover { position: absolute; top: calc(100% + 7px); left: 0; z-index: 40; width: min(310px, calc(100vw - 24px)); border: 1px solid var(--border); border-radius: 12px; background: var(--bg); padding: 11px; box-shadow: 0 12px 32px rgb(30 25 20 / 18%); }
   .tanooki-desktop-filter-popover > button { margin-top: 9px; color: var(--accent); font-size: 11px; font-weight: 600; }
@@ -1108,7 +1109,14 @@ input[data-global-search]:focus-visible {
   .tanooki-desktop-move-popover label { color: var(--text-secondary); font-size: 10px; }
   .tanooki-desktop-move-popover select { min-height: 30px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-secondary); padding: 0 6px; color: var(--text); font-size: 11px; }
   .tanooki-desktop-move-popover > button { min-height: 30px; border-radius: 7px; background: var(--accent); color: #fff; font-size: 11px; }
-  .tanooki-desktop-note-rows { padding: 7px 8px; }
+  .tanooki-desktop-note-rows { padding: 9px 10px; }
+  .tanooki-desktop-note-rows > div { margin-bottom: 3px; }
+  .tanooki-desktop-note-rows .tanooki-desktop-note-row { padding: 11px 13px; }
+  .tanooki-desktop-note-row h3 { line-height: 1.35; }
+  .tanooki-desktop-note-row > div:first-child { align-items: baseline; gap: 8px; margin-bottom: 3px; }
+  .tanooki-desktop-note-row .note-preview { display: -webkit-box; overflow: hidden; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .tanooki-desktop-note-row > div:last-child { min-width: 0; }
+  .tanooki-desktop-note-row > div:last-child > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tanooki-desktop-note-rows.is-selecting .tanooki-desktop-note-row { padding-left: 37px; }
   .tanooki-desktop-note-check { position: absolute; z-index: 1; top: 50%; left: 13px; display: grid; width: 17px; height: 17px; transform: translateY(-50%); place-items: center; border: 1.5px solid var(--text-tertiary); border-radius: 50%; color: #fff; pointer-events: none; }
   .tanooki-desktop-note-check.is-selected { border-color: var(--accent); background: var(--accent); }
@@ -1176,10 +1184,11 @@ input[data-global-search]:focus-visible {
   .tanooki-desktop-note-list .tanooki-desktop-note-row.is-selected { box-shadow: inset 3px 0 0 var(--tanooki-red); }
   .tanooki-desktop-note-list .tanooki-desktop-note-row:hover { background: var(--bg-secondary); }
   @media (min-width: 1024px) and (max-width: 1279px) {
-    .tanooki-desktop-workspace-actions { gap: 3px; }
-    .tanooki-desktop-workspace-action { min-width: 27px; padding-inline: 5px; }
+    .tanooki-desktop-workspace-header { padding-inline: 12px; }
+    .tanooki-desktop-workspace-actions { gap: 4px; }
+    .tanooki-desktop-workspace-action { min-width: 32px; padding-inline: 6px; }
     .tanooki-desktop-workspace-action > span { display: none; }
-    .tanooki-desktop-sort-control select { width: 74px; }
+    .tanooki-desktop-sort-control select { width: 72px; padding-inline: 3px; }
   }
   .tanooki-desktop-editor { background: var(--bg-secondary); color: var(--text); }
   .tanooki-editor-topbar { min-height: 54px; background: var(--bg); padding-inline: 18px; }

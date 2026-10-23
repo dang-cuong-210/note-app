@@ -109,3 +109,17 @@ test('desktop workspace presentation is isolated from mobile All Notes and neste
   assert.match(css, /\.tanooki-desktop-gallery \{ display: grid; grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 170px\), 1fr\)\)/);
   assert.match(css, /\.tanooki-desktop-workspace-header/);
 });
+
+test('desktop workspace layout gives the note pane room while keeping controls and selection readable', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const list = await readFile(new URL('../src/components/NoteList.tsx', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+
+  assert.match(app, /lg:w-\[360px\] xl:w-\[390px\] 2xl:w-\[410px\]/);
+  assert.match(list, /tanooki-desktop-sort-control" title="Sắp xếp ghi chú"/);
+  assert.match(list, /color-mix\(in srgb, var\(--tanooki-red\) 10%, var\(--bg-secondary\)\)/);
+  assert.match(css, /\.tanooki-desktop-workspace-action \{[^}]*min-height: 34px/s);
+  assert.match(css, /\.tanooki-desktop-workspace-action:focus-visible/);
+  assert.match(css, /\.tanooki-desktop-note-row \.note-preview \{[^}]*-webkit-line-clamp: 2/s);
+});

@@ -479,7 +479,7 @@ export function NoteList({
             <button type="button" className={`tanooki-desktop-workspace-action${activeFilterCount ? ' is-active' : ''}`} onClick={() => setFilterOpen((open) => !open)} aria-expanded={filterOpen} aria-label={activeFilterCount ? `Bộ lọc, ${activeFilterCount} bộ lọc đang bật` : 'Bộ lọc'} title="Bộ lọc"><SlidersHorizontal size={15} aria-hidden="true" /><span>Lọc</span>{activeFilterCount > 0 && <small>{activeFilterCount}</small>}</button>
             {filterOpen && <div className="tanooki-desktop-filter-popover">{filterControls}{hasAdvancedFilters && <button type="button" onClick={clearSearchAndFilters}>Xóa bộ lọc</button>}</div>}
           </div>
-          <label className="tanooki-desktop-sort-control"><ArrowDownUp size={15} aria-hidden="true" /><SortSelect value={sortMode} onChange={setSortMode} /></label>
+          <label className="tanooki-desktop-sort-control" title="Sắp xếp ghi chú"><ArrowDownUp size={15} aria-hidden="true" /><SortSelect value={sortMode} onChange={setSortMode} /></label>
           <div className="tanooki-desktop-view-toggle" role="group" aria-label="Cách hiển thị ghi chú">
             <button type="button" className={!mobileAllNotesGallery ? 'is-active' : ''} onClick={() => setMobileAllNotesGallery(false)} aria-label="Xem dạng danh sách" aria-pressed={!mobileAllNotesGallery} title="Danh sách"><List size={16} aria-hidden="true" /></button>
             <button type="button" className={mobileAllNotesGallery ? 'is-active' : ''} onClick={() => setMobileAllNotesGallery(true)} aria-label="Xem dạng bộ sưu tập" aria-pressed={mobileAllNotesGallery} title="Bộ sưu tập"><Grid2X2 size={16} aria-hidden="true" /></button>
@@ -792,7 +792,7 @@ export function NoteList({
                     data-mobile-context-title={mobileMode ? (note.title.trim() || 'Chưa có tiêu đề') : undefined}
                     data-mobile-context-detail={mobileMode ? preview : undefined}
                     data-mobile-context-preview={mobileMode ? record?.bodyText.slice(0, 1600) || '' : undefined}
-                    style={selected || menuFor === note.id ? { backgroundColor: desktopMode && selected ? 'var(--selection)' : 'var(--accent-light)' } : undefined}
+                    style={selected || menuFor === note.id ? { backgroundColor: desktopMode && selected ? 'color-mix(in srgb, var(--tanooki-red) 10%, var(--bg-secondary))' : 'var(--accent-light)' } : undefined}
                   >
                     <div className="flex items-start justify-between gap-2 mb-0.5">
                       <h3
