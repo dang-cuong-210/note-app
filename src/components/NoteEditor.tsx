@@ -46,6 +46,7 @@ import { MobileAttachmentBrowserSheet, MobileEditorMorePopover, MobileEditorTool
 import { MobileFormattingSheet } from '@/components/MobileFormattingSheet';
 import { NoteTagManager } from '@/components/NoteTagManager';
 import { MOBILE_FORMATTING_GROUPS, setChecklistItemChecked } from '@/lib/mobileFormatting.js';
+import { getMobileFormattingTransition } from '@/lib/mobileFormattingState.js';
 import { getBlankLinesToAppend, isMeaningfulNoteContent } from '@/lib/editorBehavior.js';
 import { MobileDrawingMarkup } from '@/components/MobileDrawingMarkup';
 import { getFolderHierarchy, getFolderOptionLabel } from '@/lib/folderHierarchy.js';
@@ -548,10 +549,10 @@ export function NoteEditor({
     return node instanceof Element ? node : node.parentElement;
   };
 
-  const refreshActiveFormatting = () => {
+  const readActiveFormatting = () => {
     const editor = editorRef.current;
     const element = getSelectionElement();
-    if (!element) { setActiveFormatting([]); return; }
+    if (!element) return [] as string[];
     const active = new Set<string>();
     const stateCommands: Record<string, string> = {
       bold: 'bold', italic: 'italic', underline: 'underline', strikeThrough: 'strikeThrough',
@@ -570,10 +571,12 @@ export function NoteEditor({
         try { if (document.queryCommandState(command)) active.add(id); } catch { /* unsupported command state */ }
       }
     }
-    if (element.closest('b,strong')) active.add('bold');
-    if (element.closest('i,em')) active.add('italic');
-    if (element.closest('u')) active.add('underline');
-    if (element.closest('s,strike,del')) active.add('strikeThrough');
+    if (!range || range.collapsed) {
+      if (element.closest('b,strong')) active.add('bold');
+      if (element.closest('i,em')) active.add('italic');
+      if (element.closest('u')) active.add('underline');
+      if (element.closest('s,strike,del')) active.add('strikeThrough');
+    }
     if (element.closest('ol')) active.add('insertOrderedList');
     if (element.closest('ul') && !element.closest('ul[data-checklist]')) active.add('insertUnorderedList');
     const isChecklist = Boolean(element.closest('ul[data-checklist]'));
@@ -584,7 +587,11 @@ export function NoteEditor({
     if (isChecklist) active.add('checklist');
     if (element.closest('blockquote')) active.add('quote');
     if (element.closest('pre')) active.add('code');
-    setActiveFormatting([...active]);
+    return [...active];
+  };
+
+  const refreshActiveFormatting = () => {
+    setActiveFormatting(readActiveFormatting());
   };
 
   useEffect(() => {
@@ -678,6 +685,18 @@ export function NoteEditor({
     }
   };
 
+  const replaceCurrentBlockWithParagraph = (block: HTMLElement) => {
+    const children = Array.from(block.childNodes);
+    if (block.tagName === 'BLOCKQUOTE' && block.children.length > 0 && Array.from(block.children).every((child) => /^(P|DIV|H1|H2|H3)$/.test(child.tagName))) {
+      block.replaceWith(...children);
+      return;
+    }
+    const paragraph = document.createElement('p');
+    for (const child of children) paragraph.append(child);
+    if (!paragraph.childNodes.length) paragraph.append(document.createElement('br'));
+    block.replaceWith(paragraph);
+  };
+
   const applyChecklist = () => {
     const editor = editorRef.current;
     const restored = restoreEditorSelection();
@@ -686,6 +705,7 @@ export function NoteEditor({
     const currentList = element?.closest('ul,ol');
     if (currentList instanceof HTMLUListElement && currentList.hasAttribute('data-checklist')) {
       removeChecklistFromList(currentList);
+      try { document.execCommand('insertUnorderedList'); } catch { return false; }
       return true;
     }
     let list = currentList instanceof HTMLUListElement ? currentList : null;
@@ -728,20 +748,51 @@ export function NoteEditor({
     if (!action) return;
     const editor = editorRef.current;
     if (!editor) return;
-    if (!restoreEditorSelection()) {
+    let savedRange = restoreEditorSelection();
+    if (!savedRange) {
       rememberCaret();
-      if (!restoreEditorSelection()) focusBodyAtEnd();
+      savedRange = restoreEditorSelection();
+      if (!savedRange) focusBodyAtEnd();
     }
+    const activeBefore = readActiveFormatting();
+    const transition = getMobileFormattingTransition(actionId, activeBefore);
+    const selection = window.getSelection();
+    const selectedRange = savedRange && !savedRange.collapsed ? savedRange.cloneRange() : null;
+    const selectedElement = getSelectionElement();
+    const currentList = selectedElement?.closest('ul,ol');
+    let handled = false;
     if (action.command === 'checklist') {
       if (!applyChecklist()) { toast('Không thể chèn checklist tại vị trí này'); return; }
-    } else {
+      handled = true;
+    } else if (currentList instanceof HTMLUListElement && currentList.hasAttribute('data-checklist') && (actionId === 'insertUnorderedList' || actionId === 'insertOrderedList')) {
+      removeChecklistFromList(currentList);
+      if (actionId === 'insertOrderedList') {
+        try {
+          if (document.execCommand(action.command, false, action.value) === false) { toast('Định dạng này chưa khả dụng trên trình duyệt'); return; }
+        } catch { toast('Định dạng này chưa khả dụng trên trình duyệt'); return; }
+      }
+      handled = true;
+    } else if (action.command === 'formatBlock' && transition === 'clear-block') {
+      const currentBlock = selectedElement?.closest('h1,h2,h3,blockquote,pre');
+      if (currentBlock instanceof HTMLElement && editor.contains(currentBlock)) {
+        replaceCurrentBlockWithParagraph(currentBlock);
+        handled = true;
+      }
+    }
+    if (!handled) {
       try {
         const result = document.execCommand(action.command, false, action.value);
         if (result === false) { toast('Định dạng này chưa khả dụng trên trình duyệt'); return; }
       } catch { toast('Định dạng này chưa khả dụng trên trình duyệt'); return; }
     }
+    if (selectedRange && selectedRange.startContainer.isConnected && selectedRange.endContainer.isConnected && editor.contains(selectedRange.startContainer) && editor.contains(selectedRange.endContainer) && selection) {
+      selection.removeAllRanges();
+      selection.addRange(selectedRange);
+      lastCaretRange.current = selectedRange.cloneRange();
+    } else {
+      rememberCaret();
+    }
     commitEditor();
-    rememberCaret();
     refreshActiveFormatting();
   };
 
@@ -2136,7 +2187,7 @@ export function NoteEditor({
       </div>
 
       {!desktopPresentation && uploading && <div className="tanooki-mobile-upload-status" role="status" aria-live="polite"><Loader2 size={15} className="animate-spin" />Đang tải {uploadsInProgress} tệp lên…</div>}
-      {!desktopPresentation && <MobileFormattingSheet open={mobileSheet === 'formatting'} activeActions={activeFormatting} onClose={() => {
+      {!desktopPresentation && <MobileFormattingSheet open={mobileSheet === 'formatting'} activeActions={activeFormatting} onBeforeFormat={rememberCaret} onClose={() => {
         setMobileSheet(null);
         window.requestAnimationFrame(() => restoreEditorSelection());
       }} onFormat={handleMobileFormat} />}

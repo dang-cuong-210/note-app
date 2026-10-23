@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { MOBILE_FORMATTING_GROUPS, setChecklistItemChecked } from '../src/lib/mobileFormatting.js';
+import { getMobileFormattingTransition } from '../src/lib/mobileFormattingState.js';
 
 const editor = await readFile(new URL('../src/components/NoteEditor.tsx', import.meta.url), 'utf8');
 const sheet = await readFile(new URL('../src/components/MobileFormattingSheet.tsx', import.meta.url), 'utf8');
@@ -32,7 +33,7 @@ test('mobile formatting commands map to browser rich-text commands and preserve 
     insertUnorderedList: 'insertUnorderedList', insertOrderedList: 'insertOrderedList', checklist: 'checklist',
     quote: 'formatBlock', code: 'formatBlock',
   });
-  assert.match(editor, /commitEditor\(\);\s*rememberCaret\(\);\s*refreshActiveFormatting\(\);/);
+  assert.match(editor, /commitEditor\(\);\s*refreshActiveFormatting\(\);/);
   assert.doesNotMatch(editor.match(/const handleMobileFormat = \(actionId: string\) => \{[\s\S]*?\n  \};/)?.[0] ?? '', /setMobileSheet\(null\)/);
   for (const [id, value] of [['heading1', '<h1>'], ['heading2', '<h2>'], ['heading3', '<h3>']]) {
     const action = MOBILE_FORMATTING_GROUPS.flatMap((group) => group.actions).find((item) => item.id === id);
@@ -81,6 +82,47 @@ test('formatting active states derive from the selected inline marks and contain
   }
   assert.match(editor, /if \(isChecklist\) active\.add\('checklist'\)/);
   assert.match(sheet, /aria-pressed=\{active\.has\(action\.id\)\}/);
+});
+
+test('format transitions freely toggle inline, heading, list, checklist, quote and code states', () => {
+  for (const action of ['bold', 'italic', 'underline', 'strikeThrough']) {
+    assert.equal(getMobileFormattingTransition(action, [action]), 'toggle-off', `${action} should turn off when active`);
+    assert.equal(getMobileFormattingTransition(action, []), 'toggle-on', `${action} should turn on when inactive`);
+  }
+  const combinedInlineState = ['bold', 'italic', 'underline'];
+  assert.equal(getMobileFormattingTransition('bold', combinedInlineState), 'toggle-off');
+  assert.deepEqual(combinedInlineState.filter((action) => action !== 'bold'), ['italic', 'underline'], 'removing Bold leaves the other active inline formats untouched');
+  assert.equal(getMobileFormattingTransition('heading1', ['heading1']), 'clear-block');
+  assert.equal(getMobileFormattingTransition('heading1', ['heading3']), 'switch-block');
+  assert.equal(getMobileFormattingTransition('heading2', ['heading1']), 'switch-block');
+  assert.equal(getMobileFormattingTransition('heading3', ['heading2']), 'switch-block');
+  assert.equal(getMobileFormattingTransition('insertUnorderedList', ['insertUnorderedList']), 'clear-list');
+  assert.equal(getMobileFormattingTransition('insertOrderedList', ['insertUnorderedList']), 'switch-list');
+  assert.equal(getMobileFormattingTransition('checklist', ['insertUnorderedList']), 'switch-list');
+  assert.equal(getMobileFormattingTransition('insertUnorderedList', ['checklist']), 'switch-list');
+  assert.equal(getMobileFormattingTransition('insertOrderedList', ['checklist']), 'switch-list');
+  assert.equal(getMobileFormattingTransition('checklist', ['checklist']), 'clear-list');
+  assert.equal(getMobileFormattingTransition('quote', ['quote']), 'clear-block');
+  assert.equal(getMobileFormattingTransition('code', ['code']), 'clear-block');
+  assert.equal(getMobileFormattingTransition('code', ['quote']), 'switch-block');
+  assert.match(editor, /action\.command === 'formatBlock' && transition === 'clear-block'[\s\S]*?replaceCurrentBlockWithParagraph\(currentBlock\)/);
+  assert.match(editor, /if \(block\.tagName === 'BLOCKQUOTE'[\s\S]*?block\.replaceWith\(\.\.\.children\)/);
+  assert.match(editor, /if \(currentList instanceof HTMLUListElement && currentList\.hasAttribute\('data-checklist'\)\) \{\s*removeChecklistFromList\(currentList\);\s*try \{ document\.execCommand\('insertUnorderedList'\)/);
+  assert.match(editor, /currentList\.hasAttribute\('data-checklist'\) && \(actionId === 'insertUnorderedList' \|\| actionId === 'insertOrderedList'\)/);
+});
+
+test('format actions restore editor-owned selection, preserve it across actions and keep keyboard focus', () => {
+  assert.match(editor, /const selectedRange = savedRange && !savedRange\.collapsed \? savedRange\.cloneRange\(\) : null/);
+  assert.match(editor, /selection\.removeAllRanges\(\);\s*selection\.addRange\(selectedRange\)/);
+  assert.match(editor, /lastCaretRange\.current = selectedRange\.cloneRange\(\)/);
+  assert.match(editor, /restoreEditorSelection\(\)/);
+  assert.match(editor, /document\.execCommand\(action\.command, false, action\.value\)/);
+  assert.match(editor.match(/const handleMobileFormat = \(actionId: string\) => \{[\s\S]*?\n  \};/)?.[0] ?? '', /commitEditor\(\)/);
+  assert.doesNotMatch(editor.match(/const handleMobileFormat = \(actionId: string\) => \{[\s\S]*?\n  \};/)?.[0] ?? '', /innerHTML\s*=/);
+  assert.match(editor, /onBeforeFormat=\{rememberCaret\}/);
+  assert.match(sheet, /onPointerDown=\{\(event\) => \{ event\.preventDefault\(\); onBeforeFormat\?\.\(\); \}\}/);
+  assert.match(editor, /setMobileKeyboardOpen\(keyboardOpen\)/);
+  assert.doesNotMatch(editor.match(/const handleMobileFormat = \(actionId: string\) => \{[\s\S]*?\n  \};/)?.[0] ?? '', /setMobileSheet\(null\)/);
 });
 
 test('checklist state is accessible, toggles on its list item, and survives editor save and hydration', () => {
