@@ -601,8 +601,14 @@ export function NoteEditor({
   };
 
   useEffect(() => {
-    if (desktopPresentation) return;
     const handleSelectionChange = () => {
+      if (desktopPresentation) {
+        const selection = window.getSelection();
+        if (!selection?.anchorNode || !editorRef.current?.contains(selection.anchorNode)) return;
+        rememberCaret();
+        refreshActiveFormatting();
+        return;
+      }
       rememberCaret();
       if (mobileSheet === 'formatting') refreshActiveFormatting();
     };
@@ -1723,6 +1729,14 @@ export function NoteEditor({
 
   const folderName = folders.find((f) => f.id === note.folderId)?.name || null;
   const desktopTags = desktopPresentation ? noteTags : [];
+  const runEditorHistory = (command: 'undo' | 'redo') => {
+    restoreEditorSelection();
+    editorRef.current?.focus();
+    document.execCommand(command);
+    commitEditor();
+    rememberCaret();
+    refreshActiveFormatting();
+  };
   const mobileBackLabel = suppliedMobileBackLabel || (breadcrumb === 'Tất cả ghi chú'
     ? breadcrumb
     : folders.some((folder) => folder.name === breadcrumb) ? breadcrumb : 'Ghi chú');
@@ -1754,11 +1768,17 @@ export function NoteEditor({
         <div className="flex items-center gap-1">
           {desktopPresentation && note.syncPending === true && <span className="tanooki-editor-sync-status" role="status">Đang chờ đồng bộ</span>}
           {desktopPresentation && onToggleToolsPanel && <button type="button" onClick={onToggleToolsPanel} aria-label="Công cụ chỉnh sửa" aria-controls="tanooki-desktop-editor-tools" aria-expanded={toolsPanelOpen} className="tanooki-editor-action tanooki-info-toggle" title="Công cụ chỉnh sửa"><SlidersHorizontal size={18} /></button>}
+          {desktopPresentation && <>
+            <button type="button" onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => runEditorHistory('undo')} className="tanooki-editor-action" aria-label="Hoàn tác" title="Hoàn tác"><Undo2 size={18} aria-hidden="true" /></button>
+            <button type="button" onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => runEditorHistory('redo')} className="tanooki-editor-action" aria-label="Làm lại" title="Làm lại"><Redo2 size={18} aria-hidden="true" /></button>
+            <button type="button" onClick={() => { void handleShareNote(); }} className="tanooki-editor-action" aria-label="Chia sẻ ghi chú" title="Chia sẻ"><Share2 size={18} aria-hidden="true" /></button>
+          </>}
           <button
             onClick={() => onTogglePin(note.id)}
             className={`p-2 rounded-lg hover-bg text-secondary transition-colors ${desktopPresentation ? 'tanooki-editor-action' : ''}`}
             style={{ color: note.pinned ? 'var(--accent)' : 'var(--text-secondary)' }}
             aria-label={note.pinned ? 'Bỏ ghim' : 'Ghim'}
+            title={note.pinned ? 'Bỏ ghim' : 'Ghim'}
           >
             {note.pinned ? <Pin size={18} fill="currentColor" /> : <Pin size={18} />}
           </button>
@@ -1770,6 +1790,7 @@ export function NoteEditor({
               className="p-2 rounded-lg hover-bg text-secondary transition-colors"
               style={{ color: 'var(--text-secondary)' }}
               aria-label="Tùy chọn ghi chú"
+              title="Tùy chọn ghi chú"
             >
               <MoreHorizontal size={18} />
             </button>
@@ -1882,6 +1903,26 @@ export function NoteEditor({
         </div>
         <NoteTagManager className="tanooki-editor-tags" tags={desktopTags} existingTags={existingTags} onAddTag={addNoteTag} onRemoveTag={removeNoteTag} onOpenTag={onOpenTag} />
       </section>}
+
+      <div className="hidden" aria-hidden="true">
+        <input ref={fileInputRef} type="file" multiple onChange={handleFileSelect} />
+        <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple onChange={handleFileSelect} />
+        <input ref={mobileAttachmentInputRef} type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.rtf,.csv,.json,.zip,.7z,.pages,.numbers,.key" multiple onChange={handleFileSelect} />
+      </div>
+
+      {desktopPresentation && <nav className="tanooki-editor-format-toolbar" aria-label="Định dạng và chèn nội dung">
+        <div className="tanooki-editor-format-toolbar-inner">
+          {MOBILE_FORMATTING_GROUPS.map((group) => <div key={group.label} className="tanooki-editor-format-group" role="group" aria-label={group.label}>
+            {group.actions.map((action) => <button key={action.id} type="button" className={`tanooki-editor-format-button format-${action.id}`} aria-label={action.name} title={action.name} aria-pressed={activeFormatting.includes(action.id)} onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => handleMobileFormat(action.id)}><span aria-hidden="true">{action.label}</span></button>)}
+          </div>)}
+          <div className="tanooki-editor-format-group tanooki-editor-media-group" role="group" aria-label="Tệp và hình ảnh">
+            <button type="button" className="tanooki-editor-format-button" aria-label="Đính kèm tệp" title="Đính kèm tệp" disabled={uploading} onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => fileInputRef.current?.click()}>{uploading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Paperclip size={16} aria-hidden="true" />}<span>Đính kèm</span></button>
+            <button type="button" className="tanooki-editor-format-button" aria-label="Thêm hình ảnh" title="Thêm hình ảnh" disabled={uploading} onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => imageInputRef.current?.click()}><ImageIcon size={16} aria-hidden="true" /><span>Hình ảnh</span></button>
+            <button type="button" className="tanooki-editor-format-button" aria-label="Vẽ và đánh dấu" title="Vẽ và đánh dấu" onPointerDown={(event) => { event.preventDefault(); rememberCaret(); }} onClick={() => { rememberCaret(); setDrawingOpen(true); }}><PenTool size={16} aria-hidden="true" /><span>Vẽ</span></button>
+          </div>
+          {uploading && <span className="tanooki-editor-upload-status" role="status" aria-live="polite"><Loader2 size={14} className="animate-spin" aria-hidden="true" />Đang tải {uploadsInProgress} tệp lên…</span>}
+        </div>
+      </nav>}
 
       {syncConflict && <div role="alert" className="mx-3 my-2 rounded-lg border border-amber-400 bg-amber-50 p-3 text-sm text-amber-950">
         This note also changed on another device. Autosave is paused to protect your edits.
@@ -2150,61 +2191,6 @@ export function NoteEditor({
         })}
       </>}
 
-      {/* Bottom attachment bar */}
-      <div
-        className={`${desktopPresentation ? 'flex items-center gap-2 px-3 py-2 border-t flex-shrink-0 tanooki-editor-attachment-bar' : 'hidden'}`}
-        style={{ borderColor: 'var(--border)' }}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          onChange={handleFileSelect}
-          className="hidden"
-        />
-        <input
-          ref={imageInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/gif,image/webp"
-          multiple
-          onChange={handleFileSelect}
-          className="hidden"
-        />
-        <input
-          ref={mobileAttachmentInputRef}
-          type="file"
-          accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.rtf,.csv,.json,.zip,.7z,.pages,.numbers,.key"
-          multiple
-          onChange={handleFileSelect}
-          className="hidden"
-        />
-        <button
-          onPointerDown={rememberCaret}
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover-bg text-secondary text-sm transition-colors disabled:opacity-50"
-          style={{ color: 'var(--text-secondary)' }}
-        >
-          {uploading ? <Loader2 size={15} className="animate-spin" /> : <Paperclip size={15} />}
-          <span className={desktopPresentation ? 'hidden sm:inline' : ''}>{desktopPresentation ? 'Đính kèm tệp' : 'Đính kèm'}</span>
-        </button>
-        <button
-          onPointerDown={rememberCaret}
-          onClick={() => imageInputRef.current?.click()}
-          disabled={uploading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover-bg text-secondary text-sm transition-colors disabled:opacity-50"
-          style={{ color: 'var(--text-secondary)' }}
-        >
-          <ImageIcon size={15} />
-          <span className={desktopPresentation ? 'hidden sm:inline' : ''}>{desktopPresentation ? 'Thêm hình ảnh' : 'Ảnh'}</span>
-        </button>
-        {uploading && (
-          <span className="text-xs text-tertiary" style={{ color: 'var(--text-tertiary)' }}>
-          Đang tải {uploadsInProgress} tệp lên...
-          </span>
-        )}
-      </div>
-
       {!desktopPresentation && uploading && <div className="tanooki-mobile-upload-status" role="status" aria-live="polite"><Loader2 size={15} className="animate-spin" />Đang tải {uploadsInProgress} tệp lên…</div>}
       {!desktopPresentation && <MobileFormattingSheet open={mobileSheet === 'formatting'} activeActions={activeFormatting} onBeforeFormat={rememberCaret} onClose={() => {
         setMobileSheet(null);
@@ -2224,7 +2210,7 @@ export function NoteEditor({
         <MobileEditorMorePopover note={note} folders={folders} open={mobileSheet === 'actions'} onClose={() => setMobileSheet(null)} onTogglePin={onTogglePin} onArchive={onArchive} onMove={onMove} onDuplicate={onDuplicate} onTrash={onTrash} onFind={openMobileFind} onNavigateRecent={() => { flushCurrentDraft(); onNavigateRecent(); }} onTogglePaper={() => { setMobileSheet(null); setMobilePaperMode((value) => !value); }} onShowAttachments={handleShowAttachments} paperMode={mobilePaperMode} />
       </>}
 
-      {!desktopPresentation && drawingOpen && <MobileDrawingMarkup
+      {drawingOpen && <MobileDrawingMarkup
         onCancel={() => setDrawingOpen(false)}
         onBlankDone={() => { setDrawingOpen(false); toast('Chưa có nét vẽ để thêm'); }}
         onDone={(image) => { setDrawingOpen(false); void handleImageUpload(image); }}
