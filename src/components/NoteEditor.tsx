@@ -708,6 +708,7 @@ export function NoteEditor({
 
   const normalizeChecklistMarkup = (editor: HTMLDivElement) => {
     for (const list of Array.from(editor.querySelectorAll('ul[data-checklist]'))) {
+      if (!editor.contains(list)) continue;
       let pendingItem: HTMLLIElement | null = null;
       for (const child of Array.from(list.childNodes)) {
         if (child instanceof HTMLLIElement) {
@@ -726,6 +727,51 @@ export function NoteEditor({
         pendingItem.append(child);
       }
       if (pendingItem) prepareChecklistItem(pendingItem);
+    }
+    for (const list of Array.from(editor.querySelectorAll('ul[data-checklist]'))) {
+      if (!editor.contains(list)) continue;
+      const nestedLists = Array.from(list.querySelectorAll('ul[data-checklist]')).reverse();
+      for (const nested of nestedLists) {
+        if (!editor.contains(nested)) continue;
+        const owner = nested.closest('li[data-checked]');
+        if (!(owner instanceof HTMLLIElement) || owner.closest('ul[data-checklist]') !== list) continue;
+        let insertionPoint: Element = owner;
+        for (const nestedRow of Array.from(nested.children)) {
+          if (!(nestedRow instanceof HTMLLIElement)) continue;
+          insertionPoint.after(nestedRow);
+          insertionPoint = nestedRow;
+        }
+        nested.remove();
+      }
+    }
+    for (const paragraph of Array.from(editor.children).filter((child): child is HTMLParagraphElement => child instanceof HTMLParagraphElement)) {
+      if (!paragraph.textContent && !paragraph.querySelector('img,[data-noted-attachment-id]')) continue;
+      const previousList = paragraph.previousElementSibling;
+      const nextList = paragraph.nextElementSibling;
+      const candidates: HTMLSpanElement[] = [];
+      if (previousList instanceof HTMLUListElement && previousList.hasAttribute('data-checklist')) {
+        const lastItem = previousList.lastElementChild;
+        if (lastItem instanceof HTMLLIElement) {
+          const text = prepareChecklistItem(lastItem).text;
+          if (!text.textContent && !text.querySelector('img,[data-noted-attachment-id]')) candidates.push(text);
+        }
+      }
+      if (nextList instanceof HTMLUListElement && nextList.hasAttribute('data-checklist')) {
+        const firstItem = nextList.firstElementChild;
+        if (firstItem instanceof HTMLLIElement) {
+          const text = prepareChecklistItem(firstItem).text;
+          if (!text.textContent && !text.querySelector('img,[data-noted-attachment-id]')) candidates.push(text);
+        }
+      }
+      if (candidates.length !== 1) continue;
+      const target = candidates[0];
+      target.replaceChildren();
+      for (const child of Array.from(paragraph.childNodes)) {
+        if (child instanceof HTMLElement && /^(P|DIV)$/.test(child.tagName)) target.append(...Array.from(child.childNodes));
+        else target.append(child);
+      }
+      if (!target.childNodes.length) target.append(document.createElement('br'));
+      paragraph.remove();
     }
   };
 
@@ -872,8 +918,7 @@ export function NoteEditor({
     refreshActiveFormatting();
   };
 
-  const handleChecklistEnter: React.KeyboardEventHandler<HTMLDivElement> = (event) => {
-    if (event.key !== 'Enter' || event.shiftKey || (event.target as HTMLElement).closest('[data-note-checklist-toggle]') || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+  const getChecklistCaretContext = () => {
     const editor = editorRef.current;
     const selection = window.getSelection();
     const liveRange = selection?.rangeCount ? selection.getRangeAt(0) : null;
@@ -886,9 +931,8 @@ export function NoteEditor({
     const element = node instanceof Element ? node : node?.parentElement;
     const item = element?.closest('li[data-checked]');
     const list = item?.parentElement;
-    if (!(editor && item instanceof HTMLLIElement && list instanceof HTMLUListElement && list.hasAttribute('data-checklist'))) return;
+    if (!(editor && selection && range && item instanceof HTMLLIElement && list instanceof HTMLUListElement && list.hasAttribute('data-checklist'))) return null;
     const { text } = prepareChecklistItem(item);
-    if (!selection || !range) return;
     if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer) || !text.contains(range.startContainer) || !text.contains(range.endContainer)) {
       range = document.createRange();
       range.selectNodeContents(text);
@@ -897,7 +941,11 @@ export function NoteEditor({
       selection.addRange(range);
       lastCaretRange.current = range.cloneRange();
     }
-    event.preventDefault();
+    return { editor, selection, range, item, list, text };
+  };
+
+  const performChecklistEnter = (context: NonNullable<ReturnType<typeof getChecklistCaretContext>>) => {
+    const { selection, range, item, list, text } = context;
     const shouldExit = shouldExitChecklistOnEnter({
       text: text.textContent,
       hasMedia: Boolean(text.querySelector('img,[data-noted-attachment-id]')),
@@ -940,6 +988,103 @@ export function NoteEditor({
     commitEditor();
     rememberCaret();
     refreshActiveFormatting();
+  };
+
+  const performChecklistLineBreak = (context: NonNullable<ReturnType<typeof getChecklistCaretContext>>) => {
+    const { selection, range } = context;
+    range.deleteContents();
+    const lineBreak = document.createElement('br');
+    range.insertNode(lineBreak);
+    range.setStartAfter(lineBreak);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    lastCaretRange.current = range.cloneRange();
+    commitEditor();
+    rememberCaret();
+    refreshActiveFormatting();
+  };
+
+  const isChecklistCaretAtStart = (text: HTMLSpanElement, range: Range) => {
+    if (!range.collapsed || !text.contains(range.startContainer)) return false;
+    const prefix = document.createRange();
+    prefix.selectNodeContents(text);
+    prefix.setEnd(range.startContainer, range.startOffset);
+    const fragment = prefix.cloneContents();
+    const hasMedia = Boolean(fragment.querySelector('img,[data-noted-attachment-id]'));
+    const emptyPlaceholder = !text.textContent && !text.querySelector('img,[data-noted-attachment-id]') && text.querySelectorAll('br').length === 1;
+    return fragment.textContent === '' && !hasMedia && (!fragment.querySelector('br') || emptyPlaceholder);
+  };
+
+  const performChecklistBackspace = (context: NonNullable<ReturnType<typeof getChecklistCaretContext>>) => {
+    const { selection, range, item, list, text } = context;
+    if (!isChecklistCaretAtStart(text, range)) return false;
+    const previousItem = item.previousElementSibling;
+    if (previousItem instanceof HTMLLIElement) {
+      const previousText = prepareChecklistItem(previousItem).text;
+      if (previousText.innerHTML === '<br>') previousText.replaceChildren();
+      if (text.innerHTML !== '<br>') {
+        const content = document.createDocumentFragment();
+        while (text.firstChild) content.append(text.firstChild);
+        const caret = document.createRange();
+        caret.selectNodeContents(previousText);
+        caret.collapse(false);
+        caret.insertNode(content);
+        caret.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(caret);
+        lastCaretRange.current = caret.cloneRange();
+      } else {
+        const caret = document.createRange();
+        caret.selectNodeContents(previousText);
+        caret.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(caret);
+        lastCaretRange.current = caret.cloneRange();
+      }
+      item.remove();
+    } else {
+      const paragraph = document.createElement('p');
+      if (text.innerHTML === '<br>') paragraph.append(document.createElement('br'));
+      else while (text.firstChild) paragraph.append(text.firstChild);
+      item.remove();
+      if (list.querySelector(':scope > li')) list.before(paragraph);
+      else list.replaceWith(paragraph);
+      const caret = document.createRange();
+      caret.setStart(paragraph, 0);
+      caret.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(caret);
+      lastCaretRange.current = caret.cloneRange();
+    }
+    commitEditor();
+    rememberCaret();
+    refreshActiveFormatting();
+    return true;
+  };
+
+  const handleChecklistBeforeInput: React.FormEventHandler<HTMLDivElement> = (event) => {
+    const inputType = (event.nativeEvent as InputEvent).inputType;
+    if (inputType !== 'insertParagraph' && inputType !== 'insertLineBreak' && inputType !== 'deleteContentBackward') return;
+    const context = getChecklistCaretContext();
+    if (!context) return;
+    if (inputType === 'deleteContentBackward' && !isChecklistCaretAtStart(context.text, context.range)) return;
+    event.preventDefault();
+    if (inputType === 'deleteContentBackward') performChecklistBackspace(context);
+    else if (inputType === 'insertLineBreak') performChecklistLineBreak(context);
+    else performChecklistEnter(context);
+  };
+
+  const handleChecklistEnter: React.KeyboardEventHandler<HTMLDivElement> = (event) => {
+    if ((event.target as HTMLElement).closest('[data-note-checklist-toggle]')) return;
+    if ((event.key !== 'Enter' && event.key !== 'Backspace') || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+    const context = getChecklistCaretContext();
+    if (!context) return;
+    if (event.key === 'Backspace' && !isChecklistCaretAtStart(context.text, context.range)) return;
+    event.preventDefault();
+    if (event.key === 'Backspace') performChecklistBackspace(context);
+    else if (event.shiftKey) performChecklistLineBreak(context);
+    else performChecklistEnter(context);
   };
 
   const handleChecklistClick: React.MouseEventHandler<HTMLDivElement> = (event) => {
@@ -2078,6 +2223,7 @@ export function NoteEditor({
                 else if (selectedImage !== e.target) selectImage(e.target);
               } else { clearSelection(); rememberCaret(); }
             }}
+            onBeforeInput={handleChecklistBeforeInput}
             onKeyDown={handleChecklistEnter}
             data-placeholder="Bắt đầu viết ghi chú của bạn..."
             className={`note-content editor-content w-full outline-none text-app leading-relaxed ${desktopPresentation ? '' : 'text-sm'}`}

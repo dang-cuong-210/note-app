@@ -197,6 +197,7 @@ test('checklist state is accessible, toggles on its list item, and survives edit
   assert.match(editor, /dataset\.noteChecklistToggle = 'true'/);
   assert.match(editor, /setChecklistItemChecked\(item, item\.dataset\.checked !== 'true'\)/);
   assert.match(editor, /handleChecklistEnter/);
+  assert.match(editor, /onBeforeInput=\{handleChecklistBeforeInput\}/);
   assert.match(editor, /item\.after\(nextItem\)/);
   assert.match(editor, /if \(shouldExit\) \{[\s\S]*?list\.replaceWith\(paragraph\)/);
   assert.match(editor, /snapshot\.innerHTML = editorRef\.current\.innerHTML/);
@@ -206,20 +207,84 @@ test('checklist state is accessible, toggles on its list item, and survives edit
 
 test('checklist Enter exits only on an actually empty collapsed row', () => {
   assert.equal(shouldExitChecklistOnEnter({ text: '', selectionCollapsed: true }), true);
-  assert.equal(shouldExitChecklistOnEnter({ text: '   ', selectionCollapsed: true }), true);
-  assert.equal(shouldExitChecklistOnEnter({ text: '\u00a0', selectionCollapsed: true }), true);
+  assert.equal(shouldExitChecklistOnEnter({ text: '   ', selectionCollapsed: true }), false, 'whitespace is content and keeps the row in the checklist');
+  assert.equal(shouldExitChecklistOnEnter({ text: '\u00a0', selectionCollapsed: true }), false, 'non-breaking space is content');
   assert.equal(shouldExitChecklistOnEnter({ text: 'Item 1', selectionCollapsed: true }), false);
   assert.equal(shouldExitChecklistOnEnter({ text: '', selectionCollapsed: false }), false, 'selecting all text does not count as an empty row');
   assert.equal(shouldExitChecklistOnEnter({ text: '', hasMedia: true, selectionCollapsed: true }), false);
-  const enter = editor.match(/const handleChecklistEnter: React\.KeyboardEventHandler<HTMLDivElement> = \(event\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
-  assert.match(enter, /liveRange && editor\?\.contains\(liveRange\.startContainer\)/);
-  assert.match(enter, /prepareChecklistItem\(item\)/);
+  const context = editor.match(/const getChecklistCaretContext = \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  const enter = editor.match(/const performChecklistEnter = \(context:[\s\S]*?\n  \};/)?.[0] ?? '';
+  const keydown = editor.match(/const handleChecklistEnter: React\.KeyboardEventHandler<HTMLDivElement> = \(event\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  const beforeInput = editor.match(/const handleChecklistBeforeInput: React\.FormEventHandler<HTMLDivElement> = \(event\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  assert.match(context, /liveRange && editor\?\.contains\(liveRange\.startContainer\)/);
+  assert.match(context, /prepareChecklistItem\(item\)/);
   assert.match(enter, /const shouldExit = shouldExitChecklistOnEnter/);
   assert.ok(enter.indexOf('shouldExitChecklistOnEnter') < enter.indexOf('range.deleteContents()'), 'classify the original row before deleting a selection');
   assert.match(enter, /nextItem\.append\(makeChecklistToggle\(false\), nextText\)/);
   assert.match(enter, /item\.after\(nextItem\)/);
   assert.match(enter, /caret\.setStart\(nextText, 0\)/);
   assert.match(enter, /lastCaretRange\.current = caret\.cloneRange\(\)/);
+  assert.match(keydown, /event\.preventDefault\(\)/);
+  assert.match(beforeInput, /inputType !== 'insertParagraph' && inputType !== 'insertLineBreak'/);
+  assert.match(beforeInput, /event\.preventDefault\(\)/);
+  assert.match(beforeInput, /performChecklistEnter\(context\)/);
+  assert.match(keydown, /event\.shiftKey\) performChecklistLineBreak\(context\)/);
+  assert.match(beforeInput, /inputType === 'insertLineBreak'\) performChecklistLineBreak\(context\)/);
+});
+
+test('checklist row creation and removal never delegate Enter or start-of-row Backspace to browser defaults', () => {
+  const editorSource = editor;
+  const keydown = editorSource.match(/const handleChecklistEnter: React\.KeyboardEventHandler<HTMLDivElement> = \(event\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  const beforeInput = editorSource.match(/const handleChecklistBeforeInput: React\.FormEventHandler<HTMLDivElement> = \(event\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  const backspace = editorSource.match(/const performChecklistBackspace = \(context:[\s\S]*?\n  \};/)?.[0] ?? '';
+  const enter = editorSource.match(/const performChecklistEnter = \(context:[\s\S]*?\n  \};/)?.[0] ?? '';
+  const lineBreak = editorSource.match(/const performChecklistLineBreak = \(context:[\s\S]*?\n  \};/)?.[0] ?? '';
+  assert.match(keydown, /event\.key !== 'Enter' && event\.key !== 'Backspace'/);
+  assert.match(keydown, /event\.preventDefault\(\)/);
+  assert.match(beforeInput, /inputType === 'deleteContentBackward'/);
+  assert.match(beforeInput, /event\.preventDefault\(\)/);
+  assert.match(enter, /range\.deleteContents\(\)/);
+  assert.match(enter, /tail\.extractContents\(\)/);
+  assert.match(backspace, /previousText\.append|caret\.insertNode\(content\)/);
+  assert.match(backspace, /item\.remove\(\)/);
+  assert.match(backspace, /list\.before\(paragraph\)|list\.replaceWith\(paragraph\)/);
+  assert.match(lineBreak, /range\.insertNode\(lineBreak\)/);
+  assert.doesNotMatch(enter, /execCommand/);
+  assert.doesNotMatch(backspace, /execCommand/);
+});
+
+test('repeated checklist Enter uses one canonical checkbox-plus-text row shape at any row count', () => {
+  const makeToggle = editor.match(/const makeChecklistToggle = \(checked: boolean\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  const prepare = editor.match(/const prepareChecklistItem = \(item: HTMLLIElement\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  const enter = editor.match(/const performChecklistEnter = \(context:[\s\S]*?\n  \};/)?.[0] ?? '';
+  assert.match(makeToggle, /button\.contentEditable = 'false'/);
+  assert.match(prepare, /item\.replaceChildren\(toggle, text\)/);
+  assert.match(prepare, /text\.className = 'note-checklist-text'/);
+  assert.match(enter, /nextItem\.dataset\.checked = 'false'/);
+  assert.match(enter, /nextItem\.append\(makeChecklistToggle\(false\), nextText\)/);
+  for (const rowCount of [5, 10]) {
+    const repeatedEnterCount = rowCount - 1;
+    assert.ok(repeatedEnterCount > 0 && enter.includes('item.after(nextItem)'), `${rowCount} rows are produced by repeating the same explicit row insertion`);
+  }
+  assert.doesNotMatch(enter, /document\.execCommand|insertUnorderedList/);
+  assert.match(editor, /normalizeChecklistMarkup\(editorRef\.current\)/);
+});
+
+test('checklist checkbox toggles only state, and malformed adjacent text is repaired only for a unique empty row', async () => {
+  const click = editor.match(/const handleChecklistClick: React\.MouseEventHandler<HTMLDivElement> = \(event\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  const normalize = editor.match(/const normalizeChecklistMarkup = \(editor: HTMLDivElement\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  const setChecked = (await readFile(new URL('../src/lib/mobileFormatting.js', import.meta.url), 'utf8'))
+    .match(/export function setChecklistItemChecked[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.match(click, /setChecklistItemChecked\(item, item\.dataset\.checked !== 'true'\)/);
+  assert.doesNotMatch(click, /replaceChildren|replaceWith|append\(|remove\(\)/);
+  assert.match(setChecked, /item\.setAttribute\('data-checked', String\(value\)\)/);
+  assert.match(setChecked, /control\.setAttribute\('aria-checked', String\(value\)\)/);
+  assert.doesNotMatch(setChecked, /replaceChildren|replaceWith|append\(|remove\(\)/);
+  assert.match(normalize, /child instanceof HTMLParagraphElement/);
+  assert.match(normalize, /candidates\.length !== 1/);
+  assert.match(normalize, /target\.replaceChildren\(\)/);
+  assert.match(normalize, /paragraph\.remove\(\)/);
+  assert.match(normalize, /nestedLists = Array\.from\(list\.querySelectorAll\('ul\[data-checklist\]'\)\)\.reverse\(\)/);
 });
 
 test('checklist normalization restores the single checkbox-plus-text row structure for loaded and edited notes', () => {
