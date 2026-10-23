@@ -7,6 +7,7 @@ import { getMobileFormattingTransition } from '../src/lib/mobileFormattingState.
 const editor = await readFile(new URL('../src/components/NoteEditor.tsx', import.meta.url), 'utf8');
 const sheet = await readFile(new URL('../src/components/MobileFormattingSheet.tsx', import.meta.url), 'utf8');
 const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+const inlineFormatting = await readFile(new URL('../src/lib/mobileInlineFormatting.js', import.meta.url), 'utf8');
 
 test('compact formatting toolbar offers the complete focused action set with accessible active states', () => {
   assert.deepEqual(MOBILE_FORMATTING_GROUPS.map((group) => group.label), ['Văn bản', 'Tiêu đề', 'Danh sách', 'Khối']);
@@ -111,6 +112,39 @@ test('format transitions freely toggle inline, heading, list, checklist, quote a
   assert.match(editor, /currentList\.hasAttribute\('data-checklist'\) && \(actionId === 'insertUnorderedList' \|\| actionId === 'insertOrderedList'\)/);
 });
 
+test('all inline marks use explicit selected-range and collapsed-caret toggle paths', () => {
+  const handler = editor.match(/const handleMobileFormat = \(actionId: string\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  assert.match(handler, /\['bold', 'italic', 'underline', 'strikeThrough'\]\.includes\(actionId\)/);
+  assert.match(handler, /transition === 'toggle-off' && selectedRange && isInlineFormatAppliedToRange/);
+  assert.match(handler, /removeInlineFormatFromRange\(editor, selectedRange, actionId, selection\)/);
+  assert.match(handler, /applyInlineFormatToRange\(editor, selectedRange, actionId, selection\)/);
+  assert.match(handler, /savedRange\?\.collapsed && \(transition === 'toggle-on' \|\| transition === 'toggle-off'\)/);
+  assert.match(handler, /toggleCollapsedInlineFormat\(editor, savedRange, actionId, selection\)/);
+  for (const [id, selector, tag] of [
+    ['bold', 'b,strong', 'strong'], ['italic', 'i,em', 'em'], ['underline', 'u', 'u'], ['strikeThrough', 's,strike,del', 's'],
+  ]) {
+    assert.ok(inlineFormatting.includes(`${id}: { command:`));
+    assert.ok(inlineFormatting.includes(`selector: '${selector}', tag: '${tag}'`));
+  }
+});
+
+test('inline toggle preserves independent marks, moves collapsed caret out of the toggled wrapper, and cleans empty serialized tags', () => {
+  assert.match(inlineFormatting, /const nestedMarks = \[\]/);
+  assert.match(inlineFormatting, /const trailingContent = tail\.extractContents\(\)/);
+  assert.match(inlineFormatting, /caret\.selectNodeContents\(caretContainer\)/);
+  assert.match(inlineFormatting, /unwrapFormatNodes\(fragment, format\.selector\)/);
+  assert.match(inlineFormatting, /if \(!text\.parentNode \|\| isInsideFormat\(text, fragment, format\.selector\)\) continue/);
+  assert.match(inlineFormatting, /element\.remove\(\)/);
+  assert.match(editor, /removeEmptyInlineFormats\(snapshot\)/);
+  assert.match(editor, /const serialized = removeEmptyInlineFormats\(snapshot\)/);
+});
+
+test('inline active states are read from the current collapsed caret or the full selected text range', () => {
+  assert.match(editor, /range\.collapsed \? isInlineFormatActiveAtNode\(editor, range\.startContainer, id\) : isInlineFormatAppliedToRange\(editor, range, id\)/);
+  assert.match(inlineFormatting, /if \(!isInsideFormat\(textNode, editor, format\.selector\)\) return false/);
+  assert.match(editor, /commitEditor\(\);\s*refreshActiveFormatting\(\)/);
+});
+
 test('format actions restore editor-owned selection, preserve it across actions and keep keyboard focus', () => {
   assert.match(editor, /const selectedRange = savedRange && !savedRange\.collapsed \? savedRange\.cloneRange\(\) : null/);
   assert.match(editor, /selection\.removeAllRanges\(\);\s*selection\.addRange\(selectedRange\)/);
@@ -146,7 +180,8 @@ test('checklist state is accessible, toggles on its list item, and survives edit
   assert.match(editor, /handleChecklistEnter/);
   assert.match(editor, /item\.after\(nextItem\)/);
   assert.match(editor, /if \(empty\) \{[\s\S]*?list\.replaceWith\(paragraph\)/);
-  assert.match(editor, /withLayout\(writeManagedTags\(editorRef\.current\.innerHTML/);
+  assert.match(editor, /snapshot\.innerHTML = editorRef\.current\.innerHTML/);
+  assert.match(editor, /withLayout\(writeManagedTags\(serialized/);
   assert.match(editor, /editorRef\.current\.innerHTML = stripLayout\(note\.content \?\? ''\)/);
 });
 

@@ -47,6 +47,7 @@ import { MobileFormattingSheet } from '@/components/MobileFormattingSheet';
 import { NoteTagManager } from '@/components/NoteTagManager';
 import { MOBILE_FORMATTING_GROUPS, setChecklistItemChecked } from '@/lib/mobileFormatting.js';
 import { getMobileFormattingTransition } from '@/lib/mobileFormattingState.js';
+import { applyInlineFormatToRange, isInlineFormatActiveAtNode, isInlineFormatAppliedToRange, removeEmptyInlineFormats, removeInlineFormatFromRange, toggleCollapsedInlineFormat } from '@/lib/mobileInlineFormatting.js';
 import { getBlankLinesToAppend, isMeaningfulNoteContent } from '@/lib/editorBehavior.js';
 import { MobileDrawingMarkup } from '@/components/MobileDrawingMarkup';
 import { getFolderHierarchy, getFolderOptionLabel } from '@/lib/folderHierarchy.js';
@@ -404,7 +405,10 @@ export function NoteEditor({
   // No rerender of the contentEditable DOM: this preserves the typing caret.
   const commitEditor = (layout = layoutRef.current) => {
     if (!editorRef.current) return;
-    const html = withLayout(writeManagedTags(editorRef.current.innerHTML, readManagedTags(contentRef.current)), layout);
+    const snapshot = document.createElement('div');
+    snapshot.innerHTML = editorRef.current.innerHTML;
+    const serialized = removeEmptyInlineFormats(snapshot);
+    const html = withLayout(writeManagedTags(serialized, readManagedTags(contentRef.current)), layout);
     contentRef.current = html;
     setContent(html);
     reportMeaningfulContent(titleRef.current, html);
@@ -552,16 +556,15 @@ export function NoteEditor({
   const readActiveFormatting = () => {
     const editor = editorRef.current;
     const element = getSelectionElement();
-    if (!element) return [] as string[];
+    if (!editor || !element) return [] as string[];
     const active = new Set<string>();
     const stateCommands: Record<string, string> = {
-      bold: 'bold', italic: 'italic', underline: 'underline', strikeThrough: 'strikeThrough',
       insertUnorderedList: 'insertUnorderedList', insertOrderedList: 'insertOrderedList',
     };
     const selection = window.getSelection();
-    const liveRange = selection?.rangeCount && editor?.contains(selection.anchorNode) ? selection.getRangeAt(0) : null;
+    const liveRange = selection?.rangeCount && editor.contains(selection.anchorNode) ? selection.getRangeAt(0) : null;
     const savedRange = lastCaretRange.current;
-    const range = liveRange ?? (savedRange && editor?.contains(savedRange.startContainer) && editor.contains(savedRange.endContainer) ? savedRange : null);
+    const range = liveRange ?? (savedRange && editor.contains(savedRange.startContainer) && editor.contains(savedRange.endContainer) ? savedRange : null);
     if (range && selection && !liveRange) {
       selection.removeAllRanges();
       selection.addRange(range.cloneRange());
@@ -569,6 +572,9 @@ export function NoteEditor({
     if (range) {
       for (const [id, command] of Object.entries(stateCommands)) {
         try { if (document.queryCommandState(command)) active.add(id); } catch { /* unsupported command state */ }
+      }
+      for (const id of ['bold', 'italic', 'underline', 'strikeThrough']) {
+        if (range.collapsed ? isInlineFormatActiveAtNode(editor, range.startContainer, id) : isInlineFormatAppliedToRange(editor, range, id)) active.add(id);
       }
     }
     if (!range || range.collapsed) {
@@ -761,7 +767,20 @@ export function NoteEditor({
     const selectedElement = getSelectionElement();
     const currentList = selectedElement?.closest('ul,ol');
     let handled = false;
-    if (action.command === 'checklist') {
+    let selectionWasReplaced = false;
+    if (['bold', 'italic', 'underline', 'strikeThrough'].includes(actionId)) {
+      if (selection && transition === 'toggle-off' && selectedRange && isInlineFormatAppliedToRange(editor, selectedRange, actionId)) {
+        handled = removeInlineFormatFromRange(editor, selectedRange, actionId, selection);
+      } else if (selection && selectedRange) {
+        handled = applyInlineFormatToRange(editor, selectedRange, actionId, selection);
+      } else if (selection && savedRange?.collapsed && (transition === 'toggle-on' || transition === 'toggle-off')) {
+        handled = toggleCollapsedInlineFormat(editor, savedRange, actionId, selection);
+      }
+      selectionWasReplaced = handled;
+    }
+    if (handled) {
+      // The inline helper already restored the selection/caret to the edited range.
+    } else if (action.command === 'checklist') {
       if (!applyChecklist()) { toast('Không thể chèn checklist tại vị trí này'); return; }
       handled = true;
     } else if (currentList instanceof HTMLUListElement && currentList.hasAttribute('data-checklist') && (actionId === 'insertUnorderedList' || actionId === 'insertOrderedList')) {
@@ -785,7 +804,7 @@ export function NoteEditor({
         if (result === false) { toast('Định dạng này chưa khả dụng trên trình duyệt'); return; }
       } catch { toast('Định dạng này chưa khả dụng trên trình duyệt'); return; }
     }
-    if (selectedRange && selectedRange.startContainer.isConnected && selectedRange.endContainer.isConnected && editor.contains(selectedRange.startContainer) && editor.contains(selectedRange.endContainer) && selection) {
+    if (!selectionWasReplaced && selectedRange && selectedRange.startContainer.isConnected && selectedRange.endContainer.isConnected && editor.contains(selectedRange.startContainer) && editor.contains(selectedRange.endContainer) && selection) {
       selection.removeAllRanges();
       selection.addRange(selectedRange);
       lastCaretRange.current = selectedRange.cloneRange();
