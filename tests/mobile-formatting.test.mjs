@@ -178,7 +178,7 @@ test('format actions restore editor-owned selection, preserve it across actions 
   assert.doesNotMatch(editor.match(/const handleMobileFormat = \(actionId: string\) => \{[\s\S]*?\n  \};/)?.[0] ?? '', /setMobileSheet\(null\)/);
 });
 
-test('checklist state is accessible, toggles on its list item, and survives editor save and hydration', () => {
+test('checklist checkbox state stays accessible and updates without rebuilding the LI', () => {
   const attributes = new Map();
   const controlAttributes = new Map();
   const item = {
@@ -193,16 +193,16 @@ test('checklist state is accessible, toggles on its list item, and survives edit
   assert.equal(attributes.get('data-checked'), 'false');
   assert.equal(controlAttributes.get('aria-checked'), 'false');
 
-  assert.match(editor, /list\.dataset\.checklist = 'true'/);
-  assert.match(editor, /dataset\.noteChecklistToggle = 'true'/);
+  assert.match(editor, /const box = document\.createElement\('span'\)/);
+  assert.match(editor, /box\.contentEditable = 'false'/);
+  assert.match(editor, /box\.setAttribute\('role', 'checkbox'\)/);
+  assert.match(editor, /box\.setAttribute\('aria-checked'/);
+  assert.doesNotMatch(editor.match(/const makeChecklistToggle[\s\S]*?\n  \};/)?.[0] ?? '', /createElement\('button'\)/);
   assert.match(editor, /setChecklistItemChecked\(item, item\.dataset\.checked !== 'true'\)/);
-  assert.match(editor, /handleChecklistEnter/);
   assert.match(editor, /onBeforeInput=\{handleChecklistBeforeInput\}/);
   assert.match(editor, /item\.after\(nextItem\)/);
-  assert.match(editor, /if \(shouldExit\) \{[\s\S]*?list\.replaceWith\(paragraph\)/);
   assert.match(editor, /snapshot\.innerHTML = editorRef\.current\.innerHTML/);
   assert.match(editor, /withLayout\(writeManagedTags\(serialized/);
-  assert.match(editor, /editorRef\.current\.innerHTML = stripLayout\(note\.content \?\? ''\)/);
 });
 
 test('checklist Enter exits only on an actually empty collapsed row', () => {
@@ -220,10 +220,13 @@ test('checklist Enter exits only on an actually empty collapsed row', () => {
   assert.match(context, /prepareChecklistItem\(item\)/);
   assert.match(enter, /const shouldExit = shouldExitChecklistOnEnter/);
   assert.ok(enter.indexOf('shouldExitChecklistOnEnter') < enter.indexOf('range.deleteContents()'), 'classify the original row before deleting a selection');
-  assert.match(enter, /nextItem\.append\(makeChecklistToggle\(false\), nextText\)/);
+  assert.match(enter, /nextItem\.append\(makeChecklistToggle\(false\)\)/);
+  assert.match(enter, /const nextText = makeChecklistText\(\)/);
+  assert.match(enter, /nextText\.append\(remainder\)/);
   assert.match(enter, /item\.after\(nextItem\)/);
-  assert.match(enter, /caret\.setStart\(nextText, 0\)/);
-  assert.match(enter, /lastCaretRange\.current = caret\.cloneRange\(\)/);
+  assert.match(enter, /placeCaretInChecklistText\(nextText\)/);
+  assert.match(enter, /createdText\.contains\(active\.anchorNode\)/);
+  assert.doesNotMatch(enter, /caret\.setStart\(nextItem/);
   assert.match(keydown, /event\.preventDefault\(\)/);
   assert.match(beforeInput, /inputType !== 'insertParagraph' && inputType !== 'insertLineBreak'/);
   assert.match(beforeInput, /event\.preventDefault\(\)/);
@@ -232,7 +235,7 @@ test('checklist Enter exits only on an actually empty collapsed row', () => {
   assert.match(beforeInput, /inputType === 'insertLineBreak'\) performChecklistLineBreak\(context\)/);
 });
 
-test('checklist row creation and removal never delegate Enter or start-of-row Backspace to browser defaults', () => {
+test('checklist intercepts only structural input and keeps text entry browser-native', () => {
   const editorSource = editor;
   const keydown = editorSource.match(/const handleChecklistEnter: React\.KeyboardEventHandler<HTMLDivElement> = \(event\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
   const beforeInput = editorSource.match(/const handleChecklistBeforeInput: React\.FormEventHandler<HTMLDivElement> = \(event\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
@@ -245,7 +248,8 @@ test('checklist row creation and removal never delegate Enter or start-of-row Ba
   assert.match(beforeInput, /event\.preventDefault\(\)/);
   assert.match(enter, /range\.deleteContents\(\)/);
   assert.match(enter, /tail\.extractContents\(\)/);
-  assert.match(backspace, /previousText\.append|caret\.insertNode\(content\)/);
+  assert.match(backspace, /while \(currentText\.firstChild\) previousText\.append\(currentText\.firstChild\)/);
+  assert.match(backspace, /placeCaretInChecklistText\(previousText, caretOffset\)/);
   assert.match(backspace, /item\.remove\(\)/);
   assert.match(backspace, /list\.before\(paragraph\)|list\.replaceWith\(paragraph\)/);
   assert.match(lineBreak, /range\.insertNode\(lineBreak\)/);
@@ -253,15 +257,23 @@ test('checklist row creation and removal never delegate Enter or start-of-row Ba
   assert.doesNotMatch(backspace, /execCommand/);
 });
 
-test('repeated checklist Enter uses one canonical checkbox-plus-text row shape at any row count', () => {
+test('repeated checklist Enter creates canonical checkbox and inherited editable text spans', () => {
   const makeToggle = editor.match(/const makeChecklistToggle = \(checked: boolean\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  const makeText = editor.match(/const makeChecklistText = \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
   const prepare = editor.match(/const prepareChecklistItem = \(item: HTMLLIElement\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
   const enter = editor.match(/const performChecklistEnter = \(context:[\s\S]*?\n  \};/)?.[0] ?? '';
-  assert.match(makeToggle, /button\.contentEditable = 'false'/);
-  assert.match(prepare, /item\.replaceChildren\(toggle, text\)/);
-  assert.match(prepare, /text\.className = 'note-checklist-text'/);
+  assert.match(makeToggle, /document\.createElement\('span'\)/);
+  assert.match(makeToggle, /box\.contentEditable = 'false'/);
+  assert.match(makeText, /text\.className = 'note-checklist-text'/);
+  assert.doesNotMatch(makeText, /contentEditable/);
+  assert.match(prepare, /item\.replaceChildren\(box, text\)/);
+  assert.match(prepare, /child\.classList\.contains\('note-checklist-text'\)/);
   assert.match(enter, /nextItem\.dataset\.checked = 'false'/);
-  assert.match(enter, /nextItem\.append\(makeChecklistToggle\(false\), nextText\)/);
+  assert.match(enter, /nextItem\.dataset\.checklistItem = 'true'/);
+  assert.match(enter, /nextItem\.append\(makeChecklistToggle\(false\)\)/);
+  assert.match(enter, /nextItem\.append\(nextText\)/);
+  assert.match(enter, /ensureChecklistTextPlaceholder\(nextText\)/);
+  assert.doesNotMatch(enter, /createElement\('button'\)/);
   for (const rowCount of [5, 10]) {
     const repeatedEnterCount = rowCount - 1;
     assert.ok(repeatedEnterCount > 0 && enter.includes('item.after(nextItem)'), `${rowCount} rows are produced by repeating the same explicit row insertion`);
@@ -282,21 +294,74 @@ test('checklist checkbox toggles only state, and malformed adjacent text is repa
   assert.doesNotMatch(setChecked, /replaceChildren|replaceWith|append\(|remove\(\)/);
   assert.match(normalize, /child instanceof HTMLParagraphElement/);
   assert.match(normalize, /candidates\.length !== 1/);
-  assert.match(normalize, /target\.replaceChildren\(\)/);
   assert.match(normalize, /paragraph\.remove\(\)/);
   assert.match(normalize, /nestedLists = Array\.from\(list\.querySelectorAll\('ul\[data-checklist\]'\)\)\.reverse\(\)/);
 });
 
-test('checklist normalization restores the single checkbox-plus-text row structure for loaded and edited notes', () => {
+test('checklist hydration migrates legacy wrappers to direct LI text and serialization stays in the existing pipeline', () => {
   const prepare = editor.match(/const prepareChecklistItem = \(item: HTMLLIElement\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
   assert.match(prepare, /const originalChildren = Array\.from\(item\.childNodes\)/);
-  assert.match(prepare, /text\.replaceChildren\(\.\.\.content\)/);
-  assert.match(prepare, /item\.replaceChildren\(toggle, text\)/);
+  assert.match(prepare, /target\.push\(\.\.\.Array\.from\(child\.childNodes\)\)/);
+  assert.match(prepare, /item\.replaceChildren\(box, text\)/);
+  assert.match(prepare, /item\.dataset\.checklistItem = 'true'/);
   assert.match(editor, /for \(const list of Array\.from\(editor\.querySelectorAll\('ul\[data-checklist\]'\)\)\)/);
   assert.match(editor, /prepareChecklistItem\(child\)/);
   assert.match(editor, /normalizeChecklistMarkup\(editorRef\.current\)/);
   assert.match(editor, /snapshot\.innerHTML = editorRef\.current\.innerHTML/);
+  assert.match(editor, /text\.replaceChildren\(\)/);
   assert.match(editor, /commitEditor\(\);\s*rememberCaret\(\);\s*refreshActiveFormatting\(\)/);
+});
+
+test('checklist contract keeps a noneditable checkbox and inherited text span with Safari caret restoration', () => {
+  const checklist = editor.match(/const makeChecklistToggle[\s\S]*?const handleChecklistBeforeInput/)?.[0] ?? '';
+  const enter = editor.match(/const performChecklistEnter = \(context:[\s\S]*?\n  \};/)?.[0] ?? '';
+  const input = editor.match(/onInput=\{\(\) => \{[\s\S]*?\}\}[\s\S]*?className=\{`note-content/)?.[0] ?? '';
+  assert.match(checklist, /item\.dataset\.checklistItem = 'true'/);
+  assert.match(checklist, /box\.contentEditable = 'false'/);
+  assert.match(checklist, /item\.replaceChildren\(box, text\)/);
+  assert.doesNotMatch(checklist, /document\.createElement\('button'\)/);
+  assert.match(enter, /nextItem\.append\(makeChecklistToggle\(false\)\)/);
+  assert.match(enter, /placeCaretInChecklistText\(nextText\)/);
+  const caretHelper = editor.match(/const placeCaretAtEditableElement = \(element: HTMLElement, position = 0\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  const checklistCaret = editor.match(/const placeCaretInChecklistText = \(text: HTMLSpanElement, position = 0\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  assert.match(checklistCaret, /ensureChecklistTextPlaceholder\(text\)/);
+  assert.match(checklistCaret, /placeCaretAtEditableElement\(text, caretPosition\)/);
+  assert.match(caretHelper, /range\.setStart\(element,/);
+  assert.match(caretHelper, /selection\.setBaseAndExtent\(element,/);
+  assert.match(input, /commitEditor\(\)/);
+  assert.doesNotMatch(input, /innerHTML\s*=/);
+  assert.match(css, /\.note-checklist-box:focus-visible/);
+  assert.match(css, /\.note-checklist-text\s*\{\s*min-width:\s*0/);
+});
+
+test('iPhone checklist A → Enter → B → CCCCC keeps caret in row two and prevents duplicate Enter handling', () => {
+  const enter = editor.match(/const performChecklistEnter = \(context:[\s\S]*?\n  \};/)?.[0] ?? '';
+  const caret = editor.match(/const placeCaretInChecklistText = \(text: HTMLSpanElement, position = 0\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  const beforeInput = editor.match(/const handleChecklistBeforeInput: React\.FormEventHandler<HTMLDivElement> = \(event\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  const keydown = editor.match(/const handleChecklistEnter: React\.KeyboardEventHandler<HTMLDivElement> = \(event\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  assert.match(enter, /nextText\.append\(remainder\)/);
+  assert.match(enter, /ensureChecklistTextPlaceholder\(nextText\)/);
+  assert.match(enter, /placeCaretInChecklistText\(nextText\)/);
+  assert.match(enter, /requestAnimationFrame\(/);
+  assert.match(caret, /placeCaretAtEditableElement\(text, caretPosition\)/);
+  assert.match(editor, /return selection\.anchorNode === element \|\| element\.contains\(selection\.anchorNode\)/);
+  assert.match(beforeInput, /checklistKeydownEnterPending\.current === inputType/);
+  assert.match(keydown, /checklistKeydownEnterPending\.current = inputType/);
+  assert.doesNotMatch(beforeInput, /inputType === 'insertText'/);
+  assert.doesNotMatch(keydown, /event\.target\.focus|editor\.blur/);
+});
+
+test('10-row checklist stress path repeats canonical row insertion with no paragraph escape', () => {
+  const enter = editor.match(/const performChecklistEnter = \(context:[\s\S]*?\n  \};/)?.[0] ?? '';
+  const prepare = editor.match(/const prepareChecklistItem = \(item: HTMLLIElement\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  assert.match(enter, /item\.after\(nextItem\)/);
+  assert.match(enter, /nextItem\.append\(makeChecklistToggle\(false\)\)/);
+  assert.match(enter, /nextItem\.append\(nextText\)/);
+  assert.match(enter, /placeCaretInChecklistText\(nextText\)/);
+  assert.match(prepare, /ensureChecklistTextPlaceholder\(text\)/);
+  assert.match(enter, /commitEditor\(\)/);
+  const rowCreation = enter.split('} else {')[1] ?? '';
+  assert.doesNotMatch(rowCreation, /list\.after\(paragraph\)/);
 });
 
 test('checklist and formatted content remain in the existing editable HTML and mobile actions reuse the editor toolbar', () => {
@@ -308,5 +373,6 @@ test('checklist and formatted content remain in the existing editable HTML and m
   for (const action of ['Định dạng (Aa)', 'Checklist', 'Đính kèm', 'Vẽ và đánh dấu', 'Tạo ghi chú mới']) assert.ok(toolbar.includes(action));
   assert.match(toolbar, /mobileKeyboardOpen && <button/);
   assert.match(css, /\.note-content ul\[data-checklist\] > li/);
-  assert.match(css, /\.note-content \.note-checklist-toggle:focus-visible/);
+  assert.match(css, /\.note-content ul\[data-checklist\] > li > \.note-checklist-text/);
+  assert.match(css, /\.note-content \.note-checklist-box:focus-visible/);
 });

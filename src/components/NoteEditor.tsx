@@ -209,6 +209,7 @@ export function NoteEditor({
   const [selectedInlineAttachment, setSelectedInlineAttachment] = useState<HTMLElement | null>(null);
   const [inlineFrame, setInlineFrame] = useState<DOMRect | null>(null);
   const lastCaretRange = useRef<Range | null>(null);
+  const checklistKeydownEnterPending = useRef<'insertParagraph' | 'insertLineBreak' | null>(null);
   const inlineDrag = useRef<{ element: HTMLElement; x: number; y: number; moved: boolean } | null>(null);
   const editorDrag = useRef<EditorDragSession | null>(null);
   const suppressMediaClick = useRef<{ source: HTMLElement; until: number } | null>(null);
@@ -412,6 +413,9 @@ export function NoteEditor({
     if (!editorRef.current) return;
     const snapshot = document.createElement('div');
     snapshot.innerHTML = editorRef.current.innerHTML;
+    for (const text of Array.from(snapshot.querySelectorAll('.note-checklist-text'))) {
+      if (!text.textContent && !text.querySelector('img,[data-noted-attachment-id]') && Array.from(text.childNodes).every((node) => node instanceof HTMLBRElement)) text.replaceChildren();
+    }
     const serialized = removeEmptyInlineFormats(snapshot);
     const html = withLayout(writeManagedTags(serialized, readManagedTags(contentRef.current)), layout);
     contentRef.current = html;
@@ -659,51 +663,83 @@ export function NoteEditor({
   }, [desktopPresentation, note?.id]);
 
   const makeChecklistToggle = (checked: boolean) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.contentEditable = 'false';
-    button.tabIndex = 0;
-    button.className = 'note-checklist-toggle';
-    button.dataset.noteChecklistToggle = 'true';
-    button.setAttribute('role', 'checkbox');
-    button.setAttribute('aria-checked', String(checked));
-    button.setAttribute('aria-label', checked ? 'Bỏ đánh dấu mục' : 'Đánh dấu mục');
-    return button;
+    const box = document.createElement('span');
+    box.contentEditable = 'false';
+    box.tabIndex = 0;
+    box.className = 'note-checklist-box';
+    box.dataset.noteChecklistToggle = 'true';
+    box.setAttribute('role', 'checkbox');
+    box.setAttribute('aria-checked', String(checked));
+    box.setAttribute('aria-label', checked ? 'Bỏ đánh dấu mục' : 'Đánh dấu mục');
+    return box;
   };
 
+  const makeChecklistText = () => {
+    const text = document.createElement('span');
+    text.className = 'note-checklist-text';
+    return text;
+  };
+
+  const ensureChecklistTextPlaceholder = (text: HTMLSpanElement) => {
+    if (!text.childNodes.length) text.append(document.createElement('br'));
+  };
+
+  const placeCaretAtEditableElement = (element: HTMLElement, position = 0) => {
+    const selection = window.getSelection();
+    if (!selection) return false;
+    const range = document.createRange();
+    range.setStart(element, Math.max(0, Math.min(position, element.childNodes.length)));
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    try { selection.setBaseAndExtent(element, range.startOffset, element, range.startOffset); } catch { /* Range selection is the Safari fallback. */ }
+    lastCaretRange.current = range.cloneRange();
+    return selection.anchorNode === element || element.contains(selection.anchorNode);
+  };
+
+  const placeCaretInChecklistText = (text: HTMLSpanElement, position = 0) => {
+    ensureChecklistTextPlaceholder(text);
+    const caretPosition = text.lastChild instanceof HTMLBRElement && position >= text.childNodes.length
+      ? Math.max(0, text.childNodes.length - 1)
+      : position;
+    return placeCaretAtEditableElement(text, caretPosition);
+  };
+
+  // The LI owns the editable text flow. This only runs while hydrating legacy
+  // markup or before a structural edit, never on ordinary character input.
   const prepareChecklistItem = (item: HTMLLIElement) => {
+    item.dataset.checklistItem = 'true';
     item.dataset.checked = item.dataset.checked === 'true' ? 'true' : 'false';
     const originalChildren = Array.from(item.childNodes);
-    let toggle = originalChildren.find((child) => child instanceof HTMLButtonElement && child.hasAttribute('data-note-checklist-toggle')) as HTMLButtonElement | undefined;
-    if (!toggle) toggle = makeChecklistToggle(item.dataset.checked === 'true');
-    let text = originalChildren.find((child) => child instanceof HTMLSpanElement && child.classList.contains('note-checklist-text')) as HTMLSpanElement | undefined;
-    if (!text) {
-      text = document.createElement('span');
-      text.className = 'note-checklist-text';
-    }
-    const canonical = originalChildren.length === 2 && originalChildren[0] === toggle && originalChildren[1] === text;
-    if (!canonical) {
-      const content: Node[] = [];
-      const appendContent = (child: Node) => {
-        if (child instanceof HTMLElement && /^(P|DIV)$/.test(child.tagName)) {
-          if (content.length && !(content[content.length - 1] instanceof HTMLBRElement)) content.push(document.createElement('br'));
-          content.push(...Array.from(child.childNodes));
-        } else {
-          content.push(child);
-        }
-      };
-      for (const child of originalChildren) {
-        if (child === toggle) continue;
-        if (child === text) {
-          for (const contentChild of Array.from(text.childNodes)) appendContent(contentChild);
-        } else if (child.nodeType !== Node.TEXT_NODE || child.textContent?.trim()) appendContent(child);
+    const existingBox = originalChildren.find((child) => child instanceof HTMLSpanElement && child.hasAttribute('data-note-checklist-toggle')) as HTMLSpanElement | undefined;
+    const box = existingBox ?? makeChecklistToggle(item.dataset.checked === 'true');
+    const isControl = (child: Node) => child instanceof Element && child.hasAttribute('data-note-checklist-toggle');
+    const isLegacyText = (child: Node) => child instanceof HTMLSpanElement && child.classList.contains('note-checklist-text');
+    const appendEditable = (target: Node[], child: Node) => {
+      if (isControl(child)) return;
+      if (isLegacyText(child)) {
+        target.push(...Array.from(child.childNodes));
+      } else if (child instanceof HTMLElement && /^(P|DIV)$/.test(child.tagName)) {
+        if (target.length && !(target[target.length - 1] instanceof HTMLBRElement)) target.push(document.createElement('br'));
+        target.push(...Array.from(child.childNodes));
+      } else {
+        target.push(child);
       }
-      text.replaceChildren(...content);
-      item.replaceChildren(toggle, text);
+    };
+    const existingText = originalChildren.find(isLegacyText) as HTMLSpanElement | undefined;
+    const canonical = originalChildren[0] === box && existingText instanceof HTMLSpanElement && originalChildren[1] === existingText && originalChildren.length === 2;
+    if (!canonical) {
+      const editable: Node[] = [];
+      originalChildren.forEach((child) => appendEditable(editable, child));
+      const text = makeChecklistText();
+      text.append(...editable);
+      ensureChecklistTextPlaceholder(text);
+      item.replaceChildren(box, text);
+    } else {
+      ensureChecklistTextPlaceholder(existingText);
     }
     setChecklistItemChecked(item, item.dataset.checked === 'true');
-    if (!text.childNodes.length) text.append(document.createElement('br'));
-    return { toggle, text };
+    return { toggle: box, text: item.querySelector<HTMLSpanElement>(':scope > .note-checklist-text')! };
   };
 
   const normalizeChecklistMarkup = (editor: HTMLDivElement) => {
@@ -712,6 +748,7 @@ export function NoteEditor({
       let pendingItem: HTMLLIElement | null = null;
       for (const child of Array.from(list.childNodes)) {
         if (child instanceof HTMLLIElement) {
+          if (pendingItem) prepareChecklistItem(pendingItem);
           pendingItem = null;
           prepareChecklistItem(child);
           continue;
@@ -748,29 +785,30 @@ export function NoteEditor({
       if (!paragraph.textContent && !paragraph.querySelector('img,[data-noted-attachment-id]')) continue;
       const previousList = paragraph.previousElementSibling;
       const nextList = paragraph.nextElementSibling;
-      const candidates: HTMLSpanElement[] = [];
+      const candidates: HTMLLIElement[] = [];
       if (previousList instanceof HTMLUListElement && previousList.hasAttribute('data-checklist')) {
         const lastItem = previousList.lastElementChild;
         if (lastItem instanceof HTMLLIElement) {
-          const text = prepareChecklistItem(lastItem).text;
-          if (!text.textContent && !text.querySelector('img,[data-noted-attachment-id]')) candidates.push(text);
+          prepareChecklistItem(lastItem);
+          if (!lastItem.textContent && !lastItem.querySelector('img,[data-noted-attachment-id]')) candidates.push(lastItem);
         }
       }
       if (nextList instanceof HTMLUListElement && nextList.hasAttribute('data-checklist')) {
         const firstItem = nextList.firstElementChild;
         if (firstItem instanceof HTMLLIElement) {
-          const text = prepareChecklistItem(firstItem).text;
-          if (!text.textContent && !text.querySelector('img,[data-noted-attachment-id]')) candidates.push(text);
+          prepareChecklistItem(firstItem);
+          if (!firstItem.textContent && !firstItem.querySelector('img,[data-noted-attachment-id]')) candidates.push(firstItem);
         }
       }
       if (candidates.length !== 1) continue;
       const target = candidates[0];
-      target.replaceChildren();
+      const text = prepareChecklistItem(target).text;
+      if (text.childNodes.length === 1 && text.firstChild instanceof HTMLBRElement) text.replaceChildren();
       for (const child of Array.from(paragraph.childNodes)) {
-        if (child instanceof HTMLElement && /^(P|DIV)$/.test(child.tagName)) target.append(...Array.from(child.childNodes));
-        else target.append(child);
+        if (child instanceof HTMLElement && /^(P|DIV)$/.test(child.tagName)) text.append(...Array.from(child.childNodes));
+        else text.append(child);
       }
-      if (!target.childNodes.length) target.append(document.createElement('br'));
+      ensureChecklistTextPlaceholder(text);
       paragraph.remove();
     }
   };
@@ -784,13 +822,11 @@ export function NoteEditor({
     for (const item of Array.from(list.children)) {
       if (!(item instanceof HTMLLIElement)) continue;
       item.removeAttribute('data-checked');
-      const toggle = Array.from(item.children).find((child) => child instanceof HTMLButtonElement && child.hasAttribute('data-note-checklist-toggle'));
+      const toggle = Array.from(item.children).find((child) => child instanceof HTMLElement && child.hasAttribute('data-note-checklist-toggle'));
       toggle?.remove();
-      const text = Array.from(item.children).find((child) => child instanceof HTMLSpanElement && child.classList.contains('note-checklist-text'));
-      if (text) {
-        while (text.firstChild) text.before(text.firstChild);
-        text.remove();
-      }
+      item.removeAttribute('data-checklist-item');
+      const legacyText = Array.from(item.children).find((child) => child instanceof HTMLSpanElement && child.classList.contains('note-checklist-text'));
+      if (legacyText) { while (legacyText.firstChild) legacyText.before(legacyText.firstChild); legacyText.remove(); }
     }
   };
 
@@ -827,26 +863,22 @@ export function NoteEditor({
     if (!list) return false;
     list.dataset.checklist = 'true';
     const selection = window.getSelection();
-    let caretTarget: HTMLSpanElement | null = null;
+    let caretTarget: HTMLLIElement | null = null;
     for (const child of Array.from(list.children)) {
       if (!(child instanceof HTMLLIElement)) continue;
-      const { text } = prepareChecklistItem(child);
-      if (selection?.anchorNode && child.contains(selection.anchorNode)) caretTarget = text;
+      prepareChecklistItem(child);
+      if (selection?.anchorNode && child.contains(selection.anchorNode)) caretTarget = child;
     }
     if (restored && !caretTarget) {
       const item = list.querySelector(':scope > li:last-child');
-      if (item instanceof HTMLLIElement) caretTarget = prepareChecklistItem(item).text;
+      if (item instanceof HTMLLIElement) { prepareChecklistItem(item); caretTarget = item; }
     }
     if (caretTarget && selection) {
       const activeRange = selection.rangeCount ? selection.getRangeAt(0) : null;
-      if (activeRange && caretTarget.contains(activeRange.startContainer)) lastCaretRange.current = activeRange.cloneRange();
+      const text = caretTarget.querySelector<HTMLSpanElement>(':scope > .note-checklist-text');
+      if (activeRange && text?.contains(activeRange.startContainer)) lastCaretRange.current = activeRange.cloneRange();
       else {
-        const range = document.createRange();
-        range.selectNodeContents(caretTarget);
-        range.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(range);
-        lastCaretRange.current = range.cloneRange();
+        if (text) placeCaretInChecklistText(text);
       }
     }
     return true;
@@ -929,26 +961,30 @@ export function NoteEditor({
         : null;
     const node = range?.startContainer;
     const element = node instanceof Element ? node : node?.parentElement;
-    const item = element?.closest('li[data-checked]');
+    const item = element?.closest('li[data-checklist-item],li[data-checked]');
     const list = item?.parentElement;
     if (!(editor && selection && range && item instanceof HTMLLIElement && list instanceof HTMLUListElement && list.hasAttribute('data-checklist'))) return null;
-    const { text } = prepareChecklistItem(item);
-    if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer) || !text.contains(range.startContainer) || !text.contains(range.endContainer)) {
-      range = document.createRange();
-      range.selectNodeContents(text);
-      range.collapse(false);
-      selection.removeAllRanges();
-      selection.addRange(range);
-      lastCaretRange.current = range.cloneRange();
+    prepareChecklistItem(item);
+    const text = item.querySelector<HTMLSpanElement>(':scope > .note-checklist-text');
+    if (!(text instanceof HTMLSpanElement)) return null;
+    const currentSelection = window.getSelection();
+    const currentRange = currentSelection?.rangeCount ? currentSelection.getRangeAt(0) : null;
+    range = currentRange && text.contains(currentRange.startContainer) && text.contains(currentRange.endContainer)
+      ? currentRange
+      : null;
+    if (!range) {
+      placeCaretInChecklistText(text);
+      range = currentSelection?.rangeCount ? currentSelection.getRangeAt(0) : null;
     }
-    return { editor, selection, range, item, list, text };
+    if (!range) return null;
+    return { editor, selection: currentSelection ?? selection, range, item, list, text };
   };
 
   const performChecklistEnter = (context: NonNullable<ReturnType<typeof getChecklistCaretContext>>) => {
-    const { selection, range, item, list, text } = context;
+    const { range, item, list, text } = context;
     const shouldExit = shouldExitChecklistOnEnter({
-      text: text.textContent,
-      hasMedia: Boolean(text.querySelector('img,[data-noted-attachment-id]')),
+      text: item.textContent,
+      hasMedia: Boolean(item.querySelector('img,[data-noted-attachment-id]')),
       selectionCollapsed: range.collapsed,
     });
     if (shouldExit) {
@@ -957,33 +993,33 @@ export function NoteEditor({
       paragraph.append(document.createElement('br'));
       if (!list.querySelector(':scope > li')) list.replaceWith(paragraph);
       else list.after(paragraph);
-      const caret = document.createRange();
-      caret.setStart(paragraph, 0);
-      caret.collapse(true);
-      selection.removeAllRanges();
-      selection.addRange(caret);
-      lastCaretRange.current = caret.cloneRange();
+      placeCaretAtEditableElement(paragraph);
     } else {
       range.deleteContents();
       const tail = range.cloneRange();
-      tail.selectNodeContents(text);
-      if (text.contains(range.startContainer)) tail.setStart(range.startContainer, range.startOffset);
-      else tail.collapse(false);
+      tail.setEnd(text, text.childNodes.length);
       const remainder = tail.extractContents();
       const nextItem = document.createElement('li');
+      nextItem.dataset.checklistItem = 'true';
       nextItem.dataset.checked = 'false';
-      const nextText = document.createElement('span');
-      nextText.className = 'note-checklist-text';
-      if (remainder.childNodes.length) nextText.append(remainder);
-      else nextText.append(document.createElement('br'));
-      nextItem.append(makeChecklistToggle(false), nextText);
+      nextItem.append(makeChecklistToggle(false));
+      const nextText = makeChecklistText();
+      nextText.append(remainder);
+      ensureChecklistTextPlaceholder(nextText);
+      nextItem.append(nextText);
+      ensureChecklistTextPlaceholder(text);
       item.after(nextItem);
-      const caret = document.createRange();
-      caret.setStart(nextText, 0);
-      caret.collapse(true);
-      selection.removeAllRanges();
-      selection.addRange(caret);
-      lastCaretRange.current = caret.cloneRange();
+      const placed = placeCaretInChecklistText(nextText);
+      if (!placed) {
+        const createdRow = nextItem;
+        requestAnimationFrame(() => {
+          if (!createdRow.isConnected) return;
+          const createdText = createdRow.querySelector<HTMLSpanElement>(':scope > .note-checklist-text');
+          if (!createdText) return;
+          const active = window.getSelection();
+          if (!active?.anchorNode || !createdText.contains(active.anchorNode)) placeCaretInChecklistText(createdText);
+        });
+      }
     }
     commitEditor();
     rememberCaret();
@@ -1005,57 +1041,43 @@ export function NoteEditor({
     refreshActiveFormatting();
   };
 
-  const isChecklistCaretAtStart = (text: HTMLSpanElement, range: Range) => {
-    if (!range.collapsed || !text.contains(range.startContainer)) return false;
+  const isChecklistCaretAtStart = (item: HTMLLIElement, range: Range) => {
+    if (!range.collapsed || !item.contains(range.startContainer)) return false;
     const prefix = document.createRange();
-    prefix.selectNodeContents(text);
+    prefix.setStart(item, 1);
     prefix.setEnd(range.startContainer, range.startOffset);
     const fragment = prefix.cloneContents();
     const hasMedia = Boolean(fragment.querySelector('img,[data-noted-attachment-id]'));
-    const emptyPlaceholder = !text.textContent && !text.querySelector('img,[data-noted-attachment-id]') && text.querySelectorAll('br').length === 1;
+    const emptyPlaceholder = !item.textContent && !item.querySelector('img,[data-noted-attachment-id]') && item.querySelectorAll('br').length === 1;
     return fragment.textContent === '' && !hasMedia && (!fragment.querySelector('br') || emptyPlaceholder);
   };
 
   const performChecklistBackspace = (context: NonNullable<ReturnType<typeof getChecklistCaretContext>>) => {
-    const { selection, range, item, list, text } = context;
-    if (!isChecklistCaretAtStart(text, range)) return false;
+    const { range, item, list } = context;
+    if (!isChecklistCaretAtStart(item, range)) return false;
     const previousItem = item.previousElementSibling;
     if (previousItem instanceof HTMLLIElement) {
+      prepareChecklistItem(previousItem);
+      if (previousItem.childNodes.length === 2 && previousItem.lastChild instanceof HTMLBRElement) previousItem.lastChild.remove();
       const previousText = prepareChecklistItem(previousItem).text;
-      if (previousText.innerHTML === '<br>') previousText.replaceChildren();
-      if (text.innerHTML !== '<br>') {
-        const content = document.createDocumentFragment();
-        while (text.firstChild) content.append(text.firstChild);
-        const caret = document.createRange();
-        caret.selectNodeContents(previousText);
-        caret.collapse(false);
-        caret.insertNode(content);
-        caret.collapse(true);
-        selection.removeAllRanges();
-        selection.addRange(caret);
-        lastCaretRange.current = caret.cloneRange();
-      } else {
-        const caret = document.createRange();
-        caret.selectNodeContents(previousText);
-        caret.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(caret);
-        lastCaretRange.current = caret.cloneRange();
+      const currentText = prepareChecklistItem(item).text;
+      if (currentText.textContent || currentText.querySelector('img,[data-noted-attachment-id]')) {
+        if (previousText.childNodes.length === 1 && previousText.firstChild instanceof HTMLBRElement) previousText.replaceChildren();
+        while (currentText.firstChild) previousText.append(currentText.firstChild);
       }
+      const caretOffset = previousText.childNodes.length;
+      placeCaretInChecklistText(previousText, caretOffset);
       item.remove();
     } else {
       const paragraph = document.createElement('p');
-      if (text.innerHTML === '<br>') paragraph.append(document.createElement('br'));
-      else while (text.firstChild) paragraph.append(text.firstChild);
+      const text = prepareChecklistItem(item).text;
+      while (text.firstChild) paragraph.append(text.firstChild);
+      if (!paragraph.textContent && !paragraph.querySelector('img,[data-noted-attachment-id]')) paragraph.replaceChildren(document.createElement('br'));
+      else if (paragraph.querySelectorAll('br').length === 1 && paragraph.childNodes.length === 1) paragraph.replaceChildren(document.createElement('br'));
       item.remove();
       if (list.querySelector(':scope > li')) list.before(paragraph);
       else list.replaceWith(paragraph);
-      const caret = document.createRange();
-      caret.setStart(paragraph, 0);
-      caret.collapse(true);
-      selection.removeAllRanges();
-      selection.addRange(caret);
-      lastCaretRange.current = caret.cloneRange();
+      placeCaretAtEditableElement(paragraph);
     }
     commitEditor();
     rememberCaret();
@@ -1064,11 +1086,18 @@ export function NoteEditor({
   };
 
   const handleChecklistBeforeInput: React.FormEventHandler<HTMLDivElement> = (event) => {
-    const inputType = (event.nativeEvent as InputEvent).inputType;
+    const nativeEvent = event.nativeEvent as InputEvent;
+    if (nativeEvent.isComposing) return;
+    const inputType = nativeEvent.inputType;
     if (inputType !== 'insertParagraph' && inputType !== 'insertLineBreak' && inputType !== 'deleteContentBackward') return;
+    if (checklistKeydownEnterPending.current === inputType) {
+      event.preventDefault();
+      checklistKeydownEnterPending.current = null;
+      return;
+    }
     const context = getChecklistCaretContext();
     if (!context) return;
-    if (inputType === 'deleteContentBackward' && !isChecklistCaretAtStart(context.text, context.range)) return;
+    if (inputType === 'deleteContentBackward' && !isChecklistCaretAtStart(context.item, context.range)) return;
     event.preventDefault();
     if (inputType === 'deleteContentBackward') performChecklistBackspace(context);
     else if (inputType === 'insertLineBreak') performChecklistLineBreak(context);
@@ -1076,23 +1105,43 @@ export function NoteEditor({
   };
 
   const handleChecklistEnter: React.KeyboardEventHandler<HTMLDivElement> = (event) => {
-    if ((event.target as HTMLElement).closest('[data-note-checklist-toggle]')) return;
+    const checkbox = (event.target as HTMLElement).closest<HTMLElement>('[data-note-checklist-toggle]');
+    if (checkbox) {
+      if (event.key === ' ' || event.key === 'Enter') {
+        event.preventDefault();
+        event.stopPropagation();
+        const item = checkbox.closest('li[data-checklist-item]');
+        if (item instanceof HTMLLIElement) {
+          setChecklistItemChecked(item, item.dataset.checked !== 'true');
+          commitEditor();
+        }
+      }
+      return;
+    }
     if ((event.key !== 'Enter' && event.key !== 'Backspace') || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
     const context = getChecklistCaretContext();
     if (!context) return;
-    if (event.key === 'Backspace' && !isChecklistCaretAtStart(context.text, context.range)) return;
+    if (event.key === 'Backspace' && !isChecklistCaretAtStart(context.item, context.range)) return;
     event.preventDefault();
     if (event.key === 'Backspace') performChecklistBackspace(context);
-    else if (event.shiftKey) performChecklistLineBreak(context);
-    else performChecklistEnter(context);
+    else {
+      const inputType = event.shiftKey ? 'insertLineBreak' : 'insertParagraph';
+      checklistKeydownEnterPending.current = inputType;
+      const pendingType = inputType;
+      requestAnimationFrame(() => {
+        if (checklistKeydownEnterPending.current === pendingType) checklistKeydownEnterPending.current = null;
+      });
+      if (event.shiftKey) performChecklistLineBreak(context);
+      else performChecklistEnter(context);
+    }
   };
 
   const handleChecklistClick: React.MouseEventHandler<HTMLDivElement> = (event) => {
-    const control = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-note-checklist-toggle]');
+    const control = (event.target as HTMLElement).closest<HTMLElement>('[data-note-checklist-toggle]');
     if (!control || !editorRef.current?.contains(control)) return;
     event.preventDefault();
     event.stopPropagation();
-    const item = control.closest('li[data-checked]');
+    const item = control.closest('li[data-checklist-item]');
     if (!(item instanceof HTMLLIElement)) return;
     setChecklistItemChecked(item, item.dataset.checked !== 'true');
     commitEditor();

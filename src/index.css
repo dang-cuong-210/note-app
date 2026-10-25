@@ -264,34 +264,40 @@
   padding-left: 0.2em;
 }
 .note-content ul[data-checklist] > li {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
-  align-items: start;
-  gap: 0.55em;
+  position: relative;
+  min-height: 1.5em;
+  padding-left: 1.8em;
   list-style: none;
+  overflow-wrap: anywhere;
 }
-.note-content .note-checklist-toggle {
-  display: grid;
+.note-content ul[data-checklist] > li > .note-checklist-text {
+  min-width: 0;
+  white-space: pre-wrap;
+}
+.note-content .note-checklist-box {
+  position: absolute;
+  left: 0;
+  top: 0.24em;
+  display: inline-grid;
   width: 18px;
   height: 18px;
   place-items: center;
-  margin-top: 0.24em;
   border: 1.5px solid var(--text-tertiary);
   border-radius: 4px;
   cursor: pointer;
   background: transparent;
-  padding: 0;
+  box-sizing: border-box;
 }
-.note-content .note-checklist-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.note-content ul[data-checklist] > li[data-checked="true"] .note-checklist-text {
+.note-content .note-checklist-box:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.note-content ul[data-checklist] > li[data-checked="true"] {
   color: var(--text-tertiary);
   text-decoration: line-through;
 }
-.note-content ul[data-checklist] > li[data-checked="true"] .note-checklist-toggle {
+.note-content ul[data-checklist] > li[data-checked="true"] .note-checklist-box {
   background: var(--accent);
   border-color: var(--accent);
 }
-.note-content ul[data-checklist] > li[data-checked="true"] .note-checklist-toggle::after {
+.note-content ul[data-checklist] > li[data-checked="true"] .note-checklist-box::after {
   content: '';
   width: 5px;
   height: 9px;
@@ -299,7 +305,6 @@
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
-.note-content .note-checklist-text { min-width: 0; overflow-wrap: anywhere; }
 
 /* Toggles / collapsible */
 .editor-content details {
