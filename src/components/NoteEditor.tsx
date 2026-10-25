@@ -415,6 +415,12 @@ export function NoteEditor({
     const snapshot = document.createElement('div');
     snapshot.innerHTML = editorRef.current.innerHTML;
     for (const text of Array.from(snapshot.querySelectorAll('.note-checklist-text'))) {
+      for (const node of Array.from(text.childNodes)) {
+        if (node.nodeType !== Node.TEXT_NODE) continue;
+        const clean = (node.textContent ?? '').replace(/\u200B/g, '');
+        if (!clean) node.remove();
+        else if (clean !== node.textContent) node.textContent = clean;
+      }
       if (!text.textContent && !text.querySelector('img,[data-noted-attachment-id]') && Array.from(text.childNodes).every((node) => node instanceof HTMLBRElement)) text.replaceChildren();
     }
     const serialized = removeEmptyInlineFormats(snapshot);
@@ -682,7 +688,12 @@ export function NoteEditor({
   };
 
   const ensureChecklistTextPlaceholder = (text: HTMLSpanElement) => {
-    if (!text.childNodes.length) text.append(document.createElement('br'));
+    const hasVisibleText = (text.textContent ?? '').replace(/\u200B/g, '').length > 0;
+    const hasMedia = Boolean(text.querySelector('img,[data-noted-attachment-id]'));
+    if (text.childNodes.length === 1 && text.firstChild?.nodeType === Node.TEXT_NODE && text.textContent === '\u200B') return;
+    if (!hasVisibleText && !hasMedia && Array.from(text.childNodes).every((node) => node instanceof HTMLBRElement || (node.nodeType === Node.TEXT_NODE && node.textContent?.replace(/\u200B/g, '') === ''))) {
+      text.replaceChildren(document.createTextNode('\u200B'));
+    }
   };
 
   const placeCaretAtEditableElement = (element: HTMLElement, position = 0) => {
@@ -700,10 +711,83 @@ export function NoteEditor({
 
   const placeCaretInChecklistText = (text: HTMLSpanElement, position = 0) => {
     ensureChecklistTextPlaceholder(text);
-    const caretPosition = text.lastChild instanceof HTMLBRElement && position >= text.childNodes.length
-      ? Math.max(0, text.childNodes.length - 1)
-      : position;
-    return placeCaretAtEditableElement(text, caretPosition);
+    const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+    const textNodes: Text[] = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+    const anchor = (position >= text.childNodes.length ? textNodes[textNodes.length - 1] : textNodes[0]) ?? document.createTextNode('');
+    if (!anchor.parentNode) text.insertBefore(anchor, text.firstChild);
+    const caretPosition = position >= text.childNodes.length
+      ? anchor.textContent?.length ?? 0
+      : Math.max(0, Math.min(position, anchor.textContent?.length ?? 0));
+    const selection = window.getSelection();
+    if (!selection) return false;
+    const range = document.createRange();
+    range.setStart(anchor, caretPosition);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    try { selection.setBaseAndExtent(anchor, caretPosition, anchor, caretPosition); } catch { /* Range selection is the Safari fallback. */ }
+    lastCaretRange.current = range.cloneRange();
+    return selection.anchorNode === anchor && selection.anchorOffset === caretPosition;
+  };
+
+  const describeChecklistSelection = (label: string, target?: HTMLSpanElement) => {
+    if (!import.meta.env.DEV) return;
+    const selection = window.getSelection();
+    const anchor = selection?.anchorNode;
+    console.debug('[Tanooki checklist caret]', label, {
+      activeElement: document.activeElement,
+      anchorNode: anchor,
+      anchorOffset: selection?.anchorOffset,
+      activeChecklistRow: anchor instanceof Element ? anchor.closest('li[data-checklist-item]') : anchor?.parentElement?.closest('li[data-checklist-item]'),
+      activeChecklistText: anchor instanceof Element ? anchor.closest('.note-checklist-text') : anchor?.parentElement?.closest('.note-checklist-text'),
+      targetText: target,
+      targetContainsSelection: Boolean(target && anchor && target.contains(anchor)),
+    });
+  };
+
+  const focusChecklistTextOnIOS = (text: HTMLSpanElement, row: HTMLLIElement) => {
+    const editor = editorRef.current;
+    if (!editor || !text.isConnected || !row.isConnected) return false;
+    const selection = window.getSelection();
+    if (!selection) return false;
+    ensureChecklistTextPlaceholder(text);
+    const textAnchor = Array.from(text.childNodes).find((node): node is Text => node.nodeType === Node.TEXT_NODE) ?? document.createTextNode('\u200B');
+    if (!textAnchor.parentNode) text.insertBefore(textAnchor, text.firstChild);
+    const placeAndVerify = () => {
+      if (document.activeElement !== editor) {
+        try { editor.focus({ preventScroll: true }); } catch { editor.focus(); }
+      }
+      const range = document.createRange();
+      range.setStart(textAnchor, 0);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      try { selection.setBaseAndExtent(textAnchor, 0, textAnchor, 0); } catch { /* Range selection is the Safari fallback. */ }
+      const placed = selection.anchorNode === textAnchor && text.contains(selection.anchorNode);
+      if (placed) lastCaretRange.current = range.cloneRange();
+      return placed;
+    };
+    const placed = placeAndVerify();
+    describeChecklistSelection('after immediate handoff', text);
+    if (placed) return true;
+    requestAnimationFrame(() => {
+      if (!text.isConnected || !row.isConnected) return;
+      const retried = placeAndVerify();
+      describeChecklistSelection(retried ? 'after one-frame retry' : 'handoff failed after one-frame retry', text);
+    });
+    return false;
+  };
+
+  const cleanChecklistCaretAnchors = (editor: HTMLDivElement | null) => {
+    if (!editor) return;
+    for (const text of Array.from(editor.querySelectorAll('.note-checklist-text'))) {
+      for (const node of Array.from(text.childNodes)) {
+        if (node.nodeType !== Node.TEXT_NODE || !node.textContent?.includes('\u200B')) continue;
+        const clean = node.textContent.replace(/\u200B/g, '');
+        if (clean) node.textContent = clean;
+      }
+    }
   };
 
   // The LI owns the editable text flow. This only runs while hydrating legacy
@@ -983,6 +1067,7 @@ export function NoteEditor({
 
   const performChecklistEnter = (context: NonNullable<ReturnType<typeof getChecklistCaretContext>>) => {
     const { range, item, list, text } = context;
+    describeChecklistSelection('before Enter', text);
     const shouldExit = shouldExitChecklistOnEnter({
       text: item.textContent,
       hasMedia: Boolean(item.querySelector('img,[data-noted-attachment-id]')),
@@ -1012,20 +1097,11 @@ export function NoteEditor({
       nextItem.append(nextText);
       ensureChecklistTextPlaceholder(text);
       item.after(nextItem);
-      const placed = placeCaretInChecklistText(nextText);
-      if (!placed) {
-        const createdRow = nextItem;
-        requestAnimationFrame(() => {
-          if (!createdRow.isConnected) return;
-          const createdText = createdRow.querySelector<HTMLSpanElement>(':scope > .note-checklist-text');
-          if (!createdText) return;
-          const active = window.getSelection();
-          if (!active?.anchorNode || !createdText.contains(active.anchorNode)) placeCaretInChecklistText(createdText);
-        });
-      }
+      lastCaretRange.current = null;
+      describeChecklistSelection('after row insert before caret handoff', nextText);
+      focusChecklistTextOnIOS(nextText, nextItem);
     }
     commitEditor();
-    rememberCaret();
     refreshActiveFormatting();
   };
 
@@ -1061,13 +1137,16 @@ export function NoteEditor({
     const previousItem = item.previousElementSibling;
     if (previousItem instanceof HTMLLIElement) {
       prepareChecklistItem(previousItem);
-      if (previousItem.childNodes.length === 2 && previousItem.lastChild instanceof HTMLBRElement) previousItem.lastChild.remove();
       const previousText = prepareChecklistItem(previousItem).text;
       const currentText = prepareChecklistItem(item).text;
-      if (currentText.textContent || currentText.querySelector('img,[data-noted-attachment-id]')) {
-        if (previousText.childNodes.length === 1 && previousText.firstChild instanceof HTMLBRElement) previousText.replaceChildren();
+      const currentHasVisibleText = (currentText.textContent ?? '').replace(/\u200B/g, '').length > 0;
+      if (currentHasVisibleText || currentText.querySelector('img,[data-noted-attachment-id]')) {
+        if ((previousText.textContent ?? '').replace(/\u200B/g, '') === '' && !previousText.querySelector('img,[data-noted-attachment-id]')) previousText.replaceChildren();
         while (currentText.firstChild) previousText.append(currentText.firstChild);
+      } else {
+        currentText.replaceChildren();
       }
+      ensureChecklistTextPlaceholder(previousText);
       const caretOffset = previousText.childNodes.length;
       placeCaretInChecklistText(previousText, caretOffset);
       item.remove();
@@ -2249,6 +2328,7 @@ export function NoteEditor({
             suppressContentEditableWarning
             aria-readonly={!canEdit}
             onInput={() => {
+              cleanChecklistCaretAnchors(editorRef.current);
               commitEditor();
 
             }}

@@ -41,6 +41,8 @@ test('search matches title and HTML body text, ignores markup, normalizes case a
   assert.deepEqual(filterSearchRecords(records, { query: '  SUPABASE   để   đồng bộ ' }, { kind: 'all' }).map((r) => r.note.id), ['a']);
   assert.deepEqual(filterSearchRecords(records, { query: 'supabase notes' }, { kind: 'all' }).map((r) => r.note.id), ['b']);
   assert.equal(stripHtmlToText('<p>hello <b>world</b></p>'), 'hello world');
+  assert.equal(stripHtmlToText('<li><span class="note-checklist-text">\u200B</span></li>'), '');
+  assert.equal(stripHtmlToText('<li>Start\u200B end</li>'), 'Start end');
   assert.equal(normalizeSearchText('  A\n  B '), 'a b');
   assert.deepEqual(filterSearchRecords(records, { query: 'strong' }, { kind: 'all' }), []);
 });

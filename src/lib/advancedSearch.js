@@ -17,7 +17,7 @@ export function stripHtmlToText(html = '') {
     container.querySelectorAll('script, style').forEach((node) => node.remove());
     container.querySelectorAll('br').forEach((node) => node.replaceWith(' '));
     container.querySelectorAll('p, div, li, tr, h1, h2, h3, h4, h5, h6, blockquote').forEach((node) => node.append(' '));
-    return (container.textContent || '').replace(/\s+/g, ' ').trim();
+    return (container.textContent || '').replace(/\u200B/g, '').replace(/\s+/g, ' ').trim();
   }
   return String(html)
     .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ')
@@ -32,6 +32,7 @@ export function stripHtmlToText(html = '') {
       }
       return namedEntities[code.toLowerCase()] ?? ' ';
     })
+    .replace(/\u200B/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
