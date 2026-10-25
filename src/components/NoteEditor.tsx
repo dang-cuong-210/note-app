@@ -210,6 +210,7 @@ export function NoteEditor({
   const [inlineFrame, setInlineFrame] = useState<DOMRect | null>(null);
   const lastCaretRange = useRef<Range | null>(null);
   const checklistKeydownEnterPending = useRef<'insertParagraph' | 'insertLineBreak' | null>(null);
+  const checklistCompositionActive = useRef(false);
   const inlineDrag = useRef<{ element: HTMLElement; x: number; y: number; moved: boolean } | null>(null);
   const editorDrag = useRef<EditorDragSession | null>(null);
   const suppressMediaClick = useRef<{ source: HTMLElement; until: number } | null>(null);
@@ -995,10 +996,12 @@ export function NoteEditor({
       else list.after(paragraph);
       placeCaretAtEditableElement(paragraph);
     } else {
-      range.deleteContents();
-      const tail = range.cloneRange();
-      tail.setEnd(text, text.childNodes.length);
-      const remainder = tail.extractContents();
+      const splitPoint = range.cloneRange();
+      if (!splitPoint.collapsed) splitPoint.deleteContents();
+      const rightSide = document.createRange();
+      rightSide.setStart(splitPoint.startContainer, splitPoint.startOffset);
+      rightSide.setEnd(text, text.childNodes.length);
+      const remainder = rightSide.extractContents();
       const nextItem = document.createElement('li');
       nextItem.dataset.checklistItem = 'true';
       nextItem.dataset.checked = 'false';
@@ -1087,10 +1090,10 @@ export function NoteEditor({
 
   const handleChecklistBeforeInput: React.FormEventHandler<HTMLDivElement> = (event) => {
     const nativeEvent = event.nativeEvent as InputEvent;
-    if (nativeEvent.isComposing) return;
+    if (nativeEvent.isComposing || checklistCompositionActive.current) return;
     const inputType = nativeEvent.inputType;
     if (inputType !== 'insertParagraph' && inputType !== 'insertLineBreak' && inputType !== 'deleteContentBackward') return;
-    if (checklistKeydownEnterPending.current === inputType) {
+    if (checklistKeydownEnterPending.current && (inputType === 'insertParagraph' || inputType === 'insertLineBreak')) {
       event.preventDefault();
       checklistKeydownEnterPending.current = null;
       return;
@@ -1099,12 +1102,20 @@ export function NoteEditor({
     if (!context) return;
     if (inputType === 'deleteContentBackward' && !isChecklistCaretAtStart(context.item, context.range)) return;
     event.preventDefault();
+    if (inputType === 'insertParagraph' || inputType === 'insertLineBreak') {
+      checklistKeydownEnterPending.current = inputType;
+      const pendingType = inputType;
+      requestAnimationFrame(() => {
+        if (checklistKeydownEnterPending.current === pendingType) checklistKeydownEnterPending.current = null;
+      });
+    }
     if (inputType === 'deleteContentBackward') performChecklistBackspace(context);
     else if (inputType === 'insertLineBreak') performChecklistLineBreak(context);
     else performChecklistEnter(context);
   };
 
   const handleChecklistEnter: React.KeyboardEventHandler<HTMLDivElement> = (event) => {
+    if (event.nativeEvent.isComposing || checklistCompositionActive.current || event.nativeEvent.keyCode === 229) return;
     const checkbox = (event.target as HTMLElement).closest<HTMLElement>('[data-note-checklist-toggle]');
     if (checkbox) {
       if (event.key === ' ' || event.key === 'Enter') {
@@ -1118,7 +1129,14 @@ export function NoteEditor({
       }
       return;
     }
-    if ((event.key !== 'Enter' && event.key !== 'Backspace') || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+    if (event.key === 'Enter') {
+      if (checklistKeydownEnterPending.current) {
+        event.preventDefault();
+        checklistKeydownEnterPending.current = null;
+        return;
+      }
+    }
+    if (event.key !== 'Enter' && event.key !== 'Backspace') return;
     const context = getChecklistCaretContext();
     if (!context) return;
     if (event.key === 'Backspace' && !isChecklistCaretAtStart(context.item, context.range)) return;
@@ -1135,6 +1153,9 @@ export function NoteEditor({
       else performChecklistEnter(context);
     }
   };
+
+  const handleChecklistCompositionStart = () => { checklistCompositionActive.current = true; };
+  const handleChecklistCompositionEnd = () => { checklistCompositionActive.current = false; };
 
   const handleChecklistClick: React.MouseEventHandler<HTMLDivElement> = (event) => {
     const control = (event.target as HTMLElement).closest<HTMLElement>('[data-note-checklist-toggle]');
@@ -2274,6 +2295,8 @@ export function NoteEditor({
             }}
             onBeforeInput={handleChecklistBeforeInput}
             onKeyDown={handleChecklistEnter}
+            onCompositionStart={handleChecklistCompositionStart}
+            onCompositionEnd={handleChecklistCompositionEnd}
             data-placeholder="Bắt đầu viết ghi chú của bạn..."
             className={`note-content editor-content w-full outline-none text-app leading-relaxed ${desktopPresentation ? '' : 'text-sm'}`}
             style={{ color: 'var(--text)' }}

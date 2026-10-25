@@ -219,7 +219,7 @@ test('checklist Enter exits only on an actually empty collapsed row', () => {
   assert.match(context, /liveRange && editor\?\.contains\(liveRange\.startContainer\)/);
   assert.match(context, /prepareChecklistItem\(item\)/);
   assert.match(enter, /const shouldExit = shouldExitChecklistOnEnter/);
-  assert.ok(enter.indexOf('shouldExitChecklistOnEnter') < enter.indexOf('range.deleteContents()'), 'classify the original row before deleting a selection');
+  assert.ok(enter.indexOf('shouldExitChecklistOnEnter') < enter.indexOf('splitPoint.deleteContents()'), 'classify the original row before deleting a selected range');
   assert.match(enter, /nextItem\.append\(makeChecklistToggle\(false\)\)/);
   assert.match(enter, /const nextText = makeChecklistText\(\)/);
   assert.match(enter, /nextText\.append\(remainder\)/);
@@ -246,8 +246,10 @@ test('checklist intercepts only structural input and keeps text entry browser-na
   assert.match(keydown, /event\.preventDefault\(\)/);
   assert.match(beforeInput, /inputType === 'deleteContentBackward'/);
   assert.match(beforeInput, /event\.preventDefault\(\)/);
-  assert.match(enter, /range\.deleteContents\(\)/);
-  assert.match(enter, /tail\.extractContents\(\)/);
+  assert.match(enter, /rightSide\.setStart\(splitPoint\.startContainer, splitPoint\.startOffset\)/);
+  assert.match(enter, /rightSide\.setEnd\(text, text\.childNodes\.length\)/);
+  assert.match(enter, /rightSide\.extractContents\(\)/);
+  assert.doesNotMatch(enter, /range\.deleteContents\(\)/);
   assert.match(backspace, /while \(currentText\.firstChild\) previousText\.append\(currentText\.firstChild\)/);
   assert.match(backspace, /placeCaretInChecklistText\(previousText, caretOffset\)/);
   assert.match(backspace, /item\.remove\(\)/);
@@ -345,10 +347,53 @@ test('iPhone checklist A → Enter → B → CCCCC keeps caret in row two and pr
   assert.match(enter, /requestAnimationFrame\(/);
   assert.match(caret, /placeCaretAtEditableElement\(text, caretPosition\)/);
   assert.match(editor, /return selection\.anchorNode === element \|\| element\.contains\(selection\.anchorNode\)/);
-  assert.match(beforeInput, /checklistKeydownEnterPending\.current === inputType/);
+  assert.match(beforeInput, /checklistKeydownEnterPending\.current && \(inputType === 'insertParagraph' \|\| inputType === 'insertLineBreak'\)/);
   assert.match(keydown, /checklistKeydownEnterPending\.current = inputType/);
   assert.doesNotMatch(beforeInput, /inputType === 'insertText'/);
   assert.doesNotMatch(keydown, /event\.target\.focus|editor\.blur/);
+});
+
+test('checklist split boundaries preserve left and right text for caret-at-end, middle, and start cases', () => {
+  const enter = editor.match(/const performChecklistEnter = \(context:[\s\S]*?\n  \};/)?.[0] ?? '';
+  const split = enter.slice(enter.indexOf('const splitPoint'), enter.indexOf("const nextItem = document.createElement('li')"));
+  assert.match(split, /const splitPoint = range\.cloneRange\(\)/);
+  assert.match(split, /rightSide\.setStart\(splitPoint\.startContainer, splitPoint\.startOffset\)/);
+  assert.match(split, /rightSide\.setEnd\(text, text\.childNodes\.length\)/);
+  assert.match(split, /rightSide\.extractContents\(\)/);
+  assert.doesNotMatch(split, /text\.cloneNode|text\.innerHTML|textContent\.slice/);
+  const cases = [
+    { before: 'ABC', offset: 3, left: 'ABC', right: '' },
+    { before: 'ABCD', offset: 2, left: 'AB', right: 'CD' },
+    { before: 'ABCD', offset: 0, left: '', right: 'ABCD' },
+  ];
+  for (const { before, offset, left, right } of cases) {
+    assert.equal(before.slice(0, offset), left);
+    assert.equal(before.slice(offset), right);
+  }
+  assert.match(enter, /ensureChecklistTextPlaceholder\(nextText\)/);
+  assert.match(enter, /ensureChecklistTextPlaceholder\(text\)/);
+});
+
+test('composition defers checklist Enter and keydown/beforeinput share a duplicate guard', () => {
+  const beforeInput = editor.match(/const handleChecklistBeforeInput: React\.FormEventHandler<HTMLDivElement> = \(event\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  const keydown = editor.match(/const handleChecklistEnter: React\.KeyboardEventHandler<HTMLDivElement> = \(event\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  assert.match(beforeInput, /nativeEvent\.isComposing \|\| checklistCompositionActive\.current/);
+  assert.match(keydown, /event\.nativeEvent\.isComposing \|\| checklistCompositionActive\.current/);
+  assert.match(editor, /onCompositionStart=\{handleChecklistCompositionStart\}/);
+  assert.match(editor, /onCompositionEnd=\{handleChecklistCompositionEnd\}/);
+  assert.match(beforeInput, /checklistKeydownEnterPending\.current = inputType/);
+  assert.match(keydown, /if \(checklistKeydownEnterPending\.current\)/);
+  assert.match(beforeInput, /event\.preventDefault\(\);\s*checklistKeydownEnterPending\.current = null/);
+});
+
+test('ABC Enter DEF Enter GHI follows the same one-row-per-Enter split without paragraph insertion', () => {
+  const enter = editor.match(/const performChecklistEnter = \(context:[\s\S]*?\n  \};/)?.[0] ?? '';
+  const creation = enter.slice(enter.indexOf("const nextItem = document.createElement('li')"));
+  assert.match(creation, /nextItem\.append\(makeChecklistToggle\(false\)\)/);
+  assert.match(creation, /nextItem\.append\(nextText\)/);
+  assert.match(creation, /item\.after\(nextItem\)/);
+  assert.doesNotMatch(creation, /document\.createElement\('p'\)|list\.after\(paragraph\)/);
+  assert.equal(['ABC', 'DEF', 'GHI'].join('\n').split('\n').length, 3);
 });
 
 test('10-row checklist stress path repeats canonical row insertion with no paragraph escape', () => {
