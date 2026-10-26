@@ -12,4 +12,5 @@ export const MOBILE_FORMATTING_GROUPS: Array<{
 }>;
 
 export function setChecklistItemChecked(item: Element, checked: boolean): boolean;
-export function shouldExitChecklistOnEnter(options: { text: string | null; hasMedia?: boolean; selectionCollapsed?: boolean }): boolean;
+export function normalizeChecklistItem(item: HTMLLIElement): void;
+export function normalizeChecklistRows(list: HTMLUListElement): void;

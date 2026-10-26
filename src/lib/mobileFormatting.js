@@ -36,14 +36,20 @@ export const MOBILE_FORMATTING_GROUPS = [
 export function setChecklistItemChecked(item, checked) {
   const value = Boolean(checked);
   item.setAttribute('data-checked', String(value));
-  const control = item.querySelector('[data-note-checklist-toggle]');
-  if (control) {
-    control.setAttribute('aria-checked', String(value));
-    control.setAttribute('aria-label', value ? 'Bỏ đánh dấu mục' : 'Đánh dấu mục');
-  }
+  item.setAttribute('aria-checked', String(value));
   return value;
 }
 
-export function shouldExitChecklistOnEnter({ text, hasMedia = false, selectionCollapsed = true }) {
-  return selectionCollapsed && !hasMedia && String(text ?? '').replace(/\u200B/g, '').length === 0;
+export function normalizeChecklistItem(item) {
+  item.dataset.checklistItem = 'true';
+  const checked = item.dataset.checked === 'true';
+  item.setAttribute('role', 'checkbox');
+  item.setAttribute('aria-keyshortcuts', 'Control+Space Meta+Space');
+  setChecklistItemChecked(item, checked);
+}
+
+export function normalizeChecklistRows(list) {
+  for (const item of Array.from(list.children)) {
+    if (item.tagName === 'LI') normalizeChecklistItem(item);
+  }
 }

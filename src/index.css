@@ -270,40 +270,37 @@
   list-style: none;
   overflow-wrap: anywhere;
 }
-.note-content ul[data-checklist] > li > .note-checklist-text {
-  min-width: 0;
-  white-space: pre-wrap;
-}
-.note-content .note-checklist-box {
+.note-content ul[data-checklist] > li::before {
+  content: '';
   position: absolute;
   left: 0;
   top: 0.24em;
-  display: inline-grid;
   width: 18px;
   height: 18px;
-  place-items: center;
   border: 1.5px solid var(--text-tertiary);
   border-radius: 4px;
-  cursor: pointer;
   background: transparent;
   box-sizing: border-box;
 }
-.note-content .note-checklist-box:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .note-content ul[data-checklist] > li[data-checked="true"] {
   color: var(--text-tertiary);
   text-decoration: line-through;
 }
-.note-content ul[data-checklist] > li[data-checked="true"] .note-checklist-box {
+.note-content ul[data-checklist] > li[data-checked="true"]::before {
   background: var(--accent);
   border-color: var(--accent);
 }
-.note-content ul[data-checklist] > li[data-checked="true"] .note-checklist-box::after {
+.note-content ul[data-checklist] > li[data-checked="true"]::after {
   content: '';
+  position: absolute;
+  left: 7px;
+  top: 0.36em;
   width: 5px;
   height: 9px;
   border: solid white;
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
+  pointer-events: none;
 }
 
 /* Toggles / collapsible */
