@@ -108,3 +108,65 @@ export function removeChecklistFromItem(item) {
 
   return true;
 }
+
+// Converts exactly one focused block (or one LI from a regular list) into a
+// checklist row. The source block's children move intact, preserving inline DOM.
+export function convertBlockToChecklist(block) {
+  const parent = block.parentElement;
+  if (!parent) return false;
+  const doc = block.ownerDocument;
+  const selection = doc.getSelection?.();
+  const focusNode = selection?.focusNode;
+  const focusOffset = selection?.focusOffset ?? 0;
+  const focusIsInsideBlock = focusNode === block || Boolean(focusNode && block.contains(focusNode));
+  const sourceList = block.tagName === 'LI' ? parent : null;
+  const siblings = sourceList ? Array.from(sourceList.children) : [];
+  const itemIndex = sourceList ? siblings.indexOf(block) : -1;
+  if (sourceList && (itemIndex < 0 || !/^(UL|OL)$/.test(sourceList.tagName) || sourceList.hasAttribute('data-checklist'))) return false;
+  const checklist = doc.createElement('ul');
+  checklist.setAttribute('data-checklist', 'true');
+  const item = doc.createElement('li');
+  normalizeChecklistItem(item);
+  while (block.firstChild) item.append(block.firstChild);
+  if (!item.childNodes.length) item.append(doc.createElement('br'));
+  checklist.append(item);
+
+  if (block.tagName !== 'LI') {
+    block.replaceWith(checklist);
+  } else {
+    const hasPrevious = itemIndex > 0;
+    const hasFollowing = itemIndex < siblings.length - 1;
+    let trailingList = null;
+    if (hasPrevious && hasFollowing) {
+      trailingList = sourceList.cloneNode(false);
+      if (sourceList.tagName === 'OL') {
+        const reversed = sourceList.hasAttribute('reversed');
+        let nextNumber = Number.parseInt(sourceList.getAttribute('start') || (reversed ? String(siblings.length) : '1'), 10);
+        for (const previousItem of siblings.slice(0, itemIndex + 1)) {
+          const explicitValue = Number.parseInt(previousItem.getAttribute('value') || '', 10);
+          if (Number.isFinite(explicitValue)) nextNumber = explicitValue;
+          nextNumber += reversed ? -1 : 1;
+        }
+        trailingList.setAttribute('start', String(nextNumber));
+      }
+      while (block.nextSibling) trailingList.append(block.nextSibling);
+    }
+    block.remove();
+    if (!hasPrevious && !hasFollowing) sourceList.replaceWith(checklist);
+    else if (!hasPrevious) sourceList.before(checklist);
+    else {
+      sourceList.after(checklist);
+      if (trailingList) checklist.after(trailingList);
+    }
+  }
+
+  if (focusIsInsideBlock && selection) {
+    const range = doc.createRange();
+    if (focusNode === block) range.setStart(item, Math.min(focusOffset, item.childNodes.length));
+    else range.setStart(focusNode, Math.min(focusOffset, focusNode.nodeType === 3 ? focusNode.textContent.length : focusNode.childNodes.length));
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+  return true;
+}

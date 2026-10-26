@@ -49,7 +49,7 @@ import { addTagToContent, readManagedTags, removeTagFromContent, writeManagedTag
 import { MobileAttachmentBrowserSheet, MobileEditorMorePopover, MobileEditorToolsSheet, type MobileInlineImage } from '@/components/MobileEditorSheets';
 import { MobileFormattingSheet } from '@/components/MobileFormattingSheet';
 import { NoteTagManager } from '@/components/NoteTagManager';
-import { MOBILE_FORMATTING_GROUPS, normalizeChecklistItem, normalizeChecklistRows, removeChecklistFromItem, setChecklistItemChecked } from '@/lib/mobileFormatting.js';
+import { MOBILE_FORMATTING_GROUPS, convertBlockToChecklist, normalizeChecklistItem, normalizeChecklistRows, removeChecklistFromItem, setChecklistItemChecked } from '@/lib/mobileFormatting.js';
 import { getMobileFormattingTransition } from '@/lib/mobileFormattingState.js';
 import { applyInlineFormatToRange, isInlineFormatActiveAtNode, isInlineFormatAppliedToRange, removeEmptyInlineFormats, removeInlineFormatFromRange, toggleCollapsedInlineFormat } from '@/lib/mobileInlineFormatting.js';
 import { getBlankLinesToAppend, isMeaningfulNoteContent } from '@/lib/editorBehavior.js';
@@ -730,7 +730,8 @@ export function NoteEditor({
     const editor = editorRef.current;
     restoreEditorSelection();
     if (!editor) return false;
-    const selectionNode = window.getSelection()?.focusNode;
+    const selection = window.getSelection();
+    const selectionNode = selection?.focusNode;
     const caretNode = selectionNode && editor.contains(selectionNode) ? selectionNode : lastCaretRange.current?.endContainer;
     const element = caretNode ? (caretNode instanceof Element ? caretNode : caretNode.parentElement) : getSelectionElement();
     const currentList = element?.closest('ul,ol');
@@ -738,19 +739,44 @@ export function NoteEditor({
       const currentItem = element?.closest<HTMLLIElement>('li[data-checklist-item]');
       return currentItem instanceof HTMLLIElement && currentList.contains(currentItem) && removeChecklistFromItem(currentItem);
     }
-    let list = currentList instanceof HTMLUListElement ? currentList : null;
-    if (!list) {
-      try { document.execCommand('insertUnorderedList'); } catch { return false; }
-      const afterElement = getSelectionElement();
-      const candidate = afterElement?.closest('ul');
-      if (candidate instanceof HTMLUListElement && editor.contains(candidate)) list = candidate;
+
+    let block: HTMLElement | null = null;
+    const currentItem = element?.closest<HTMLLIElement>('li');
+    if (currentItem && editor.contains(currentItem) && currentList?.contains(currentItem)) block = currentItem;
+    else {
+      const candidate = element?.closest<HTMLElement>('p,div,h1,h2,h3');
+      if (candidate && candidate !== editor && editor.contains(candidate)) block = candidate;
     }
-    if (!list) return false;
-    list.dataset.checklist = 'true';
-    for (const child of Array.from(list.children)) {
-      if (!(child instanceof HTMLLIElement)) continue;
-      updateChecklistItemSemantics(child);
+
+    // Some contenteditable engines place an empty-line caret directly in the
+    // editor root. Materialize only that insertion point as a blank paragraph.
+    if (!block && selectionNode === editor) {
+      const paragraph = document.createElement('p');
+      const atCaret = editor.childNodes[Math.min(selection?.focusOffset ?? editor.childNodes.length, editor.childNodes.length)] ?? null;
+      editor.insertBefore(paragraph, atCaret);
+      if (atCaret instanceof HTMLBRElement) paragraph.append(atCaret);
+      else paragraph.append(document.createElement('br'));
+      const range = document.createRange();
+      range.setStart(paragraph, 0);
+      range.collapse(true);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      block = paragraph;
+    } else if (!block && caretNode) {
+      let topLevelNode: Node = caretNode;
+      while (topLevelNode.parentNode && topLevelNode.parentNode !== editor) topLevelNode = topLevelNode.parentNode;
+      const isInlineOrText = topLevelNode.nodeType === Node.TEXT_NODE || (topLevelNode instanceof HTMLElement && !/^(UL|OL|P|DIV|H1|H2|H3|BLOCKQUOTE|PRE|TABLE|IMG)$/.test(topLevelNode.tagName) && !topLevelNode.closest(attachmentSelector));
+      if (topLevelNode.parentNode === editor && isInlineOrText) {
+        const paragraph = document.createElement('p');
+        editor.insertBefore(paragraph, topLevelNode);
+        paragraph.append(topLevelNode);
+        block = paragraph;
+      }
     }
+
+    if (!block || !convertBlockToChecklist(block)) return false;
+    const convertedRange = window.getSelection();
+    if (convertedRange?.rangeCount) lastCaretRange.current = convertedRange.getRangeAt(0).cloneRange();
     return true;
   };
 
@@ -788,6 +814,7 @@ export function NoteEditor({
     } else if (action.command === 'checklist') {
       if (!applyChecklist()) { toast('Không thể chèn checklist tại vị trí này'); return; }
       handled = true;
+      selectionWasReplaced = true;
     } else if (currentList instanceof HTMLUListElement && currentList.hasAttribute('data-checklist') && (actionId === 'insertUnorderedList' || actionId === 'insertOrderedList')) {
       removeChecklistFromList(currentList);
       if (actionId === 'insertOrderedList') {

@@ -15,3 +15,4 @@ export function setChecklistItemChecked(item: Element, checked: boolean): boolea
 export function normalizeChecklistItem(item: HTMLLIElement): void;
 export function normalizeChecklistRows(list: HTMLUListElement): void;
 export function removeChecklistFromItem(item: HTMLLIElement): boolean;
+export function convertBlockToChecklist(block: HTMLElement): boolean;

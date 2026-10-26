@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { MOBILE_FORMATTING_GROUPS, normalizeChecklistRows, removeChecklistFromItem, setChecklistItemChecked } from '../src/lib/mobileFormatting.js';
+import { MOBILE_FORMATTING_GROUPS, convertBlockToChecklist, normalizeChecklistRows, removeChecklistFromItem, setChecklistItemChecked } from '../src/lib/mobileFormatting.js';
 import { getMobileFormattingTransition } from '../src/lib/mobileFormattingState.js';
 
 const editor = await readFile(new URL('../src/components/NoteEditor.tsx', import.meta.url), 'utf8');
@@ -16,6 +16,8 @@ class ChecklistTestNode {
     this._text = text;
     this.childNodes = [];
     this.attributes = new Set();
+    const node = this;
+    this.dataset = new Proxy({}, { set(target, key, value) { target[key] = value; node.setAttribute(`data-${String(key).replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`, value); return true; } });
     this.parentNode = null;
     this.ownerDocument = checklistTestDocument;
     if (tagName && text) this.append(new ChecklistTestNode(null, text));
@@ -59,12 +61,17 @@ class ChecklistTestNode {
     return clone;
   }
   hasAttribute(name) { return this.attributes.has(name); }
-  setAttribute(name) { this.attributes.add(name); }
+  setAttribute(name, value) { this.attributes.add(name); this.attributeValues ??= new Map(); this.attributeValues.set(name, String(value)); }
+  getAttribute(name) { return this.attributeValues?.get(name) ?? null; }
   removeAttribute(name) { this.attributes.delete(name); }
 }
 
 let checklistTestSelection = null;
-const checklistTestDocument = { createElement: (tag) => new ChecklistTestNode(tag.toUpperCase()), getSelection: () => checklistTestSelection };
+const checklistTestDocument = {
+  createElement: (tag) => new ChecklistTestNode(tag.toUpperCase()),
+  getSelection: () => checklistTestSelection,
+  createRange: () => ({ startContainer: null, startOffset: 0, setStart(container, offset) { this.startContainer = container; this.startOffset = offset; }, collapse() { this.collapsed = true; } }),
+};
 
 function makeChecklist(items) {
   const editor = new ChecklistTestNode('DIV');
@@ -78,6 +85,16 @@ function makeChecklist(items) {
     return row;
   });
   return { editor, list, rows };
+}
+
+function makeParagraphs(items) {
+  const editor = new ChecklistTestNode('DIV');
+  const blocks = items.map((text) => {
+    const paragraph = new ChecklistTestNode('P', text);
+    editor.append(paragraph);
+    return paragraph;
+  });
+  return { editor, blocks };
 }
 
 test('compact formatting toolbar offers the complete focused action set with accessible active states', () => {
@@ -263,12 +280,88 @@ test('checklist checked state updates only data and accessibility attributes', a
   assert.doesNotMatch(setter, /querySelector|replaceChildren|replaceWith|append\(|remove\(/);
 });
 
-test('checklist toolbar creates a native unordered list and marks LI metadata without caret handoff', () => {
+test('checklist toolbar explicitly converts one current block without the generic unordered-list command', async () => {
   const apply = editor.match(/const applyChecklist = \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
-  assert.match(apply, /document\.execCommand\('insertUnorderedList'\)/);
-  assert.match(apply, /list\.dataset\.checklist = 'true'/);
-  assert.match(apply, /updateChecklistItemSemantics\(child\)/);
-  assert.doesNotMatch(apply, /placeCaret|setStart|append\(|replaceChildren/);
+  assert.match(apply, /candidate = element\?\.closest<HTMLElement>\('p,div,h1,h2,h3'\)/);
+  assert.match(apply, /convertBlockToChecklist\(block\)/);
+  assert.doesNotMatch(apply, /execCommand/);
+  const converter = await readFile(new URL('../src/lib/mobileFormatting.js', import.meta.url), 'utf8');
+  const conversion = converter.match(/export function convertBlockToChecklist[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.match(conversion, /block\.replaceWith\(checklist\)/);
+  assert.match(conversion, /while \(block\.firstChild\) item\.append\(block\.firstChild\)/);
+  assert.match(conversion, /normalizeChecklistItem\(item\)/);
+});
+
+test('checklist ON changes only the focused first, middle, or last paragraph', () => {
+  for (const targetIndex of [0, 1, 2]) {
+    const { editor, blocks } = makeParagraphs(['A', 'B', 'C']);
+    assert.equal(convertBlockToChecklist(blocks[targetIndex]), true);
+    assert.equal(editor.children.length, 3, 'exactly one source block is replaced');
+    assert.deepEqual(editor.children.map((node) => node.tagName), targetIndex === 0 ? ['UL', 'P', 'P'] : targetIndex === 1 ? ['P', 'UL', 'P'] : ['P', 'P', 'UL']);
+    assert.equal(editor.children[targetIndex].tagName, 'UL');
+    assert.ok(editor.children[targetIndex].hasAttribute('data-checklist'));
+    assert.deepEqual(editor.children[targetIndex].children.map((node) => node.tagName), ['LI']);
+    assert.ok(editor.children[targetIndex].children[0].hasAttribute('data-checklist-item'));
+    assert.equal(editor.children[targetIndex].children[0].getAttribute('data-checked'), 'false', 'new checklist row defaults to unchecked');
+    assert.equal(editor.children.filter((node) => node.tagName === 'P').length, 2);
+  }
+});
+
+test('checklist ON supports an empty current paragraph and repeated independent conversions', () => {
+  {
+    const { editor, blocks } = makeParagraphs(['A', 'B', '']);
+    blocks[2].append(new ChecklistTestNode('BR'));
+    assert.equal(convertBlockToChecklist(blocks[2]), true);
+    assert.deepEqual(editor.children.map((node) => node.tagName), ['P', 'P', 'UL']);
+    assert.equal(editor.children[2].children[0].firstChild.tagName, 'BR');
+  }
+  {
+    const { editor, blocks } = makeParagraphs(['A', 'B', 'C']);
+    assert.equal(convertBlockToChecklist(blocks[1]), true);
+    const currentC = editor.children[2];
+    assert.equal(currentC.textContent, 'C');
+    assert.equal(convertBlockToChecklist(currentC), true);
+    assert.deepEqual(editor.children.map((node) => node.tagName), ['P', 'UL', 'UL']);
+    assert.equal(editor.children[0].textContent, 'A', 'the untouched previous paragraph stays normal');
+  }
+});
+
+test('checklist ON preserves inline markup and restores the caret into the converted LI', () => {
+  const { editor, blocks } = makeParagraphs(['A', 'B', 'C']);
+  const italic = new ChecklistTestNode('EM', 'world');
+  blocks[1].append(italic);
+  const text = italic.firstChild;
+  checklistTestSelection = {
+    focusNode: text,
+    focusOffset: 3,
+    rangeCount: 0,
+    removeAllRanges() { this.rangeCount = 0; },
+    addRange(range) { this.rangeCount = 1; this.restored = range; },
+  };
+  try {
+    assert.equal(convertBlockToChecklist(blocks[1]), true);
+    assert.equal(editor.children[1].children[0].children[0], italic);
+    assert.equal(checklistTestSelection.restored.startContainer, text);
+    assert.equal(checklistTestSelection.restored.startOffset, 3);
+  } finally {
+    checklistTestSelection = null;
+  }
+});
+
+test('checklist ON from a regular list isolates only the current list item and leaves list commands intact', () => {
+  const editorNode = new ChecklistTestNode('DIV');
+  const bullets = new ChecklistTestNode('UL');
+  const rows = ['A', 'B', 'C'].map((text) => new ChecklistTestNode('LI', text));
+  bullets.append(...rows);
+  editorNode.append(bullets);
+  assert.equal(convertBlockToChecklist(rows[1]), true);
+  assert.deepEqual(editorNode.children.map((node) => node.tagName), ['UL', 'UL', 'UL']);
+  assert.deepEqual(editorNode.children[0].children.map((node) => node.textContent), ['A']);
+  assert.ok(editorNode.children[1].hasAttribute('data-checklist'));
+  assert.deepEqual(editorNode.children[1].children.map((node) => node.textContent), ['B']);
+  assert.deepEqual(editorNode.children[2].children.map((node) => node.textContent), ['C']);
+  const formatHandler = editor.match(/const handleMobileFormat = \(actionId: string\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  assert.match(formatHandler, /document\.execCommand\(action\.command, false, action\.value\)/, 'regular bullet/ordered commands still use their existing browser command');
 });
 
 test('checklist toggle-off converts only the caret item to a paragraph and splits remaining groups', async () => {
@@ -276,7 +369,7 @@ test('checklist toggle-off converts only the caret item to a paragraph and split
   const remove = helper.match(/export function removeChecklistFromItem[\s\S]*?\n\}/)?.[0] ?? '';
   const apply = editor.match(/const applyChecklist = \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
   assert.ok(removeChecklistFromItem, 'checklist toggle-off helper is exported');
-  assert.match(apply, /selectionNode = window\.getSelection\(\)\?\.focusNode/);
+  assert.match(apply, /selectionNode = selection\?\.focusNode/);
   assert.match(remove, /const siblings = Array\.from\(list\.children\)/);
   assert.match(remove, /const hasPrevious = itemIndex > 0/);
   assert.match(remove, /const hasFollowing = itemIndex < siblings\.length - 1/);
