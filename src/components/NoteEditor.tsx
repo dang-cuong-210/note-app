@@ -209,6 +209,7 @@ export function NoteEditor({
   const [selectedInlineAttachment, setSelectedInlineAttachment] = useState<HTMLElement | null>(null);
   const [inlineFrame, setInlineFrame] = useState<DOMRect | null>(null);
   const lastCaretRange = useRef<Range | null>(null);
+  const checklistCaretHandoff = useRef<{ row: HTMLLIElement; text: HTMLSpanElement } | null>(null);
   const checklistKeydownEnterPending = useRef<'insertParagraph' | 'insertLineBreak' | null>(null);
   const checklistCompositionActive = useRef(false);
   const inlineDrag = useRef<{ element: HTMLElement; x: number; y: number; moved: boolean } | null>(null);
@@ -534,6 +535,9 @@ export function NoteEditor({
     const editor = editorRef.current;
     const selection = window.getSelection();
     if (!editor || !selection || !selection.rangeCount || !editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) return;
+    const pendingChecklistCaret = checklistCaretHandoff.current;
+    if (pendingChecklistCaret && !pendingChecklistCaret.row.isConnected) checklistCaretHandoff.current = null;
+    else if (pendingChecklistCaret && !pendingChecklistCaret.text.contains(selection.anchorNode)) return;
     const range = selection.getRangeAt(0);
     if (!range.startContainer.isConnected || !range.endContainer.isConnected) return;
     const startElement = range.startContainer instanceof Element ? range.startContainer : range.startContainer.parentElement;
@@ -731,7 +735,7 @@ export function NoteEditor({
     return selection.anchorNode === anchor && selection.anchorOffset === caretPosition;
   };
 
-  const describeChecklistSelection = (label: string, target?: HTMLSpanElement) => {
+  const describeChecklistSelection = (label: string, target?: HTMLSpanElement, contextRow?: HTMLLIElement) => {
     if (!import.meta.env.DEV) return;
     const selection = window.getSelection();
     const anchor = selection?.anchorNode;
@@ -741,6 +745,7 @@ export function NoteEditor({
       anchorOffset: selection?.anchorOffset,
       activeChecklistRow: anchor instanceof Element ? anchor.closest('li[data-checklist-item]') : anchor?.parentElement?.closest('li[data-checklist-item]'),
       activeChecklistText: anchor instanceof Element ? anchor.closest('.note-checklist-text') : anchor?.parentElement?.closest('.note-checklist-text'),
+      contextChecklistRow: contextRow,
       targetText: target,
       targetContainsSelection: Boolean(target && anchor && target.contains(anchor)),
     });
@@ -748,35 +753,46 @@ export function NoteEditor({
 
   const focusChecklistTextOnIOS = (text: HTMLSpanElement, row: HTMLLIElement) => {
     const editor = editorRef.current;
-    if (!editor || !text.isConnected || !row.isConnected) return false;
-    const selection = window.getSelection();
-    if (!selection) return false;
+    if (!editor || !text.isConnected || !row.isConnected || !row.contains(text)) return false;
     ensureChecklistTextPlaceholder(text);
     const textAnchor = Array.from(text.childNodes).find((node): node is Text => node.nodeType === Node.TEXT_NODE) ?? document.createTextNode('\u200B');
     if (!textAnchor.parentNode) text.insertBefore(textAnchor, text.firstChild);
+    checklistCaretHandoff.current = { row, text };
+    lastCaretRange.current = null;
     const placeAndVerify = () => {
       if (document.activeElement !== editor) {
         try { editor.focus({ preventScroll: true }); } catch { editor.focus(); }
       }
+      const selection = window.getSelection();
+      if (!selection) return false;
       const range = document.createRange();
       range.setStart(textAnchor, 0);
       range.collapse(true);
       selection.removeAllRanges();
       selection.addRange(range);
-      try { selection.setBaseAndExtent(textAnchor, 0, textAnchor, 0); } catch { /* Range selection is the Safari fallback. */ }
-      const placed = selection.anchorNode === textAnchor && text.contains(selection.anchorNode);
+      try { selection.collapse(textAnchor, 0); } catch { /* addRange remains the primary selection path. */ }
+      const verifiedSelection = window.getSelection();
+      const placed = verifiedSelection?.anchorNode === textAnchor && text.contains(verifiedSelection.anchorNode);
       if (placed) lastCaretRange.current = range.cloneRange();
       return placed;
     };
     const placed = placeAndVerify();
-    describeChecklistSelection('after immediate handoff', text);
-    if (placed) return true;
+    describeChecklistSelection('after immediate handoff', text, row);
     requestAnimationFrame(() => {
-      if (!text.isConnected || !row.isConnected) return;
-      const retried = placeAndVerify();
-      describeChecklistSelection(retried ? 'after one-frame retry' : 'handoff failed after one-frame retry', text);
+      if (!text.isConnected || !row.isConnected) {
+        checklistCaretHandoff.current = null;
+        return;
+      }
+      const liveSelection = window.getSelection();
+      const alreadyInTarget = liveSelection?.anchorNode === textAnchor;
+      const verified = alreadyInTarget || placeAndVerify();
+      if (verified && liveSelection?.rangeCount && text.contains(liveSelection.anchorNode)) {
+        lastCaretRange.current = liveSelection.getRangeAt(0).cloneRange();
+      }
+      describeChecklistSelection(verified ? 'verified after one-frame handoff' : 'handoff failed after one-frame retry', text, row);
+      if (verified) checklistCaretHandoff.current = null;
     });
-    return false;
+    return placed;
   };
 
   const cleanChecklistCaretAnchors = (editor: HTMLDivElement | null) => {
@@ -1067,7 +1083,7 @@ export function NoteEditor({
 
   const performChecklistEnter = (context: NonNullable<ReturnType<typeof getChecklistCaretContext>>) => {
     const { range, item, list, text } = context;
-    describeChecklistSelection('before Enter', text);
+    describeChecklistSelection('before Enter', text, item);
     const shouldExit = shouldExitChecklistOnEnter({
       text: item.textContent,
       hasMedia: Boolean(item.querySelector('img,[data-noted-attachment-id]')),
@@ -1098,7 +1114,7 @@ export function NoteEditor({
       ensureChecklistTextPlaceholder(text);
       item.after(nextItem);
       lastCaretRange.current = null;
-      describeChecklistSelection('after row insert before caret handoff', nextText);
+      describeChecklistSelection('after row insert before caret handoff', nextText, nextItem);
       focusChecklistTextOnIOS(nextText, nextItem);
     }
     commitEditor();
@@ -2328,6 +2344,10 @@ export function NoteEditor({
             suppressContentEditableWarning
             aria-readonly={!canEdit}
             onInput={() => {
+              const pending = checklistCaretHandoff.current;
+              const selection = window.getSelection();
+              if (pending && selection?.anchorNode && pending.text.contains(selection.anchorNode)) checklistCaretHandoff.current = null;
+              else if (pending) describeChecklistSelection('typed input landed outside pending checklist row', pending.text, pending.row);
               cleanChecklistCaretAnchors(editorRef.current);
               commitEditor();
 
@@ -2336,7 +2356,7 @@ export function NoteEditor({
             onKeyUp={rememberCaret}
             onMouseUp={rememberCaret}
             onTouchEnd={rememberCaret}
-            onPointerDown={e => { if ((e.target as HTMLElement).closest('[data-note-checklist-toggle]')) { rememberCaret(); return; } if (e.target === e.currentTarget && placeCaretAtBlankTap(e)) return; if (!canEdit) return; if (!onInlinePointerDown(e)) onImagePointerDown(e); }}
+            onPointerDown={e => { const target = e.target as HTMLElement; const pending = checklistCaretHandoff.current; if (pending && !pending.text.contains(target)) checklistCaretHandoff.current = null; if (target.closest('[data-note-checklist-toggle]')) { rememberCaret(); return; } if (e.target === e.currentTarget && placeCaretAtBlankTap(e)) return; if (!canEdit) return; if (!onInlinePointerDown(e)) onImagePointerDown(e); }}
             onPointerMove={e => { if (!canEdit) return; if (!onInlinePointerMove(e)) onImagePointerMove(e); }}
             onPointerUp={e => { if (!canEdit) return; if (!onInlinePointerEnd(e)) onImagePointerUp(e); rememberCaret(); }}
             onPointerCancel={(e) => {
