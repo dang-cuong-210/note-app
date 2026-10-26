@@ -53,3 +53,58 @@ export function normalizeChecklistRows(list) {
     if (item.tagName === 'LI') normalizeChecklistItem(item);
   }
 }
+
+// Removes checklist formatting from only the selected LI. When the item is in
+// the middle of a checklist, split the list around its new paragraph so the
+// remaining rows retain native checklist semantics.
+export function removeChecklistFromItem(item) {
+  const list = item.parentElement;
+  if (!list || list.tagName !== 'UL' || !list.hasAttribute('data-checklist')) return false;
+
+  const siblings = Array.from(list.children);
+  const itemIndex = siblings.indexOf(item);
+  if (itemIndex < 0) return false;
+  const hasPrevious = itemIndex > 0;
+  const hasFollowing = itemIndex < siblings.length - 1;
+  const paragraph = item.ownerDocument.createElement('p');
+  const selection = item.ownerDocument.getSelection?.();
+  const range = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+
+  while (item.firstChild) paragraph.append(item.firstChild);
+  if (!paragraph.childNodes.length) paragraph.append(item.ownerDocument.createElement('br'));
+
+  item.removeAttribute('data-checklist-item');
+  item.removeAttribute('data-checked');
+  item.removeAttribute('role');
+  item.removeAttribute('aria-checked');
+  item.removeAttribute('aria-keyshortcuts');
+
+  let trailingList = null;
+  if (hasPrevious && hasFollowing) {
+    trailingList = list.cloneNode(false);
+    while (item.nextSibling) trailingList.append(item.nextSibling);
+  }
+  item.remove();
+
+  if (!hasPrevious && !hasFollowing) {
+    list.replaceWith(paragraph);
+  } else if (!hasPrevious) {
+    list.before(paragraph);
+  } else {
+    list.after(paragraph);
+    if (trailingList) paragraph.after(trailingList);
+  }
+
+  // Most browser carets point into a text node, which remains connected as its
+  // parent moves. Also map LI-boundary ranges into the corresponding P boundary.
+  if (range && selection) {
+    if (range.startContainer === item) range.setStart(paragraph, Math.min(range.startOffset, paragraph.childNodes.length));
+    if (range.endContainer === item) range.setEnd(paragraph, Math.min(range.endOffset, paragraph.childNodes.length));
+    if (paragraph.contains(range.startContainer) && paragraph.contains(range.endContainer)) {
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  }
+
+  return true;
+}

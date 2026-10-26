@@ -1,13 +1,84 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { MOBILE_FORMATTING_GROUPS, normalizeChecklistRows, setChecklistItemChecked } from '../src/lib/mobileFormatting.js';
+import { MOBILE_FORMATTING_GROUPS, normalizeChecklistRows, removeChecklistFromItem, setChecklistItemChecked } from '../src/lib/mobileFormatting.js';
 import { getMobileFormattingTransition } from '../src/lib/mobileFormattingState.js';
 
 const editor = await readFile(new URL('../src/components/NoteEditor.tsx', import.meta.url), 'utf8');
 const sheet = await readFile(new URL('../src/components/MobileFormattingSheet.tsx', import.meta.url), 'utf8');
 const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
 const inlineFormatting = await readFile(new URL('../src/lib/mobileInlineFormatting.js', import.meta.url), 'utf8');
+
+class ChecklistTestNode {
+  constructor(tagName, text = '') {
+    this.tagName = tagName;
+    this.nodeType = tagName ? 1 : 3;
+    this._text = text;
+    this.childNodes = [];
+    this.attributes = new Set();
+    this.parentNode = null;
+    this.ownerDocument = checklistTestDocument;
+    if (tagName && text) this.append(new ChecklistTestNode(null, text));
+  }
+  get textContent() { return this.nodeType === 3 ? this._text : this.childNodes.map((node) => node.textContent).join(''); }
+  set textContent(value) { this._text = value; }
+  get children() { return this.childNodes.filter((node) => node.nodeType === 1); }
+  get firstChild() { return this.childNodes[0] ?? null; }
+  get parentElement() { return this.parentNode?.tagName ? this.parentNode : null; }
+  get nextSibling() {
+    if (!this.parentNode) return null;
+    const siblings = this.parentNode.childNodes;
+    return siblings[siblings.indexOf(this) + 1] ?? null;
+  }
+  append(...nodes) {
+    for (const node of nodes) {
+      node.remove();
+      node.parentNode = this;
+      this.childNodes.push(node);
+    }
+  }
+  before(node) { this.parentNode.insertBefore(node, this); }
+  after(node) { this.parentNode.insertBefore(node, this.nextSibling); }
+  insertBefore(node, reference) {
+    node.remove();
+    const index = reference ? this.childNodes.indexOf(reference) : this.childNodes.length;
+    node.parentNode = this;
+    this.childNodes.splice(index, 0, node);
+  }
+  remove() {
+    if (!this.parentNode) return;
+    const siblings = this.parentNode.childNodes;
+    siblings.splice(siblings.indexOf(this), 1);
+    this.parentNode = null;
+  }
+  contains(node) { return node === this || this.childNodes.some((child) => child.contains(node)); }
+  replaceWith(node) { this.parentNode.insertBefore(node, this); this.remove(); }
+  cloneNode() {
+    const clone = new ChecklistTestNode(this.tagName);
+    clone.attributes = new Set(this.attributes);
+    return clone;
+  }
+  hasAttribute(name) { return this.attributes.has(name); }
+  setAttribute(name) { this.attributes.add(name); }
+  removeAttribute(name) { this.attributes.delete(name); }
+}
+
+let checklistTestSelection = null;
+const checklistTestDocument = { createElement: (tag) => new ChecklistTestNode(tag.toUpperCase()), getSelection: () => checklistTestSelection };
+
+function makeChecklist(items) {
+  const editor = new ChecklistTestNode('DIV');
+  const list = new ChecklistTestNode('UL');
+  list.setAttribute('data-checklist');
+  editor.append(list);
+  const rows = items.map((text) => {
+    const row = new ChecklistTestNode('LI', text);
+    row.setAttribute('data-checklist-item');
+    list.append(row);
+    return row;
+  });
+  return { editor, list, rows };
+}
 
 test('compact formatting toolbar offers the complete focused action set with accessible active states', () => {
   assert.deepEqual(MOBILE_FORMATTING_GROUPS.map((group) => group.label), ['Văn bản', 'Tiêu đề', 'Danh sách', 'Khối']);
@@ -108,7 +179,7 @@ test('format transitions freely toggle inline, heading, list, checklist, quote a
   assert.equal(getMobileFormattingTransition('code', ['quote']), 'switch-block');
   assert.match(editor, /action\.command === 'formatBlock' && transition === 'clear-block'[\s\S]*?replaceCurrentBlockWithParagraph\(currentBlock\)/);
   assert.match(editor, /if \(block\.tagName === 'BLOCKQUOTE'[\s\S]*?block\.replaceWith\(\.\.\.children\)/);
-  assert.match(editor, /if \(currentList instanceof HTMLUListElement && currentList\.hasAttribute\('data-checklist'\)\) \{\s*removeChecklistFromList\(currentList\);\s*try \{ document\.execCommand\('insertUnorderedList'\)/);
+  assert.match(editor, /if \(currentList instanceof HTMLUListElement && currentList\.hasAttribute\('data-checklist'\)\) \{\s*const currentItem = element\?\.closest<HTMLLIElement>\('li\[data-checklist-item\]'\);\s*return currentItem instanceof HTMLLIElement && currentList\.contains\(currentItem\) && removeChecklistFromItem\(currentItem\)/);
   assert.match(editor, /currentList\.hasAttribute\('data-checklist'\) && \(actionId === 'insertUnorderedList' \|\| actionId === 'insertOrderedList'\)/);
 });
 
@@ -198,6 +269,107 @@ test('checklist toolbar creates a native unordered list and marks LI metadata wi
   assert.match(apply, /list\.dataset\.checklist = 'true'/);
   assert.match(apply, /updateChecklistItemSemantics\(child\)/);
   assert.doesNotMatch(apply, /placeCaret|setStart|append\(|replaceChildren/);
+});
+
+test('checklist toggle-off converts only the caret item to a paragraph and splits remaining groups', async () => {
+  const helper = await readFile(new URL('../src/lib/mobileFormatting.js', import.meta.url), 'utf8');
+  const remove = helper.match(/export function removeChecklistFromItem[\s\S]*?\n\}/)?.[0] ?? '';
+  const apply = editor.match(/const applyChecklist = \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? '';
+  assert.ok(removeChecklistFromItem, 'checklist toggle-off helper is exported');
+  assert.match(apply, /selectionNode = window\.getSelection\(\)\?\.focusNode/);
+  assert.match(remove, /const siblings = Array\.from\(list\.children\)/);
+  assert.match(remove, /const hasPrevious = itemIndex > 0/);
+  assert.match(remove, /const hasFollowing = itemIndex < siblings\.length - 1/);
+  assert.match(remove, /const paragraph = item\.ownerDocument\.createElement\('p'\)/);
+  assert.match(remove, /while \(item\.firstChild\) paragraph\.append\(item\.firstChild\)/);
+  assert.match(remove, /trailingList = list\.cloneNode\(false\)/);
+  assert.match(remove, /paragraph\.after\(trailingList\)/);
+  assert.match(remove, /list\.replaceWith\(paragraph\)/);
+  assert.match(remove, /item\.removeAttribute\('data-checked'\)/);
+  assert.match(remove, /item\.removeAttribute\('aria-checked'\)/);
+  assert.match(remove, /selection\.addRange\(range\)/);
+  assert.doesNotMatch(apply.match(/if \(currentList instanceof HTMLUListElement && currentList\.hasAttribute\('data-checklist'\)\) \{[\s\S]*?\n    \}/)?.[0] ?? '', /execCommand|insertUnorderedList/);
+  assert.match(editor, /commitEditor\(\);\s*refreshActiveFormatting\(\)/, 'the active state is immediately reread from the resulting caret DOM');
+});
+
+test('checklist toggle-off produces paragraph/list boundaries for first, middle, last and only rows', () => {
+  {
+    const { editor, rows } = makeChecklist(['A', 'B', 'C']);
+    assert.equal(removeChecklistFromItem(rows[1]), true);
+    assert.deepEqual(editor.children.map((node) => node.tagName), ['UL', 'P', 'UL']);
+    assert.deepEqual(editor.children[0].children.map((node) => node.textContent), ['A']);
+    assert.equal(editor.children[1].textContent, 'B');
+    assert.deepEqual(editor.children[2].children.map((node) => node.textContent), ['C']);
+    assert.ok(editor.children[0].hasAttribute('data-checklist'));
+    assert.ok(editor.children[2].hasAttribute('data-checklist'));
+  }
+  {
+    const { editor, rows } = makeChecklist(['A', 'B']);
+    assert.equal(removeChecklistFromItem(rows[0]), true);
+    assert.deepEqual(editor.children.map((node) => node.tagName), ['P', 'UL']);
+    assert.equal(editor.children[0].textContent, 'A');
+    assert.deepEqual(editor.children[1].children.map((node) => node.textContent), ['B']);
+  }
+  {
+    const { editor, rows } = makeChecklist(['A', 'B']);
+    assert.equal(removeChecklistFromItem(rows[1]), true);
+    assert.deepEqual(editor.children.map((node) => node.tagName), ['UL', 'P']);
+    assert.deepEqual(editor.children[0].children.map((node) => node.textContent), ['A']);
+    assert.equal(editor.children[1].textContent, 'B');
+  }
+  {
+    const { editor, rows } = makeChecklist(['A']);
+    assert.equal(removeChecklistFromItem(rows[0]), true);
+    assert.deepEqual(editor.children.map((node) => node.tagName), ['P']);
+    assert.equal(editor.children[0].textContent, 'A');
+    assert.deepEqual(editor.children.filter((node) => node.tagName === 'UL'), [], 'the empty list node is removed rather than left in the editor');
+  }
+});
+
+test('checklist toggle-off preserves inline nodes and removes checked state only from the converted row', () => {
+  const { editor, rows } = makeChecklist(['A', 'B', 'C']);
+  const strong = new ChecklistTestNode('STRONG', 'formatted B');
+  rows[1].append(strong);
+  rows[1].setAttribute('data-checked');
+  rows[1].setAttribute('aria-checked');
+  rows[0].setAttribute('data-checked');
+  rows[2].setAttribute('data-checked');
+  assert.equal(removeChecklistFromItem(rows[1]), true);
+  const paragraph = editor.children.find((node) => node.tagName === 'P');
+  assert.equal(paragraph.children[0], strong);
+  assert.equal(strong.textContent, 'formatted B');
+  assert.equal(paragraph.hasAttribute('data-checked'), false);
+  assert.equal(editor.children[0].children[0].hasAttribute('data-checked'), true);
+  assert.equal(editor.children[2].children[0].hasAttribute('data-checked'), true);
+});
+
+test('checklist toggle-off restores a caret in the same moved text node', () => {
+  const { editor, rows } = makeChecklist(['A', 'B']);
+  const text = rows[1].firstChild;
+  const range = {
+    startContainer: text,
+    endContainer: text,
+    startOffset: 1,
+    endOffset: 1,
+    cloneRange() { return { ...this }; },
+    setStart(container, offset) { this.startContainer = container; this.startOffset = offset; },
+    setEnd(container, offset) { this.endContainer = container; this.endOffset = offset; },
+  };
+  checklistTestSelection = {
+    rangeCount: 1,
+    getRangeAt: () => range,
+    removeAllRanges() { this.rangeCount = 0; },
+    addRange(restored) { this.rangeCount = 1; this.restored = restored; },
+  };
+  try {
+    assert.equal(removeChecklistFromItem(rows[1]), true);
+    assert.equal(checklistTestSelection.restored.startContainer, text);
+    assert.equal(checklistTestSelection.restored.endContainer, text);
+    assert.equal(checklistTestSelection.restored.startOffset, 1);
+    assert.equal(editor.children[1].contains(text), true);
+  } finally {
+    checklistTestSelection = null;
+  }
 });
 
 test('browser-created checklist rows only receive metadata after input', async () => {

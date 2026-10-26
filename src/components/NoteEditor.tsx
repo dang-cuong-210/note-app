@@ -49,7 +49,7 @@ import { addTagToContent, readManagedTags, removeTagFromContent, writeManagedTag
 import { MobileAttachmentBrowserSheet, MobileEditorMorePopover, MobileEditorToolsSheet, type MobileInlineImage } from '@/components/MobileEditorSheets';
 import { MobileFormattingSheet } from '@/components/MobileFormattingSheet';
 import { NoteTagManager } from '@/components/NoteTagManager';
-import { MOBILE_FORMATTING_GROUPS, normalizeChecklistItem, normalizeChecklistRows, setChecklistItemChecked } from '@/lib/mobileFormatting.js';
+import { MOBILE_FORMATTING_GROUPS, normalizeChecklistItem, normalizeChecklistRows, removeChecklistFromItem, setChecklistItemChecked } from '@/lib/mobileFormatting.js';
 import { getMobileFormattingTransition } from '@/lib/mobileFormattingState.js';
 import { applyInlineFormatToRange, isInlineFormatActiveAtNode, isInlineFormatAppliedToRange, removeEmptyInlineFormats, removeInlineFormatFromRange, toggleCollapsedInlineFormat } from '@/lib/mobileInlineFormatting.js';
 import { getBlankLinesToAppend, isMeaningfulNoteContent } from '@/lib/editorBehavior.js';
@@ -730,12 +730,13 @@ export function NoteEditor({
     const editor = editorRef.current;
     restoreEditorSelection();
     if (!editor) return false;
-    const element = getSelectionElement();
+    const selectionNode = window.getSelection()?.focusNode;
+    const caretNode = selectionNode && editor.contains(selectionNode) ? selectionNode : lastCaretRange.current?.endContainer;
+    const element = caretNode ? (caretNode instanceof Element ? caretNode : caretNode.parentElement) : getSelectionElement();
     const currentList = element?.closest('ul,ol');
     if (currentList instanceof HTMLUListElement && currentList.hasAttribute('data-checklist')) {
-      removeChecklistFromList(currentList);
-      try { document.execCommand('insertUnorderedList'); } catch { return false; }
-      return true;
+      const currentItem = element?.closest<HTMLLIElement>('li[data-checklist-item]');
+      return currentItem instanceof HTMLLIElement && currentList.contains(currentItem) && removeChecklistFromItem(currentItem);
     }
     let list = currentList instanceof HTMLUListElement ? currentList : null;
     if (!list) {
