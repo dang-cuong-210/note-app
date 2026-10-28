@@ -224,31 +224,6 @@ export function MobileEditorMorePopover({ note, folders, open, onClose, onToggle
   </div>;
 }
 
-interface MobileNoteActionsSheetProps {
-  note: Note;
-  folders: NoteFolder[];
-  open: boolean;
-  onClose: () => void;
-  onTogglePin: (id: string) => void;
-  onArchive: (id: string, archived: boolean) => void;
-  onMove: (id: string, folderId: string | null) => void;
-  onDuplicate: (id: string) => void;
-  onTrash: (id: string) => void;
-}
-
-export function MobileNoteActionsSheet({ note, folders, open, onClose, onTogglePin, onArchive, onMove, onDuplicate, onTrash }: MobileNoteActionsSheetProps) {
-  const run = (action: () => void) => { onClose(); action(); };
-  return <MobileBottomSheet open={open} title="Thao tác ghi chú" onClose={onClose} labelledBy="mobile-note-actions">
-    <div className="tanooki-mobile-sheet-actions">
-      <button type="button" onClick={() => run(() => onTogglePin(note.id))}><Pin size={19} />{note.pinned ? 'Bỏ ghim' : 'Ghim'}</button>
-      <button type="button" onClick={() => run(() => onArchive(note.id, !note.archived))}>{note.archived ? <ArchiveRestore size={19} /> : <Archive size={19} />}{note.archived ? 'Bỏ lưu trữ' : 'Lưu trữ'}</button>
-      <label className="tanooki-mobile-sheet-select"><span><Folder size={19} /> Chuyển thư mục</span><select aria-label="Chuyển thư mục" value={note.folderId || ''} onChange={(event) => run(() => onMove(note.id, event.target.value || null))}><option value="">Không có thư mục</option>{getFolderHierarchy(folders).map(({ folder, depth }) => <option key={folder.id} value={folder.id}>{getFolderOptionLabel(folder, depth)}</option>)}</select></label>
-      <button type="button" onClick={() => run(() => onDuplicate(note.id))}><Copy size={19} />Tạo bản sao</button>
-      <button type="button" className="is-danger" onClick={() => run(() => onTrash(note.id))}><Trash2 size={19} />Chuyển vào thùng rác</button>
-    </div>
-  </MobileBottomSheet>;
-}
-
 export function MobileTrashActionsSheet({ note, open, onClose, onRestore, onPermanentDelete }: { note: Note; open: boolean; onClose: () => void; onRestore: (id: string) => void; onPermanentDelete: (id: string) => void }) {
   return <MobileBottomSheet open={open} title="Thao tác ghi chú" onClose={onClose} labelledBy="mobile-trash-actions">
     <div className="tanooki-mobile-sheet-actions">

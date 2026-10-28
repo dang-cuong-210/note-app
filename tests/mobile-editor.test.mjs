@@ -91,9 +91,8 @@ test('mobile tools retain note metadata and tag management while the paperclip o
 
 test('mobile note actions remain available through the long-press context menu', () => {
   assert.match(noteList, /longPressTarget\.kind === 'note'[\s\S]*?onTogglePin\(targetNote\.id\)[\s\S]*?<DesktopFolderMoveOptions mobile folders=\{folders\} onSelect=\{\(folderId\) => run\(\(\) => onMove\(targetNote\.id, folderId\)\)\}[\s\S]*?handleArchive\(targetNote\)[\s\S]*?onDuplicate\(targetNote\.id\)[\s\S]*?onTrash\(targetNote\.id\)/);
-  assert.doesNotMatch(noteList, /<MobileNoteActionsSheet/);
-  assert.match(sheets, /export function MobileNoteActionsSheet/);
-  for (const label of ['Ghim', 'Lưu trữ', 'Chuyển thư mục', 'Tạo bản sao', 'Chuyển vào thùng rác']) assert.ok(sheets.includes(label));
+  assert.doesNotMatch(sheets, /MobileNoteActionsSheet/);
+  for (const label of ['Ghim', 'Lưu trữ', 'Di chuyển', 'Tạo bản sao', 'Chuyển vào thùng rác']) assert.ok(noteList.includes(label));
 });
 
 test('mobile editor More popover reuses pin, move, archive, duplicate and delete actions', () => {
@@ -155,7 +154,7 @@ test('mobile More opens an anchored popover, closes outside or on Escape, and ha
   assert.match(sheets, /className="tanooki-mobile-note-menu-backdrop"[\s\S]*?onClick=\{onClose\}/);
   assert.match(sheets, /event\.key === 'Escape'[\s\S]*?onCloseRef\.current\(\)/);
   assert.match(sheets, /role="dialog" aria-modal="true" aria-label="Tùy chọn ghi chú"/);
-  const popover = sheets.match(/export function MobileEditorMorePopover[\s\S]*?interface MobileNoteActionsSheetProps/)?.[0] || '';
+  const popover = sheets.match(/export function MobileEditorMorePopover[\s\S]*?export function MobileTrashActionsSheet/)?.[0] || '';
   assert.doesNotMatch(popover, /MobileBottomSheet|tanooki-mobile-sheet-handle|Tùy chọn ghi chú<\/h2>|Đóng bảng/);
   assert.match(popover, /tanooki-mobile-note-menu-quick[\s\S]*?Ghim/);
   assert.match(popover, /<span>Tìm trong ghi chú<\/span><Search/);
