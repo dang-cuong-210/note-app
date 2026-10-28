@@ -29,12 +29,13 @@ test('mobile Home brand is an accessible reload button with a subtle pressed sta
   assert.match(css, /\.tanooki-mobile-home-brand:active \{[^}]*transform: scale\(/);
 });
 
-test('mobile Home keeps header and actions outside its only scrollable content region', async () => {
+test('mobile Home keeps the header fixed and folder creation reachable in its scrollable content', async () => {
   const home = await readFile(new URL('../src/components/MobileHome.tsx', import.meta.url), 'utf8');
   const headerAt = home.indexOf('<header className="tanooki-mobile-home-header">');
   const scrollAt = home.indexOf('<div className="tanooki-mobile-home-scroll">');
-  const footerAt = home.indexOf('<footer className="tanooki-mobile-home-actions">');
-  assert.ok(headerAt >= 0 && scrollAt > headerAt && footerAt > scrollAt);
+  const createAt = home.indexOf('aria-label="Thêm thư mục"');
+  assert.ok(headerAt >= 0 && scrollAt > headerAt && createAt > scrollAt);
+  assert.doesNotMatch(home, /<footer className="tanooki-mobile-home-actions">/);
   assert.doesNotMatch(home.slice(headerAt, scrollAt), /tanooki-mobile-home-scroll/);
 });
 
@@ -123,9 +124,9 @@ test('Add Folder opens the existing creation sheet and submits through addFolder
 test('Create New uses the existing immediate note-creation flow', async () => {
   const home = await readFile(new URL('../src/components/MobileHome.tsx', import.meta.url), 'utf8');
   const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
-  assert.match(home, /onClick=\{onCreateNote\}/);
+  assert.doesNotMatch(home, /tanooki-mobile-home-action is-new/);
   assert.match(app, /const createMobileNote = \(\) => \{[\s\S]*?const note = registerNewDraft\(data\.addNote\(null\)\);/);
-  assert.match(app, /onCreateNote=\{createMobileNote\}/);
+  assert.match(app, /onNew=\{createMobileNote\}/);
 });
 
 test('desktop Dashboard remains on its existing separate rendering branch', async () => {

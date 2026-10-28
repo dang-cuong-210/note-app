@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, ChevronRight, Copy, Edit3, FileText, Folder, Pencil, Pin, PinOff, Plus, Search, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, ChevronRight, Copy, Edit3, FileText, Folder, Pin, PinOff, Plus, Search, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Folder as FolderRecord, Note } from '@/types';
 import type { ViewType } from '@/lib/navigation';
@@ -21,7 +21,6 @@ interface MobileHomeProps {
   onOpenView: (view: ViewType) => void;
   onOpenFolder: (id: string) => void;
   onAddFolder: (name: string) => void;
-  onCreateNote: () => void;
   onTogglePin: (id: string) => void;
   onTrash: (id: string) => void;
   onDuplicate: (id: string) => void;
@@ -31,7 +30,7 @@ interface MobileHomeProps {
   onDeleteFolder: (id: string) => void;
 }
 
-export function MobileHome({ notes, folders, searchQuery, onSearchChange, onSearchSubmit, onOpenNote, onOpenView, onOpenFolder, onAddFolder, onCreateNote, onTogglePin, onTrash, onDuplicate, onArchive, onMove, onRenameFolder, onDeleteFolder }: MobileHomeProps) {
+export function MobileHome({ notes, folders, searchQuery, onSearchChange, onSearchSubmit, onOpenNote, onOpenView, onOpenFolder, onAddFolder, onTogglePin, onTrash, onDuplicate, onArchive, onMove, onRenameFolder, onDeleteFolder }: MobileHomeProps) {
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [contextTarget, setContextTarget] = useState<MobileContextTarget | null>(null);
   const [contextClosing, setContextClosing] = useState(false);
@@ -92,7 +91,10 @@ export function MobileHome({ notes, folders, searchQuery, onSearchChange, onSear
         </button>
 
         <section className="tanooki-mobile-home-section" aria-labelledby="tanooki-mobile-home-folders">
-          <h1 id="tanooki-mobile-home-folders">Thư mục</h1>
+          <div className="tanooki-mobile-home-section-heading">
+            <h1 id="tanooki-mobile-home-folders">Thư mục</h1>
+            <button type="button" onClick={() => setCreateFolderOpen(true)} aria-label="Thêm thư mục"><Plus size={20} aria-hidden="true" /></button>
+          </div>
           {folders.length > 0 ? <div className="tanooki-mobile-home-grouped-card">
             {folderHierarchy.filter(({ depth }) => depth === 0).map(({ folder }) => <FolderRow key={folder.id} folder={folder} count={getMobileHomeFolderCount(notes, folder.id)} onClick={() => onOpenFolder(folder.id)} />)}
           </div> : <p className="tanooki-mobile-home-empty-folders">Chưa có thư mục nào.</p>}
@@ -105,14 +107,6 @@ export function MobileHome({ notes, folders, searchQuery, onSearchChange, onSear
       </>}
     </div>
 
-    {!searching && <footer className="tanooki-mobile-home-actions">
-      <button type="button" className="tanooki-mobile-home-action is-folder" onClick={() => setCreateFolderOpen(true)}>
-        <span><FolderPlusIcon /></span><strong>Thêm thư mục</strong>
-      </button>
-      <button type="button" className="tanooki-mobile-home-action is-new" onClick={onCreateNote}>
-        <span><Pencil size={31} aria-hidden="true" /></span><strong>Tạo mới</strong>
-      </button>
-    </footer>}
     <MobileCreateFolderSheet open={createFolderOpen} onClose={() => setCreateFolderOpen(false)} onCreate={onAddFolder} />
     <MobileContextPopover target={contextTarget} closing={contextClosing} onClose={() => closeContext()} labelledBy="mobile-home-context-menu">
       {contextTarget?.kind === 'note' ? (() => {
@@ -149,10 +143,6 @@ function HomeViewRow({ icon: Icon, label, count, iconClass, onClick }: { icon: L
     <span className={`tanooki-mobile-home-view-icon ${iconClass}`}><Icon size={23} aria-hidden="true" /></span>
     <strong>{label}</strong><span className="tanooki-mobile-home-count">{count}</span><ChevronRight size={23} aria-hidden="true" />
   </button>;
-}
-
-function FolderPlusIcon() {
-  return <span className="tanooki-mobile-home-folder-plus" aria-hidden="true"><Folder size={34} /><Plus size={17} /></span>;
 }
 
 export function MobileFoldersView({ folders, notes, onOpenFolder, onAddFolder, onRenameFolder, onDeleteFolder }: { folders: FolderRecord[]; notes: Note[]; onOpenFolder: (id: string) => void; onAddFolder: (name: string) => void; onRenameFolder: (id: string, name: string) => void; onDeleteFolder: (id: string) => void }) {

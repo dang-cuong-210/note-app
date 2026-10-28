@@ -44,7 +44,7 @@ import { refreshAttachmentUrl } from '@/lib/attachments';
 import { MobileContextPopover } from '@/components/MobileContextPopover';
 import { useMobileLongPress, type MobileContextTarget } from '@/components/useMobileLongPress';
 import { DesktopContextMenu, type DesktopMenuPoint } from '@/components/DesktopContextMenu';
-import { announceDesktopContextMenu } from '@/lib/desktopContextMenuEvents';
+import { announceDesktopContextMenu, openDesktopMenuWithKeyboard } from '@/lib/desktopContextMenuEvents';
 import { shareNoteContent } from '@/lib/shareNote';
 
 interface NoteListProps {
@@ -684,7 +684,7 @@ export function NoteList({
         {desktopMode && currentFolder && <section className="tanooki-desktop-folder-children" aria-labelledby="tanooki-desktop-folder-children-heading">
           <div className="tanooki-desktop-folder-section-heading"><h3 id="tanooki-desktop-folder-children-heading">Thư mục</h3><button type="button" onClick={() => setDesktopFolderCreateOpen(true)}><Plus size={15} aria-hidden="true" />Thư mục mới</button></div>
           {desktopFolderCreateOpen && <form className="tanooki-desktop-folder-create" onSubmit={createDesktopChildFolder}><input autoFocus value={desktopFolderName} onChange={(event) => setDesktopFolderName(event.target.value)} placeholder={`Thư mục con trong ${currentFolder.name}`} aria-label={`Tên thư mục con trong ${currentFolder.name}`} /><button type="submit" disabled={!desktopFolderName.trim()}>Tạo</button><button type="button" onClick={() => { setDesktopFolderCreateOpen(false); setDesktopFolderName(''); }}>Hủy</button></form>}
-          {childFolders.length > 0 ? <div className="tanooki-desktop-folder-children-card">{childFolders.map((folder) => <button key={folder.id} type="button" className={`tanooki-desktop-folder-child-row${desktopContextMenu?.kind === 'folder' && desktopContextMenu.id === folder.id ? ' is-context-open' : ''}`} onClick={() => onOpenFolder?.(folder.id)} onContextMenu={(event) => { if (mobileMode || !desktopMode) return; event.preventDefault(); event.stopPropagation(); announceDesktopContextMenu(); setDesktopContextMenu({ kind: 'folder', id: folder.id, point: { x: event.clientX, y: event.clientY } }); }}><FolderIcon size={18} aria-hidden="true" /><strong>{folder.name}</strong><span>{notes.filter((note) => note.folderId === folder.id && !note.trashed && !note.archived).length}</span><ChevronRight size={17} aria-hidden="true" /></button>)}</div> : allChildFolders.length > 0 && searchQuery.trim() ? <p className="tanooki-desktop-folder-no-match">Không tìm thấy thư mục con phù hợp.</p> : null}
+          {childFolders.length > 0 ? <div className="tanooki-desktop-folder-children-card">{childFolders.map((folder) => <button key={folder.id} type="button" className={`tanooki-desktop-folder-child-row${desktopContextMenu?.kind === 'folder' && desktopContextMenu.id === folder.id ? ' is-context-open' : ''}`} onKeyDown={desktopMode && !mobileMode ? openDesktopMenuWithKeyboard : undefined} onClick={() => onOpenFolder?.(folder.id)} onContextMenu={(event) => { if (mobileMode || !desktopMode) return; event.preventDefault(); event.stopPropagation(); announceDesktopContextMenu(); setDesktopContextMenu({ kind: 'folder', id: folder.id, point: { x: event.clientX, y: event.clientY } }); }}><FolderIcon size={18} aria-hidden="true" /><strong>{folder.name}</strong><span>{notes.filter((note) => note.folderId === folder.id && !note.trashed && !note.archived).length}</span><ChevronRight size={17} aria-hidden="true" /></button>)}</div> : allChildFolders.length > 0 && searchQuery.trim() ? <p className="tanooki-desktop-folder-no-match">Không tìm thấy thư mục con phù hợp.</p> : null}
         </section>}
         {desktopMode && currentFolder && sorted.length > 0 && <h3 className="tanooki-desktop-folder-notes-heading">Ghi chú</h3>}
         {mobileSearchMode && !normalizeSearchText(searchQuery) ? <section className="px-4 pb-8 pt-3" aria-label="Tìm kiếm gần đây">
@@ -811,6 +811,7 @@ export function NoteList({
                   key={note.id}
                   className="relative"
                   ref={menuFor === note.id ? menuRef : undefined}
+                  onKeyDown={desktopMode && !mobileMode ? openDesktopMenuWithKeyboard : undefined}
                   onContextMenu={(event) => {
                     if (mobileMode || !desktopMode || (mobileAllNotesSelectionMode && desktopWorkspaceMode)) return;
                     event.preventDefault();
@@ -1146,7 +1147,7 @@ function DesktopNoteGalleryCard({ note, preview, date, folderName, selected, sel
   onContextMenu: (event: ReactMouseEvent<HTMLElement>) => void;
   contextOpen: boolean;
 }) {
-  return <article className={`tanooki-desktop-gallery-card${selected ? ' is-selected' : ''}${contextOpen ? ' is-context-open' : ''}`} onContextMenu={onContextMenu}>
+  return <article className={`tanooki-desktop-gallery-card${selected ? ' is-selected' : ''}${contextOpen ? ' is-context-open' : ''}`} onKeyDown={openDesktopMenuWithKeyboard} onContextMenu={onContextMenu}>
     {selectionMode && <button type="button" className="tanooki-desktop-gallery-check" onClick={onOpen} aria-label={`${selected ? 'Bỏ chọn' : 'Chọn'} ${note.title.trim() || 'Chưa có tiêu đề'}`} aria-pressed={selected}><span>{selected && <Check size={12} aria-hidden="true" />}</span></button>}
     <button type="button" className="tanooki-desktop-gallery-main" onClick={onOpen}>
       <strong>{note.title.trim() || 'Chưa có tiêu đề'}</strong><time>{date}</time><span className="tanooki-desktop-gallery-preview">{preview}</span>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Archive, ArchiveRestore, ArrowRight, Clock3, Copy, FileText, Folder as FolderIcon, Pin, PinOff, Search, Share2, Tag as TagIcon, Trash2, ChevronRight } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowRight, Clock3, Copy, FileText, Folder as FolderIcon, MoreHorizontal, Pin, PinOff, Search, Share2, Tag as TagIcon, Trash2, ChevronRight } from 'lucide-react';
 import type { Folder, Note, TagInfo } from '@/types';
 import type { ViewType } from '@/lib/navigation';
 import { formatTime, getAllTags, getPreview, htmlToText, noteHasTag } from '@/lib/utils';
@@ -9,7 +9,7 @@ import { LiveSearchResults } from '@/components/LiveSearchResults';
 import { normalizeSearchText } from '@/lib/advancedSearch.js';
 import { getEffectiveRecentTime } from '@/lib/recentNotes.js';
 import { DesktopContextMenu, type DesktopMenuPoint } from '@/components/DesktopContextMenu';
-import { announceDesktopContextMenu } from '@/lib/desktopContextMenuEvents';
+import { announceDesktopContextMenu, openDesktopMenuWithKeyboard } from '@/lib/desktopContextMenuEvents';
 import { DesktopFolderMoveOptions } from '@/components/NoteList';
 import { shareNoteContent } from '@/lib/shareNote';
 import { useToast } from '@/contexts/ToastContext';
@@ -64,7 +64,9 @@ export function TanookiDashboard({ notes, folders, searchQuery, onSearchChange, 
     event.stopPropagation();
     announceDesktopContextMenu();
     setContextMoveOpen(false);
-    setContextMenu({ kind, id, point: { x: event.clientX, y: event.clientY } });
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const keyboardClick = event.clientX === 0 && event.clientY === 0;
+    setContextMenu({ kind, id, point: { x: keyboardClick ? bounds.left : event.clientX, y: keyboardClick ? bounds.bottom : event.clientY } });
   };
   const closeContextMenu = () => { setContextMenu(null); setContextMoveOpen(false); };
   const shareNote = async (note: Note) => {
@@ -98,14 +100,14 @@ export function TanookiDashboard({ notes, folders, searchQuery, onSearchChange, 
             <button type="button" onClick={() => onViewChange({ kind: 'pinned' })} className="tanooki-dashboard-view-all">Xem tất cả <ArrowRight size={15} /></button>
           </div>
           {pinnedNotes.length ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-            {pinnedNotes.map((note) => <article key={note.id} onContextMenu={(event) => openContextMenu(event, 'note', note.id)} className={`tanooki-dashboard-note-card${contextMenu?.kind === 'note' && contextMenu.id === note.id ? ' is-context-open' : ''}`}>
+            {pinnedNotes.map((note) => <article key={note.id} onKeyDown={openDesktopMenuWithKeyboard} onContextMenu={(event) => openContextMenu(event, 'note', note.id)} className={`tanooki-dashboard-note-card${contextMenu?.kind === 'note' && contextMenu.id === note.id ? ' is-context-open' : ''}`}>
               <button type="button" className="tanooki-dashboard-note-open" onClick={() => onOpenNote(note.id)} aria-label={`Mở ghi chú ${note.title || 'Chưa có tiêu đề'}`}>
                 <span className="tanooki-dashboard-note-icon"><FileText size={23} /></span>
                 <span className="tanooki-dashboard-note-title">{note.title.trim() || 'Chưa có tiêu đề'}</span>
                 <span className="tanooki-dashboard-preview">{getPreview(note.content, 78) || 'Chưa có nội dung'}</span>
                 <span className="tanooki-dashboard-updated">Đã sửa {formatTime(note.updatedAt)}</span>
               </button>
-              <div className="mt-3 flex items-center justify-between gap-2"><NoteTags note={note} tags={tags} onOpenTag={openTag} /><Pin size={15} aria-label="Đã ghim" className="shrink-0 text-accent" /></div>
+              <div className="mt-3 flex items-center justify-between gap-2"><NoteTags note={note} tags={tags} onOpenTag={openTag} /><Pin size={15} aria-label="Đã ghim" className="shrink-0 text-accent" /><button type="button" className="tanooki-dashboard-menu-trigger" aria-label={`Thao tác ghi chú ${note.title || 'Chưa có tiêu đề'}`} aria-haspopup="menu" aria-expanded={contextMenu?.kind === 'note' && contextMenu.id === note.id} onClick={(event) => openContextMenu(event, 'note', note.id)}><MoreHorizontal size={18} aria-hidden="true" /></button></div>
             </article>)}
           </div> : <p className="tanooki-dashboard-empty">Chưa có ghi chú nào được ghim.</p>}
         </section>
@@ -116,7 +118,7 @@ export function TanookiDashboard({ notes, folders, searchQuery, onSearchChange, 
             <button type="button" onClick={() => onViewChange({ kind: 'recent' })} className="tanooki-dashboard-view-all">Xem tất cả <ArrowRight size={15} /></button>
           </div>
           {recentNotes.length ? <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
-            {recentNotes.map((note) => <div key={note.id} onContextMenu={(event) => openContextMenu(event, 'note', note.id)} className={`tanooki-dashboard-recent-row${contextMenu?.kind === 'note' && contextMenu.id === note.id ? ' is-context-open' : ''}`}>
+            {recentNotes.map((note) => <div key={note.id} onKeyDown={openDesktopMenuWithKeyboard} onContextMenu={(event) => openContextMenu(event, 'note', note.id)} className={`tanooki-dashboard-recent-row${contextMenu?.kind === 'note' && contextMenu.id === note.id ? ' is-context-open' : ''}`}>
               <button type="button" className="tanooki-dashboard-recent-open" onClick={() => onOpenNote(note.id)} aria-label={`Mở ghi chú ${note.title || 'Chưa có tiêu đề'}`}>
                 <span className="tanooki-dashboard-recent-icon"><FileText size={21} /></span>
                 <span className="min-w-0 flex-1"><span className="tanooki-dashboard-note-title">{note.title.trim() || 'Chưa có tiêu đề'}</span><span className="tanooki-dashboard-preview">{getPreview(note.content, 90) || 'Chưa có nội dung'}</span></span>
@@ -124,6 +126,7 @@ export function TanookiDashboard({ notes, folders, searchQuery, onSearchChange, 
               <div className="hidden min-w-0 xl:block"><NoteTags note={note} tags={tags} onOpenTag={openTag} /></div>
               <span className="hidden whitespace-nowrap text-xs text-tertiary md:block">{recentOpenedAt[note.id] > note.updatedAt ? 'Đã mở' : 'Đã sửa'} {formatTime(getEffectiveRecentTime(note, recentOpenedAt))}</span>
               {note.pinned && <Pin size={15} aria-label="Đã ghim" className="hidden shrink-0 text-accent sm:block" />}
+              <button type="button" className="tanooki-dashboard-menu-trigger" aria-label={`Thao tác ghi chú ${note.title || 'Chưa có tiêu đề'}`} aria-haspopup="menu" aria-expanded={contextMenu?.kind === 'note' && contextMenu.id === note.id} onClick={(event) => openContextMenu(event, 'note', note.id)}><MoreHorizontal size={18} aria-hidden="true" /></button>
             </div>)}
           </div> : <p className="tanooki-dashboard-empty">Chưa có ghi chú gần đây.</p>}
         </section>
@@ -133,7 +136,7 @@ export function TanookiDashboard({ notes, folders, searchQuery, onSearchChange, 
         <section className="tanooki-dashboard-panel" aria-labelledby="dashboard-folders-heading">
           <div className="tanooki-dashboard-section-heading"><h2 id="dashboard-folders-heading"><FolderIcon size={19} aria-hidden="true" /> Thư mục</h2></div>
           {folders.length ? <div className="grid grid-cols-2 gap-2.5">
-            {folders.map((folder, index) => <button key={folder.id} type="button" onClick={() => onViewChange({ kind: 'folder', id: folder.id })} onContextMenu={(event) => openContextMenu(event, 'folder', folder.id)} className={`tanooki-dashboard-folder${contextMenu?.kind === 'folder' && contextMenu.id === folder.id ? ' is-context-open' : ''}`}>
+            {folders.map((folder, index) => <button key={folder.id} type="button" onKeyDown={openDesktopMenuWithKeyboard} onClick={() => onViewChange({ kind: 'folder', id: folder.id })} onContextMenu={(event) => openContextMenu(event, 'folder', folder.id)} className={`tanooki-dashboard-folder${contextMenu?.kind === 'folder' && contextMenu.id === folder.id ? ' is-context-open' : ''}`}>
               <FolderIcon size={21} style={{ color: ['var(--tanooki-red)', 'var(--tanooki-orange)', 'var(--tanooki-ochre)', 'var(--tanooki-brown)'][index % 4] }} />
               <span className="min-w-0"><span className="block truncate text-sm font-semibold">{folder.name}</span><span className="block text-xs text-tertiary">{getDirectFolderNoteCount(activeNotes, folder.id)} ghi chú</span></span>
             </button>)}

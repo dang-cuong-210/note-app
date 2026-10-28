@@ -678,7 +678,6 @@ function AppContent() {
             }}
             onOpenFolder={openMobileFolderFromOverview}
             onAddFolder={data.addFolder}
-            onCreateNote={createMobileNote}
             onTogglePin={data.togglePin}
             onTrash={handleTrash}
             onDuplicate={handleDuplicate}

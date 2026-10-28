@@ -7,7 +7,7 @@ import { getAllTags } from '@/lib/utils';
 import { getDirectFolderNoteCount } from '@/lib/dashboardData.js';
 import { getFolderHierarchy } from '@/lib/folderHierarchy.js';
 import { DesktopContextMenu, type DesktopMenuPoint } from '@/components/DesktopContextMenu';
-import { announceDesktopContextMenu } from '@/lib/desktopContextMenuEvents';
+import { announceDesktopContextMenu, openDesktopMenuWithKeyboard } from '@/lib/desktopContextMenuEvents';
 
 interface DesktopSidebarProps {
   notes: Note[];
@@ -133,7 +133,7 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
           <button type="button" aria-label="Thêm thư mục gốc" title="Thêm thư mục gốc" onClick={beginCreateFolder} className="rounded p-1 hover-bg"><Plus size={16} /></button>
         </div>
         {folderInputOpen && <input autoFocus value={folderName} onChange={(event) => setFolderName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') submitFolder(); if (event.key === 'Escape') { folderCreateCommitted.current = true; setFolderInputOpen(false); setFolderName(''); } }} onBlur={submitFolder} placeholder="Tên thư mục gốc" aria-label="Tên thư mục mới" className="mb-1 w-full rounded-lg border bg-transparent px-2 py-2 text-sm outline-none focus-visible:ring-2" style={{ borderColor: 'var(--border)' }} />}
-        {getFolderHierarchy(folders).filter(({ depth }) => depth === 0).map(({ folder }, index) => <div key={folder.id} className={`group relative mb-0.5${folderContextMenu?.folder.id === folder.id ? ' is-context-open' : ''}`} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); announceDesktopContextMenu(); setFolderMenuFor(null); setFolderContextMenu({ folder, point: { x: event.clientX, y: event.clientY } }); }}>
+        {getFolderHierarchy(folders).filter(({ depth }) => depth === 0).map(({ folder }, index) => <div key={folder.id} className={`group relative mb-0.5${folderContextMenu?.folder.id === folder.id ? ' is-context-open' : ''}`} onKeyDown={openDesktopMenuWithKeyboard} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); announceDesktopContextMenu(); setFolderMenuFor(null); setFolderContextMenu({ folder, point: { x: event.clientX, y: event.clientY } }); }}>
             {editingFolder === folder.id ? <input autoFocus value={editName} onChange={(event) => setEditName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') commitRename(folder); if (event.key === 'Escape') { renameCommitted.current = true; setEditingFolder(null); } }} onBlur={() => commitRename(folder)} aria-label={`Đổi tên ${folder.name}`} className="w-full rounded-lg border bg-transparent px-2 py-2 text-sm outline-none focus-visible:ring-2" style={{ borderColor: 'var(--border)' }} /> : <div className="flex min-w-0 items-center">
               <button type="button" onClick={() => onViewChange({ kind: 'folder', id: folder.id })} aria-current={isActive({ kind: 'folder', id: folder.id }) ? 'page' : undefined} className={`tanooki-desktop-nav-item min-w-0 flex-1 pr-9 ${isActive({ kind: 'folder', id: folder.id }) ? 'is-active' : ''}`}>
                 <FolderIcon size={17} aria-hidden="true" style={{ color: ['var(--tanooki-red)', 'var(--tanooki-orange)', 'var(--tanooki-ochre)', 'var(--tanooki-brown)'][index % 4] }} /><span className="flex-1 truncate">{folder.name}</span><span className="text-xs text-tertiary">{getDirectFolderNoteCount(activeNotes, folder.id)}</span>

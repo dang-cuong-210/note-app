@@ -14,6 +14,46 @@ export function DesktopContextMenu({ point, onClose, children, label = 'Thao tá
   useLayoutEffect(() => {
     const menu = menuRef.current;
     if (!menu) return;
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const items = () => Array.from(menu.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'))
+      .filter((button) => button.getClientRects().length > 0);
+    const prepareItems = () => items().forEach((button) => {
+      button.setAttribute('role', 'menuitem');
+      button.tabIndex = -1;
+    });
+    prepareItems();
+    items()[0]?.focus();
+    const observer = new MutationObserver(prepareItems);
+    observer.observe(menu, { childList: true, subtree: true });
+    const navigate = (event: globalThis.KeyboardEvent) => {
+      const buttons = items();
+      const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      if (event.key === 'Tab') {
+        // Return to the originating control before the browser advances focus.
+        trigger?.focus();
+        closeRef.current();
+        return;
+      }
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) || !buttons.length) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+        : (index + (event.key === 'ArrowUp' ? -1 : 1) + buttons.length) % buttons.length;
+      buttons[next].focus();
+    };
+    menu.addEventListener('keydown', navigate);
+    return () => {
+      observer.disconnect();
+      menu.removeEventListener('keydown', navigate);
+      if (trigger?.isConnected && (menu.contains(document.activeElement) || document.activeElement === document.body)) trigger.focus();
+    };
+  }, []);
+
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    if (!menu) return;
     const bounds = menu.getBoundingClientRect();
     const margin = 8;
     setPosition({
