@@ -26,3 +26,18 @@ test('streak skips non-scheduled days and tolerates unfinished today', () => {
   assert.equal(currentStreak(dates, dates.slice(0,3), '2026-11-04'), 3);
   assert.equal(currentStreak(dates, dates.slice(0,2), '2026-11-04'), 0);
 });
+
+test('unscheduled weekends do not interrupt a weekday streak', () => {
+  const scheduled = ['2026-10-29', '2026-10-30', '2026-11-02'];
+  assert.equal(currentStreak(scheduled, scheduled, '2026-11-02'), 3);
+});
+test('a missed prior scheduled day interrupts the streak', () => {
+  const scheduled = ['2026-10-30', '2026-11-02', '2026-11-03'];
+  assert.equal(currentStreak(scheduled, ['2026-10-30', '2026-11-03'], '2026-11-03'), 1);
+});
+test('completed check-ins are deduplicated for completion percentage', () => {
+  assert.equal(completionRate(['2026-11-02','2026-11-03'], ['2026-11-02','2026-11-02']), 50);
+});
+test('invalid input dates are rejected before schedule evaluation', () => {
+  assert.throws(() => scheduledOn('2026-02-30', []), /Invalid calendar date/);
+});
