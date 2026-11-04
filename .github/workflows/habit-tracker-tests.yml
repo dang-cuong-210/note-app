@@ -1,0 +1,24 @@
+name: Habit Tracker unit tests
+on:
+  push:
+    branches:
+      - feat/habit-tracker-foundation
+    paths:
+      - 'src/features/habits/**'
+      - 'tests/habitCalendar.test.mjs'
+      - '.github/workflows/habit-tracker-tests.yml'
+  pull_request:
+    paths:
+      - 'src/features/habits/**'
+      - 'tests/habitCalendar.test.mjs'
+      - '.github/workflows/habit-tracker-tests.yml'
+jobs:
+  habit-calendar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run Habit Tracker calendar tests
+        run: node --test tests/habitCalendar.test.mjs
